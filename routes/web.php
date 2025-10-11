@@ -1,0 +1,54 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use App\Http\Controllers\Api\TensionRecordController;
+
+Route::get('/', function () {
+    return Inertia::render('welcome');
+})->name('home');
+
+Route::get('/csrf-token', function () {
+    return response()->json(['csrfToken' => csrf_token()]);
+});
+    
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('dashboard', function () {
+        return Inertia::render('dashboard');
+    })->name('dashboard');
+
+    Route::get('tension-records-display', function () {
+        return Inertia::render('tension-records-display');
+    })->name('tension-records-display');
+
+    Route::get('twisting-tension-main', function () {
+        return Inertia::render('twisting-tension-main');
+    })->name('twisting-tension-main');
+    
+    Route::get('weaving-tension-main', function () {
+        return Inertia::render('weaving-tension-main');
+    })->name('weaving-tension-main');
+
+    Route::get('under-construction', function () {
+        return Inertia::render('under-construction');
+    })->name('under-construction');
+
+    Route::resource('tension-records', TensionRecordController::class)->only([
+        'index', 'store', 'show', 'destroy', 'update'
+    ]);
+
+    Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
+        ->name('tension-records.download');
+    
+    Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
+        ->name('tension-records.statistics');
+
+    
+    
+});
+
+
+
+require __DIR__.'/settings.php';
+require __DIR__.'/auth.php';
