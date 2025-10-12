@@ -12,7 +12,7 @@
   "env": {
     "APP_ENV": "production",
     "APP_DEBUG": "true",
-    "APP_URL": "https://anufa-minerva.vercel.app",
+    "APP_URL": "anufa-minerva.vercel.app",
     "APP_CONFIG_CACHE": "/tmp/config.php",
     "APP_EVENTS_CACHE": "/tmp/events.php",
     "APP_PACKAGES_CACHE": "/tmp/packages.php",
@@ -21,7 +21,9 @@
     "VIEW_COMPILED_PATH": "/tmp",
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
-    "SESSION_DRIVER": "database"
+    "SESSION_DRIVER": "database",
+    "WAYFINDER_DISABLE_GIT": "1"
   },
-  "outputDirectory": "/public/build"
+  "outputDirectory": "/public/build",
+  "buildCommand":"echo 'locally prebuilt'"
 }
