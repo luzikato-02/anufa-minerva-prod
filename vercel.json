@@ -21,9 +21,6 @@
     "VIEW_COMPILED_PATH": "/tmp",
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
-    "SESSION_DRIVER": "database",
-    "WAYFINDER_DISABLE_GIT": "1"
-  },
-  "outputDirectory": "/public/build",
-  "buildCommand":"echo 'locally prebuilt'"
+    "SESSION_DRIVER": "database"
+  }
 }
