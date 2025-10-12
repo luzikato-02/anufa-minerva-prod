@@ -5,6 +5,13 @@
   },
   "routes": [
     {
+      "src": "^/build/(.*)$",
+      "dest": "/public/build/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/index.php"
     }
@@ -12,7 +19,7 @@
   "env": {
     "APP_ENV": "production",
     "APP_DEBUG": "true",
-    "APP_URL": "anufa-minerva.vercel.app",
+    "APP_URL": "https://anufa-minerva.vercel.app",
     "APP_CONFIG_CACHE": "/tmp/config.php",
     "APP_EVENTS_CACHE": "/tmp/events.php",
     "APP_PACKAGES_CACHE": "/tmp/packages.php",
@@ -21,6 +28,10 @@
     "VIEW_COMPILED_PATH": "/tmp",
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
-    "SESSION_DRIVER": "database"
-  }
+    "SESSION_DRIVER": "database",
+    "ASSET_URL": "https://anufa-minerva.vercel.app"
+    
+  },
+  "buildCommand":"echo 'skip build, locally built.'",
+  "outputDirectory":"/public/build"
 }
