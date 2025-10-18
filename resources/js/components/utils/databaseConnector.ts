@@ -39,7 +39,7 @@ export class LaravelDatabaseService {
 
   constructor() {
     // Configure this to point to your Laravel API
-    this.baseUrl = "http://127.0.0.1:8000"
+    this.baseUrl = window.location.origin;
   }
 
   // Get headers with authentication
