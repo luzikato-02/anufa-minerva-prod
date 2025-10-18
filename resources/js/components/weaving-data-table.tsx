@@ -138,25 +138,25 @@ export const columns: ColumnDef<TensionRecord>[] = [
     },
 
     {
-        accessorKey: 'Density',
-        header: 'Density (Dtex)',
-        accessorFn: (row) => row.form_data?.dtexNumber,
+        accessorKey: 'Color Code',
+        header: 'Color Code',
+        accessorFn: (row) => row.form_data?.colorCode,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),
     },
     {
-        accessorKey: 'Table Twist (TPM)',
-        header: 'Table Twist (TPM)',
-        accessorFn: (row) => row.form_data?.tpm,
+        accessorKey: 'Production Order',
+        header: 'Production Order',
+        accessorFn: (row) => row.form_data?.productionOrder,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),
     },
     {
-        accessorKey: 'Cycle Speed (RPM)',
-        header: 'Cycle Speed (RPM)',
-        accessorFn: (row) => row.form_data?.rpm,
+        accessorKey: 'Bale Number',
+        header: 'Bale Number',
+        accessorFn: (row) => row.form_data?.baleNumber,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),
@@ -227,7 +227,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
     },
 ];
 
-export function TwistingDataTable() {
+export function WeavingDataTable() {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [columnFilters, setColumnFilters] =
         React.useState<ColumnFiltersState>([]);
@@ -282,7 +282,7 @@ export function TwistingDataTable() {
             per_page: pagination.pageSize.toString(),
         });
 
-        params.append('type', 'twisting'); // 🧠 Filter by twisting type
+        params.append('type', 'weaving'); // 🧠 Filter by weaving type
 
         // 🧠 Add global filter (search box)
         if (globalFilter) {
@@ -305,7 +305,7 @@ export function TwistingDataTable() {
 
         try {
             const response = await fetch(
-                `${baseUrl}/tension-records?${params.toString()}`,
+                `${baseUrl}/tension-records/?${params.toString()}`,
                 {
                     credentials: 'include', // keep session if needed
                     signal: controller.signal,
@@ -314,7 +314,6 @@ export function TwistingDataTable() {
 
             const json: LaravelPaginatedResponse<TensionRecord> =
                 await response.json();
-                console.log(json);
 
             setData(json.data);
             setTotalRows(json.total);

@@ -1,4 +1,5 @@
-'use client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
     AlertDialog,
     AlertDialogContent,
@@ -7,50 +8,60 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Delete, X } from 'lucide-react';
 import * as React from 'react';
-import { exportTwistingDataToCSV } from './utils/csv-export.js';
+import { exportWeavingDataToCSV } from './utils/csv-export';
 import {
     clearAllAppData,
     loadFromLocalStorage,
     restoreProblemsWithDates,
-} from './utils/localStorage.js';
+} from './utils/localStorage';
 
 interface SpindleData {
     max: number | null;
     min: number | null;
 }
 
-interface TwistingFormData {
-    machineNumber: string;
-    itemNumber: string;
-    metersCheck: string;
-    operator: string;
-    dtexNumber: string;
-    tpm: string;
-    specTens: string;
-    tensPlus: string;
-    rpm: string;
+interface CreelData {
+    [side: string]: {
+        [row: string]: {
+            [col: number]: SpindleData;
+        };
+    };
 }
 
-interface TwistingProblem {
+interface WeavingFormData {
+    machineNumber: string;
+    metersCheck: string;
+    itemNumber: string;
+    operator: string;
+    productionOrder: string;
+    baleNumber: string;
+    colorCode: string;
+    specTens: string;
+    tensPlus: string;
+}
+
+interface WeavingProblem {
     id: number;
-    spindleNumber: number;
+    position: string;
     description: string;
     timestamp: Date;
 }
 
-export default function TwistingNumpad({
+export default function WeavingNumpad({
     display,
     setDisplay,
     counter,
     setCounter,
     valueType,
     setValueType,
-    spindleData,
-    setSpindleData,
+    creelSideIndex,
+    setCreelSideIndex,
+    creelRowIndex,
+    setCreelRowIndex,
+    creelData,
+    setCreelData,
     formData,
     problems,
     onReportProblem,
@@ -63,23 +74,30 @@ export default function TwistingNumpad({
     setCounter: (value: number) => void;
     valueType: string;
     setValueType: (value: string) => void;
-    spindleData: Record<number, SpindleData>;
-    setSpindleData: (
-        value:
-            | Record<number, SpindleData>
-            | ((
-                  prev: Record<number, SpindleData>,
-              ) => Record<number, SpindleData>),
-    ) => void;
-    formData: TwistingFormData;
-    problems: TwistingProblem[];
-    onReportProblem?: (spindleNumber: number) => void;
+    creelSideIndex: number;
+    setCreelSideIndex: (value: number) => void;
+    creelRowIndex: number;
+    setCreelRowIndex: (value: number) => void;
+    creelData: CreelData;
+    setCreelData: (value: CreelData | ((prev: CreelData) => CreelData)) => void;
+    formData: WeavingFormData;
+    problems: WeavingProblem[];
+    onReportProblem?: (position: string) => void;
     onOpenRecorder?: () => void;
     onDataCleared?: () => void;
 }) {
-    const [openFinishDialog, setOpenFinishDialog] = React.useState(false);
-    // Get current spindle's max and min values
-    const currentSpindleData = spindleData[counter] || { max: null, min: null };
+    const [openFinishDialog, setOpenFinishDialog] =
+        React.useState<boolean>(false);
+    // Creel side and row options
+    const creelSideOptions = ['AI', 'BI', 'AO', 'BO'];
+    const creelRowOptions = ['A', 'B', 'C', 'D', 'E'];
+
+    // Get current position's max and min values
+    const currentSide = creelSideOptions[creelSideIndex];
+    const currentRow = creelRowOptions[creelRowIndex];
+    const currentSpindleData = creelData[currentSide]?.[currentRow]?.[
+        counter
+    ] || { max: null, min: null };
 
     const inputNumber = (num: string) => {
         setDisplay(display === '0' ? num : display + num);
@@ -98,11 +116,33 @@ export default function TwistingNumpad({
     };
 
     const incrementCounter = () => {
-        setCounter(counter < 84 ? counter + 1 : 84);
+        setCounter(counter < 120 ? counter + 1 : 120);
     };
 
     const decrementCounter = () => {
         setCounter(counter > 1 ? counter - 1 : 1);
+    };
+
+    const incrementCreelSide = () => {
+        setCreelSideIndex((creelSideIndex + 1) % creelSideOptions.length);
+    };
+
+    const decrementCreelSide = () => {
+        setCreelSideIndex(
+            (creelSideIndex - 1 + creelSideOptions.length) %
+                creelSideOptions.length,
+        );
+    };
+
+    const incrementCreelRow = () => {
+        setCreelRowIndex((creelRowIndex + 1) % creelRowOptions.length);
+    };
+
+    const decrementCreelRow = () => {
+        setCreelRowIndex(
+            (creelRowIndex - 1 + creelRowOptions.length) %
+                creelRowOptions.length,
+        );
     };
 
     const toggleValueType = () => {
@@ -110,20 +150,30 @@ export default function TwistingNumpad({
     };
 
     const storeValue = (numValue: number) => {
-        setSpindleData((prev) => {
-            // make sure we always have an object to spread
-            const prevEntry: SpindleData = prev[counter] ?? {
-                max: null,
-                min: null,
+        setCreelData((prev) => {
+            const newData = { ...prev };
+
+            // Ensure the structure exists
+            if (!newData[currentSide]) {
+                newData[currentSide] = {};
+            }
+            if (!newData[currentSide][currentRow]) {
+                newData[currentSide][currentRow] = {};
+            }
+            if (!newData[currentSide][currentRow][counter]) {
+                newData[currentSide][currentRow][counter] = {
+                    max: null,
+                    min: null,
+                };
+            }
+
+            // Store the value
+            newData[currentSide][currentRow][counter] = {
+                ...newData[currentSide][currentRow][counter],
+                [valueType.toLowerCase()]: numValue,
             };
 
-            return {
-                ...prev,
-                [counter]: {
-                    ...prevEntry,
-                    [valueType.toLowerCase()]: numValue,
-                },
-            };
+            return newData;
         });
     };
 
@@ -132,55 +182,65 @@ export default function TwistingNumpad({
         if (!isNaN(numValue)) {
             storeValue(numValue);
             setDisplay('0');
-            toggleValueType();
             console.log(
-                `Submitted ${valueType} value ${numValue} for Spindle ${counter}`,
+                `Submitted ${valueType} value ${numValue} for ${currentSide}-${currentRow}-Col${counter}`,
             );
         }
+        toggleValueType();
     };
 
     const finishValue = (keepTrigger: boolean) => {
       setOpenFinishDialog(false);
         // 1. Get all data from localStorage and export to CSV
-        const savedSpindleData = loadFromLocalStorage(
-            'twisting-spindle-data',
-            {},
-        );
-        const savedFormData = loadFromLocalStorage('twisting-form-data', {
+        const savedCreelData = loadFromLocalStorage('weaving-creel-data', {
+            AI: {},
+            BI: {},
+            AO: {},
+            BO: {},
+        });
+        const savedFormData = loadFromLocalStorage('weaving-form-data', {
             machineNumber: '',
-            itemNumber: '',
             metersCheck: '',
+            itemNumber: '',
             operator: '',
-            dtexNumber: '',
-            tpm: '',
+            productionOrder: '',
+            baleNumber: '',
+            colorCode: '',
             specTens: '',
             tensPlus: '',
-            rpm: '',
         });
-        const savedProblems = loadFromLocalStorage('twisting-problems', []);
+        const savedProblems = loadFromLocalStorage('weaving-problems', []);
         const restoredProblems =
-            restoreProblemsWithDates<TwistingProblem>(savedProblems);
+            restoreProblemsWithDates<WeavingProblem>(savedProblems);
 
         // Export the data from localStorage
-        exportTwistingDataToCSV(
-            savedSpindleData,
+        exportWeavingDataToCSV(
+            savedCreelData,
             savedFormData,
             restoredProblems,
-            'twisting-tension-data',
+            'weaving-tension-data',
         );
-        console.log('Exported all twisting data from localStorage to CSV');
+        console.log('Exported all weaving data from localStorage to CSV');
 
         if (!keepTrigger) {
             // 2. Clear all localStorage data
             clearAllAppData();
             console.log('Cleared all app data from localStorage');
-            // 3. Reset display and counter
+
+            // 3. Reset display and counters
             setDisplay('0');
             setCounter(1);
             setValueType('Max');
+            setCreelSideIndex(0);
+            setCreelRowIndex(0);
 
-            // 4. Clear spindle data
-            setSpindleData({});
+            // 4. Clear creel data
+            setCreelData({
+                AI: {},
+                BI: {},
+                AO: {},
+                BO: {},
+            });
 
             // 5. Notify parent component to reset form data and problems
             onDataCleared?.();
@@ -210,29 +270,29 @@ export default function TwistingNumpad({
     );
 
     const deleteStoredValue = () => {
-        setSpindleData((prev) => {
-            const prevEntry: SpindleData = prev[counter] ?? {
-                max: null,
-                min: null,
-            };
+        setCreelData((prev) => {
+            const newData = { ...prev };
 
-            return {
-                ...prev,
-                [counter]: {
-                    ...prevEntry,
+            if (newData[currentSide]?.[currentRow]?.[counter]) {
+                newData[currentSide][currentRow][counter] = {
+                    ...newData[currentSide][currentRow][counter],
                     [valueType.toLowerCase()]: null,
-                },
-            };
+                };
+            }
+
+            return newData;
         });
 
-        console.log(`Deleted ${valueType} value for Spindle ${counter}`);
+        console.log(
+            `Deleted ${valueType} value for ${currentSide}-${currentRow}-Col${counter}`,
+        );
     };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-2">
             <Card className="mx-auto w-full max-w-xs shadow-lg">
                 <CardHeader className="pb-2">
-                    {/* Max and Min Value Displays for Current Spindle */}
+                    {/* Max and Min Value Displays for Current Position */}
                     <div className="mb-3 grid grid-cols-2 gap-2">
                         <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-center">
                             <div className="mb-1 text-xs font-medium text-green-700">
@@ -252,10 +312,72 @@ export default function TwistingNumpad({
                         </div>
                     </div>
 
-                    {/* Speed Number Counter with Arrow Buttons */}
+                    {/* Creel Side Counter with Arrow Buttons */}
                     <div className="mb-3 flex items-center justify-between">
                         <div className="text-sm font-semibold text-foreground">
-                            Spd No.
+                            Creel Side
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 bg-transparent p-0"
+                                onClick={decrementCreelSide}
+                            >
+                                <ChevronLeft className="h-3 w-3" />
+                            </Button>
+
+                            <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
+                                {creelSideOptions[creelSideIndex]}
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 bg-transparent p-0"
+                                onClick={incrementCreelSide}
+                            >
+                                <ChevronRight className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Creel Row Counter with Arrow Buttons */}
+                    <div className="mb-3 flex items-center justify-between">
+                        <div className="text-sm font-semibold text-foreground">
+                            Creel Row
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 bg-transparent p-0"
+                                onClick={decrementCreelRow}
+                            >
+                                <ChevronLeft className="h-3 w-3" />
+                            </Button>
+
+                            <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
+                                {creelRowOptions[creelRowIndex]}
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 bg-transparent p-0"
+                                onClick={incrementCreelRow}
+                            >
+                                <ChevronRight className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Column Number Counter with Arrow Buttons */}
+                    <div className="mb-3 flex items-center justify-between">
+                        <div className="text-sm font-semibold text-foreground">
+                            Col No.
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -270,7 +392,7 @@ export default function TwistingNumpad({
                             </Button>
 
                             <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
-                                {counter} / 84
+                                {counter} / 120
                             </div>
 
                             <Button
@@ -278,7 +400,7 @@ export default function TwistingNumpad({
                                 size="sm"
                                 className="h-8 w-8 bg-transparent p-0"
                                 onClick={incrementCounter}
-                                disabled={counter === 84}
+                                disabled={counter === 120}
                             >
                                 <ChevronRight className="h-3 w-3" />
                             </Button>
@@ -327,7 +449,8 @@ export default function TwistingNumpad({
                             {display}
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                            Entering {valueType} for Spindle {counter}
+                            Entering {valueType} for {currentSide}-{currentRow}
+                            -Col{counter}
                         </div>
                     </div>
                 </CardHeader>
@@ -429,7 +552,7 @@ export default function TwistingNumpad({
                                 onOpenRecorder?.();
                             }}
                         >
-                            Proc. Parameters
+                            Data Recorder
                         </Button>
                         <Button
                             variant="outline"
@@ -447,14 +570,16 @@ export default function TwistingNumpad({
                         size="sm"
                         className="h-10 w-full bg-transparent text-sm font-medium transition-colors hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
                         onClick={() => {
+                            const fullPosition = `${currentSide}-${currentRow}-Col${counter}`;
                             console.log(
-                                'Report Problem clicked for Spindle',
-                                counter,
+                                'Report Problem clicked for',
+                                fullPosition,
                             );
-                            onReportProblem?.(counter);
+                            onReportProblem?.(fullPosition);
                         }}
                     >
-                        Report Problem for Spd #{counter}
+                        Report Problem for {currentSide}-{currentRow}-Col
+                        {counter}
                     </Button>
                 </CardContent>
             </Card>

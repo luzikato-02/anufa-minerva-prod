@@ -9,7 +9,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: "",
     },
     {
-        title: 'Record',
+        title: 'Twisting Tension Record',
         href: "",
     },
     

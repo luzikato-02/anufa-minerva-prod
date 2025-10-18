@@ -43,6 +43,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
         ->name('tension-records.statistics');
 
+     // ✅ Filtered endpoints (now conflict-free)
+    Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
+        ->whereIn('type', ['twisting', 'weaving'])
+        ->name('tension-records.by-type');
     
     
 });

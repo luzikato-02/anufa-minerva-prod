@@ -4,19 +4,23 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { DataTableDemo } from '@/components/data-table';
-import TwistingTensionPage from '../components/twisting-tension-record';
+import WeavingTensionPage from '@/components/weaving-tension-record';
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Dashboard',
+        title: 'Tension Records',
+        href: "",
+    },
+    {
+        title: 'Weaving Tension Record',
         href: "",
     },
 ];
 
-export default function Dashboard() {
+export default function WeavingTensionMain() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard" />
-            <TwistingTensionPage></TwistingTensionPage>
+            <WeavingTensionPage></WeavingTensionPage>
         </AppLayout>
     );
 }
