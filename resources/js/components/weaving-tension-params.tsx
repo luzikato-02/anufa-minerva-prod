@@ -9,17 +9,17 @@ import { clearAllAppData } from "./utils/localStorage"
 
 interface TensionData {
   machineNumber: string
-  itemNumber: string
   metersCheck: string
+  itemNumber: string
   operator: string
-  dtexNumber: string
-  tpm: string
+  productionOrder: string
+  baleNumber: string
+  colorCode: string
   specTens: string
   tensPlus: string
-  rpm: string
 }
 
-export default function TwistingParams({
+export default function WeavingParams({
   formData,
   setFormData,
   onStartRecording,
@@ -43,14 +43,14 @@ export default function TwistingParams({
   const clearData = () => {
     setFormData({
       machineNumber: "",
-      itemNumber: "",
       metersCheck: "",
+      itemNumber: "",
       operator: "",
-      dtexNumber: "",
-      tpm: "",
+      productionOrder: "",
+      baleNumber: "",
+      colorCode: "",
       specTens: "",
       tensPlus: "",
-      rpm: "",
     })
     console.log("Data cleared")
   }
@@ -71,7 +71,7 @@ export default function TwistingParams({
     <div className="flex items-center justify-center min-h-screen bg-background p-2">
       <Card className="w-full max-w-xs mx-auto shadow-lg">
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-semibold text-center">Twisting Tension Recorder</CardTitle>
+          <CardTitle className="text-lg font-semibold text-center">Weaving Tension Recorder</CardTitle>
           <p className="text-xs text-muted-foreground text-center">Configure recording parameters</p>
           <Separator className="mt-3" />
         </CardHeader>
@@ -80,29 +80,29 @@ export default function TwistingParams({
           {/* Form Fields */}
           <div className="space-y-1">
             <div>
-              <Label htmlFor="operator" className="text-xs font-medium text-foreground">
-                Operator
+              <Label htmlFor="itemNumber" className="text-xs font-medium text-foreground">
+                Item Number
               </Label>
               <Input
-                id="operator"
+                id="itemNumber"
                 type="text"
-                value={formData.operator}
-                onChange={(e) => handleInputChange("operator", e.target.value)}
+                value={formData.itemNumber}
+                onChange={(e) => handleInputChange("itemNumber", e.target.value)}
                 className="h-7 text-sm"
               />
             </div>
 
-            {/* Item Number and Meters Check side by side */}
+            {/* Production Order and Meters Check side by side */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="itemNumber" className="text-xs font-medium text-foreground">
-                  Item Number
+                <Label htmlFor="productionOrder" className="text-xs font-medium text-foreground">
+                  Production Order
                 </Label>
                 <Input
-                  id="itemNumber"
+                  id="productionOrder"
                   type="text"
-                  value={formData.itemNumber}
-                  onChange={(e) => handleInputChange("itemNumber", e.target.value)}
+                  value={formData.productionOrder}
+                  onChange={(e) => handleInputChange("productionOrder", e.target.value)}
                   className="h-7 text-sm"
                 />
               </div>
@@ -120,29 +120,29 @@ export default function TwistingParams({
               </div>
             </div>
 
-            {/* Dtex Number and TPM side by side */}
+            {/* Bale Number and Color Code side by side */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="dtexNumber" className="text-xs font-medium text-foreground">
-                  Dtex Number
+                <Label htmlFor="baleNumber" className="text-xs font-medium text-foreground">
+                  Bale Number
                 </Label>
                 <Input
-                  id="dtexNumber"
+                  id="baleNumber"
                   type="text"
-                  value={formData.dtexNumber}
-                  onChange={(e) => handleInputChange("dtexNumber", e.target.value)}
+                  value={formData.baleNumber}
+                  onChange={(e) => handleInputChange("baleNumber", e.target.value)}
                   className="h-7 text-sm"
                 />
               </div>
               <div>
-                <Label htmlFor="tpm" className="text-xs font-medium text-foreground">
-                  TPM
+                <Label htmlFor="colorCode" className="text-xs font-medium text-foreground">
+                  Color Code
                 </Label>
                 <Input
-                  id="tpm"
+                  id="colorCode"
                   type="text"
-                  value={formData.tpm}
-                  onChange={(e) => handleInputChange("tpm", e.target.value)}
+                  value={formData.colorCode}
+                  onChange={(e) => handleInputChange("colorCode", e.target.value)}
                   className="h-7 text-sm"
                 />
               </div>
@@ -176,20 +176,8 @@ export default function TwistingParams({
               </div>
             </div>
 
-            {/* RPM and Machine Number side by side */}
+            {/* Machine Number and Operator side by side */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="rpm" className="text-xs font-medium text-foreground">
-                  RPM
-                </Label>
-                <Input
-                  id="rpm"
-                  type="text"
-                  value={formData.rpm}
-                  onChange={(e) => handleInputChange("rpm", e.target.value)}
-                  className="h-7 text-sm"
-                />
-              </div>
               <div>
                 <Label htmlFor="machineNumber" className="text-xs font-medium text-foreground">
                   Machine Number
@@ -199,6 +187,18 @@ export default function TwistingParams({
                   type="text"
                   value={formData.machineNumber}
                   onChange={(e) => handleInputChange("machineNumber", e.target.value)}
+                  className="h-7 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="operator" className="text-xs font-medium text-foreground">
+                  Operator
+                </Label>
+                <Input
+                  id="operator"
+                  type="text"
+                  value={formData.operator}
+                  onChange={(e) => handleInputChange("operator", e.target.value)}
                   className="h-7 text-sm"
                 />
               </div>

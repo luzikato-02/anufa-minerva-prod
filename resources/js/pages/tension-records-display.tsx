@@ -5,6 +5,7 @@ import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { TwistingDataTable } from '@/components/twisting-data-table';
+import { WeavingDataTable } from '@/components/weaving-data-table';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Tension Records',
@@ -43,7 +44,7 @@ export default function TensionRecordsDisplay() {
                             <TwistingDataTable></TwistingDataTable>
                         </TabsContent>
                         <TabsContent value="weaving">
-                            Underconstruction.
+                           <WeavingDataTable></WeavingDataTable>
                         </TabsContent>
                     </Tabs>
                 </div>
