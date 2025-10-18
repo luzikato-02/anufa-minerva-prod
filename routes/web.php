@@ -4,16 +4,15 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
 
-Route::get('/', function () {
-    return Inertia::render('welcome');
-})->name('home');
-
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
-});
-    
+}); 
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/', function () {
+    return Inertia::render('welcome');
+    })->name('home');
+
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');

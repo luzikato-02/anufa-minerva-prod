@@ -270,6 +270,7 @@ export function TwistingDataTable() {
         },
     });
 
+    const baseUrl = window.location.origin;
     useEffect(() => {
     const controller = new AbortController();
 
@@ -302,7 +303,7 @@ export function TwistingDataTable() {
 
         try {
             const response = await fetch(
-                `http://127.0.0.1:8000/tension-records?${params.toString()}`,
+                `${baseUrl}/tension-records?${params.toString()}`,
                 {
                     credentials: 'include', // keep session if needed
                     signal: controller.signal,
