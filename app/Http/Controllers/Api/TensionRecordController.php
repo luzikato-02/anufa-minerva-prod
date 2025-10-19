@@ -179,6 +179,14 @@ class TensionRecordController extends Controller
                 ->whereNotNull('metadata->machine_number')
                 ->groupBy('machine')
                 ->pluck('machine'),
+            // ✅ Count records where problems array is not empty
+            'twisting_problems' => TensionRecord::byType('twisting')
+                ->whereRaw('JSON_LENGTH(problems) > 0')
+                ->count(),
+
+            'weaving_problems' => TensionRecord::byType('weaving')
+                ->whereRaw('JSON_LENGTH(problems) > 0')
+                ->count(),
         ];
 
         return response()->json([
