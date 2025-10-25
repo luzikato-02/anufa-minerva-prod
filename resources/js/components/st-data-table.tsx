@@ -39,7 +39,6 @@ import {
     useReactTable,
     VisibilityState,
 } from '@tanstack/react-table';
-import { get } from 'http';
 import {
     ChevronDown,
     DownloadIcon,
@@ -65,7 +64,6 @@ interface StockTakeRecord {
     created_at?: string;
     updated_at?: string;
 }
-
 
 interface LaravelPaginatedResponse<T> {
     current_page: number;
@@ -373,11 +371,11 @@ export function StockTakeDataTable() {
     }
 
     const getUniqueMaterialCount = () => {
-    const uniqueCodes = new Set(
-        jsonData.map((row) => row['Material code']?.trim())
-    );
-    return uniqueCodes.size;
-};
+        const uniqueCodes = new Set(
+            jsonData.map((row) => row['Material code']?.trim()),
+        );
+        return uniqueCodes.size;
+    };
 
     const handleSubmit = async () => {
         if (!sessionLeader || jsonData.length === 0) {
@@ -397,12 +395,22 @@ export function StockTakeDataTable() {
         };
 
         console.log('Submitting:', payload);
-
+        const baseUrl = window.location.origin;
         try {
+            // Step 1: Ensure CSRF cookie is set
+            await fetch(`${baseUrl}/csrf-token`, {
+                credentials: 'include',
+            });
+
+            // Step 2: Extract token from cookie
+            const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+            const csrfToken = match ? decodeURIComponent(match[1]) : '';
             const response = await fetch(`${baseUrl}/stock-take-records`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    "X-XSRF-TOKEN": csrfToken,
                 },
                 body: JSON.stringify(payload),
             });
@@ -533,7 +541,17 @@ export function StockTakeDataTable() {
                                 >
                                     Cancel
                                 </Button>
-                                <Button>Create Session</Button>
+                                <Button
+                                    onClick={async () => {
+                                        await handleSubmit(); // ✅ call submit handler
+                                        setOpen(false); // ✅ close after submit
+                                    }}
+                                    disabled={
+                                        !sessionLeader || jsonData.length === 0
+                                    }
+                                >
+                                    Create Session
+                                </Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

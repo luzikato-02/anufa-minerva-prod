@@ -19,11 +19,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
 
     // Stock Take Records Routes
-    Route::get('stock-take-records', function () {
+    Route::get('stock-take-records-main', function () {
         return Inertia::render('stock-take-records-display');
-    })->name('stock-take-records');
+    })->name('stock-take-records-main');
 
-    Route::resource('stock-take-check', StockTakeRecordController::class)->only([
+    Route::resource('stock-take-records', StockTakeRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
     ]);
 

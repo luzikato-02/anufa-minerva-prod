@@ -10,7 +10,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecords } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon } from 'lucide-react';
@@ -62,7 +62,7 @@ const mainNavItems: NavItem[] = [
 
     {
         title: 'Display: Stock Take Records',
-        href: stockTakeRecords(),
+        href: stockTakeRecordsMain(),
         icon: IconStack2,
     },
 
