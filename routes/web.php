@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\StockTakeRecordController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
@@ -17,6 +18,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
 
+    // Stock Take Records Routes
+    Route::get('stock-take-records', function () {
+        return Inertia::render('stock-take-records-display');
+    })->name('stock-take-records');
+
+    Route::resource('stock-take-check', StockTakeRecordController::class)->only([
+        'index', 'store', 'show', 'destroy', 'update'
+    ]);
+
+    // Tension Records Routes
     Route::get('tension-records-display', function () {
         return Inertia::render('tension-records-display');
     })->name('tension-records-display');
@@ -47,8 +58,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
         ->whereIn('type', ['twisting', 'weaving'])
         ->name('tension-records.by-type');
-    
-    
+
 });
 
 

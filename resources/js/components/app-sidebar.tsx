@@ -10,11 +10,12 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecords } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon } from 'lucide-react';
 import AppLogo from './app-logo';
+import { IconStack2 } from '@tabler/icons-react';
 
 const mainNavItems: NavItem[] = [
     {
@@ -54,21 +55,15 @@ const mainNavItems: NavItem[] = [
     },
 
     {
-        title: 'Maintain: Leaders Maintenance Table',
-        href: underConstruction(),
-        icon: LayoutGrid,
-    },
-
-    {
         title: 'Record: Batch Stock Taking',
         href: underConstruction(),
-        icon: LayoutGrid,
+        icon: NotebookIcon,
     },
 
     {
         title: 'Display: Stock Take Records',
-        href: underConstruction(),
-        icon: LayoutGrid,
+        href: stockTakeRecords(),
+        icon: IconStack2,
     },
 
     {
