@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
-use App\Models\StockTakeRecord;
+use App\Models\StockTakingRecord;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
@@ -14,7 +14,7 @@ class StockTakeRecordController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = StockTakeRecord::query();
+        $query = StockTakingRecord::query();
 
     // 🔍 Global search (case-insensitive)
     if ($search = $request->input('search')) {
@@ -61,7 +61,7 @@ class StockTakeRecordController extends Controller
             $validated['user_id'] = auth()->id();
         }
 
-        $record = StockTakeRecord::create($validated);
+        $record = StockTakingRecord::create($validated);
 
         return response()->json([
             'status' => 'success',
@@ -73,7 +73,7 @@ class StockTakeRecordController extends Controller
     /**
      * Display the specified tension record
      */
-    public function show(StockTakeRecord $stockTakeRecord): JsonResponse
+    public function show(StockTakingRecord $stockTakeRecord): JsonResponse
     {
         return response()->json([
             'status' => 'success',
@@ -84,7 +84,7 @@ class StockTakeRecordController extends Controller
     /**
      * Update the specified tension record
      */
-    public function update(Request $request, StockTakeRecord $stockTakeRecord): JsonResponse
+    public function update(Request $request, StockTakingRecord $stockTakeRecord): JsonResponse
     {
         $validated = $request->validate([
             'indv_batch_data' => 'array',
@@ -103,7 +103,7 @@ class StockTakeRecordController extends Controller
     /**
      * Remove the specified tension record
      */
-    public function destroy(StockTakeRecord $stockTakeRecord): JsonResponse
+    public function destroy(StockTakingRecord $stockTakeRecord): JsonResponse
     {
         $stockTakeRecord->delete();
 
@@ -116,7 +116,7 @@ class StockTakeRecordController extends Controller
     /**
      * Download CSV data for a specific record
      */
-    public function downloadCsv(StockTakeRecord $stockTakeRecord)
+    public function downloadCsv(StockTakingRecord $stockTakeRecord)
     {
         $filename = sprintf(
             '%s-%s.csv',
