@@ -57,6 +57,7 @@ interface TensionRecord {
         operator: string;
         machine_number: string;
         item_number: string;
+        item_description?: string;
     };
     created_at?: string;
     updated_at?: string;
@@ -116,6 +117,14 @@ export const columns: ColumnDef<TensionRecord>[] = [
         accessorKey: 'Item Number',
         header: 'Item Number',
         accessorFn: (row) => row.metadata?.item_number,
+        cell: ({ getValue }) => (
+            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+        ),
+    },
+    {
+        accessorKey: 'Item Description',
+        header: 'Item Description',
+        accessorFn: (row) => row.metadata?.item_description,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),
@@ -192,12 +201,13 @@ export const columns: ColumnDef<TensionRecord>[] = [
         cell: ({ row }) => {
             const record = row.original;
             const handleDownload = () => {
-                const blob = new Blob([record.csv_data], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
+                 // const blob = new Blob([record.csv_data], { type: 'text/csv' });
+                const baseUrl = window.location.origin;
+                const url = `${baseUrl}/tension-records/${record.id}/download`;
 
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
+                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
                 a.click();
                 URL.revokeObjectURL(url);
             };

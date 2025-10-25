@@ -15,6 +15,8 @@ interface TensionRecord {
     operator: string
     machine_number: string
     item_number: string
+    item_description?: string
+    yarn_code?: string
   }
 }
 
@@ -260,6 +262,7 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
     specTens: "",
     tensPlus: "",
     rpm: "",
+    yarnCode: "",
   })
   const problems = loadFromLocalStorage("twisting-problems", [])
   const restoredProblems = restoreProblemsWithDates(problems)
@@ -289,6 +292,7 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
       operator: formData.operator,
       machine_number: formData.machineNumber,
       item_number: formData.itemNumber,
+      yarn_code: formData.yarnCode,
     },
   }
 }
@@ -305,6 +309,7 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
     machineNumber: "",
     metersCheck: "",
     itemNumber: "",
+    itemDescription: "",
     operator: "",
     productionOrder: "",
     baleNumber: "",
@@ -350,6 +355,7 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
       operator: formData.operator,
       machine_number: formData.machineNumber,
       item_number: formData.itemNumber,
+      item_description: formData.itemDescription,
     },
   }
 }
@@ -375,6 +381,7 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   csvRows.push(`Tens ±,${formData.tensPlus}`)
   csvRows.push(`RPM,${formData.rpm}`)
   csvRows.push(`Machine Number,${formData.machineNumber}`)
+  csvRows.push(`Yarn Code,${formData.yarnCode}`)
   csvRows.push("")
 
   // Section 2: Tension Measurement Data
@@ -419,6 +426,7 @@ function generateWeavingCSV(creelData: any, formData: any, problems: any[]): str
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Item Number,${formData.itemNumber}`)
+  csvRows.push(`Item Description,${formData.itemDescription}`)
   csvRows.push(`Production Order,${formData.productionOrder}`)
   csvRows.push(`Meters Check,${formData.metersCheck}`)
   csvRows.push(`Bale Number,${formData.baleNumber}`)
