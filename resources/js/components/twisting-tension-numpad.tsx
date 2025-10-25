@@ -33,6 +33,7 @@ interface TwistingFormData {
     specTens: string;
     tensPlus: string;
     rpm: string;
+    yarnCode: string;
 }
 
 interface TwistingProblem {

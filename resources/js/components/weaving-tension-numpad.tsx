@@ -552,7 +552,7 @@ export default function WeavingNumpad({
                                 onOpenRecorder?.();
                             }}
                         >
-                            Data Recorder
+                            Proc. Parameters
                         </Button>
                         <Button
                             variant="outline"

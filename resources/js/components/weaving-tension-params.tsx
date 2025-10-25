@@ -11,6 +11,7 @@ interface TensionData {
   machineNumber: string
   metersCheck: string
   itemNumber: string
+  itemDescription: string
   operator: string
   productionOrder: string
   baleNumber: string
@@ -45,6 +46,7 @@ export default function WeavingParams({
       machineNumber: "",
       metersCheck: "",
       itemNumber: "",
+      itemDescription: "",
       operator: "",
       productionOrder: "",
       baleNumber: "",
@@ -88,6 +90,19 @@ export default function WeavingParams({
                 type="text"
                 value={formData.itemNumber}
                 onChange={(e) => handleInputChange("itemNumber", e.target.value)}
+                className="h-7 text-sm"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="itemDescription" className="text-xs font-medium text-foreground">
+                Item Description
+              </Label>
+              <Input
+                id="itemDescription"
+                type="text"
+                value={formData.itemDescription}
+                onChange={(e) => handleInputChange("itemDescription", e.target.value)}
                 className="h-7 text-sm"
               />
             </div>

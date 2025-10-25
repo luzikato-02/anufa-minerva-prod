@@ -81,6 +81,7 @@ class TensionRecordController extends Controller
             'metadata.operator' => 'nullable|string',
             'metadata.machine_number' => 'nullable|string',
             'metadata.item_number' => 'nullable|string',
+            'metadata.yarnCode' => 'nullable|string',
         ]);
 
         // Add user_id if authenticated
@@ -150,12 +151,13 @@ class TensionRecordController extends Controller
     public function downloadCsv(TensionRecord $tensionRecord)
     {
         $filename = sprintf(
-            '%s-%s-%s.csv',
+            '%s-%s-%s-%s-%s.csv',
             $tensionRecord->record_type,
             $tensionRecord->item_number ?? 'unknown',
-            $tensionRecord->created_at->format('Y-m-d')
+            $tensionRecord->machine_number ?? 'unknown',
+            $tensionRecord->created_at->format('Y-m-d'),
+            $tensionRecord->operator ?? 'unknown'
         );
-
         return response($tensionRecord->csv_data)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');

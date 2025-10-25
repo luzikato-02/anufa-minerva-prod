@@ -21,6 +21,7 @@ interface TensionData {
   specTens: string
   tensPlus: string
   rpm: string
+  yarnCode: string
 }
 
 interface SubmittedProblem {
@@ -56,6 +57,7 @@ export default function TwistingTensionPage() {
     specTens: "",
     tensPlus: "",
     rpm: "",
+    yarnCode: "",
   })
 
   // Lifted problems state to preserve problems list during navigation
@@ -117,6 +119,7 @@ export default function TwistingTensionPage() {
       specTens: "",
       tensPlus: "",
       rpm: "",
+      yarnCode: "",
     })
     setSpindleData({})
     setSubmittedProblems([])

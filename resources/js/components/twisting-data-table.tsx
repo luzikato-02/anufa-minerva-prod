@@ -7,7 +7,6 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -46,7 +45,7 @@ interface TensionRecord {
     id: string;
     record_type: 'twisting' | 'weaving';
     timestamp: string;
-    csv_data: string;
+    // csv_data: string;
     form_data: any;
     measurement_data: any;
     problems: any[];
@@ -57,6 +56,7 @@ interface TensionRecord {
         operator: string;
         machine_number: string;
         item_number: string;
+        yarnCode: string;
     };
     created_at?: string;
     updated_at?: string;
@@ -121,6 +121,14 @@ export const columns: ColumnDef<TensionRecord>[] = [
         ),
     },
     {
+        accessorKey: 'Yarn Mat Code',
+        header: 'Yarn Mat. Code',
+        accessorFn: (row) => row.metadata?.yarnCode,
+        cell: ({ getValue }) => (
+            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+        ),
+    },
+    {
         accessorKey: 'Operator',
         header: 'Operator',
         accessorFn: (row) => row.metadata?.operator,
@@ -162,7 +170,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         ),
     },
     {
-        accessorKey: 'Spec. Tension (cN)',
+        accessorKey: 'Spec Tension (cN)',
         header: 'Spec. Tension (cN)',
         accessorFn: (row) => row.form_data?.specTens,
         cell: ({ getValue }) => (
@@ -170,7 +178,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         ),
     },
     {
-        accessorKey: 'Tens. Deviation (cN)',
+        accessorKey: 'Tens Deviation (cN)',
         header: 'Tens. Deviation (cN)',
         accessorFn: (row) => row.form_data?.tensPlus,
         cell: ({ getValue }) => (
@@ -192,12 +200,13 @@ export const columns: ColumnDef<TensionRecord>[] = [
         cell: ({ row }) => {
             const record = row.original;
             const handleDownload = () => {
-                const blob = new Blob([record.csv_data], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
+                // const blob = new Blob([record.csv_data], { type: 'text/csv' });
+                const baseUrl = window.location.origin;
+                const url = `${baseUrl}/tension-records/${record.id}/download`;
 
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
+                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
                 a.click();
                 URL.revokeObjectURL(url);
             };
@@ -235,7 +244,6 @@ export function TwistingDataTable() {
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
     const [data, setData] = useState<TensionRecord[]>([]);
-    const [totalRows, setTotalRows] = useState(0);
     const [pageCount, setPageCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
@@ -317,9 +325,7 @@ export function TwistingDataTable() {
                 console.log(json);
 
             setData(json.data);
-            setTotalRows(json.total);
-            setPageCount(json.last_page);
-        } catch (error) {
+        } catch (error: any) {
             if (error.name !== 'AbortError') {
                 console.error('Fetch error:', error);
             }
