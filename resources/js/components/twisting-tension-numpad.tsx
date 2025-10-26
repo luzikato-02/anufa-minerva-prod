@@ -11,12 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Delete, X } from 'lucide-react';
 import * as React from 'react';
+import { useState } from 'react';
 import { exportTwistingDataToCSV } from './utils/csv-export.js';
 import {
     clearAllAppData,
     loadFromLocalStorage,
     restoreProblemsWithDates,
 } from './utils/localStorage.js';
+import {
+    Dialog,
+    DialogContent } from '@/components/ui/dialog';
+import {
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface SpindleData {
     max: number | null;
@@ -81,6 +90,8 @@ export default function TwistingNumpad({
     const [openFinishDialog, setOpenFinishDialog] = React.useState(false);
     // Get current spindle's max and min values
     const currentSpindleData = spindleData[counter] || { max: null, min: null };
+    const [isSpindleModalOpen, setIsSpindleModalOpen] = useState(false);
+    const [spindleInput, setSpindleInput] = useState(String(counter));
 
     const inputNumber = (num: string) => {
         setDisplay(display === '0' ? num : display + num);
@@ -141,7 +152,7 @@ export default function TwistingNumpad({
     };
 
     const finishValue = (keepTrigger: boolean) => {
-      setOpenFinishDialog(false);
+        setOpenFinishDialog(false);
         // 1. Get all data from localStorage and export to CSV
         const savedSpindleData = loadFromLocalStorage(
             'twisting-spindle-data',
@@ -157,6 +168,7 @@ export default function TwistingNumpad({
             specTens: '',
             tensPlus: '',
             rpm: '',
+            yarnCode: '',
         });
         const savedProblems = loadFromLocalStorage('twisting-problems', []);
         const restoredProblems =
@@ -188,7 +200,6 @@ export default function TwistingNumpad({
 
             console.log('All data cleared - ready for new session');
         }
-
     };
 
     const NumberButton = ({
@@ -270,9 +281,16 @@ export default function TwistingNumpad({
                                 <ChevronLeft className="h-3 w-3" />
                             </Button>
 
-                            <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
+                            <button
+                                onClick={() => {
+                                    setSpindleInput(String(counter));
+                                    setIsSpindleModalOpen(true);
+                                }}
+                                className="min-w-[50px] cursor-pointer rounded px-2 py-1 text-center text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+                                type="button"
+                            >
                                 {counter} / 84
-                            </div>
+                            </button>
 
                             <Button
                                 variant="outline"
@@ -285,6 +303,47 @@ export default function TwistingNumpad({
                             </Button>
                         </div>
                     </div>
+
+                    <Dialog open={isSpindleModalOpen} onOpenChange={setIsSpindleModalOpen}>
+            <DialogContent className="w-80">
+              <DialogHeader>
+                <DialogTitle>Go to Spindle</DialogTitle>
+                <DialogDescription>Enter a spindle number between 1 and 84</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <input
+                  type="number"
+                  min="1"
+                  max="84"
+                  value={spindleInput}
+                  onChange={(e) => setSpindleInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Enter spindle number"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setIsSpindleModalOpen(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const num = Number.parseInt(spindleInput)
+                      if (!isNaN(num) && num >= 1 && num <= 84) {
+                        setCounter(num)
+                        setIsSpindleModalOpen(false)
+                        console.log(`Jumped to spindle ${num}`)
+                      } else {
+                        alert("Please enter a number between 1 and 84")
+                      }
+                    }}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                  >
+                    Go to Spindle
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
                     {/* Value Type Toggle with Arrow Buttons */}
                     <div className="mb-3 flex items-center justify-between">
@@ -475,8 +534,15 @@ export default function TwistingNumpad({
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <Button variant="destructive" onClick={() => finishValue(false)}>Yes, clear all</Button>
-                        <Button onClick={() => finishValue(true)}>No, keep them</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => finishValue(false)}
+                        >
+                            Yes, clear all
+                        </Button>
+                        <Button onClick={() => finishValue(true)}>
+                            No, keep them
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

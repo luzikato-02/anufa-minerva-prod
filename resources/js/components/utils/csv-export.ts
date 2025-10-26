@@ -16,6 +16,7 @@ interface CreelData {
 interface TwistingFormData {
   machineNumber: string
   itemNumber: string
+  yarnCode: string
   metersCheck: string
   operator: string
   dtexNumber: string
@@ -29,6 +30,7 @@ interface WeavingFormData {
   machineNumber: string
   metersCheck: string
   itemNumber: string
+  itemDescription: string
   operator: string
   productionOrder: string
   baleNumber: string
@@ -69,6 +71,7 @@ export async function exportWeavingDataToCSV(
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Item Number,${formData.itemNumber}`)
+  csvRows.push(`Item Number,${formData.itemDescription}`)
   csvRows.push(`Production Order,${formData.productionOrder}`)
   csvRows.push(`Meters Check,${formData.metersCheck}`)
   csvRows.push(`Bale Number,${formData.baleNumber}`)
@@ -170,6 +173,7 @@ export async function exportTwistingDataToCSV(
   csvRows.push("Parameter,Value")
   csvRows.push(`Operator,${formData.operator}`)
   csvRows.push(`Item Number,${formData.itemNumber}`)
+  csvRows.push(`Yarn Code,${formData.yarnCode}`)
   csvRows.push(`Meters Check,${formData.metersCheck}`)
   csvRows.push(`Dtex Number,${formData.dtexNumber}`)
   csvRows.push(`TPM,${formData.tpm}`)
