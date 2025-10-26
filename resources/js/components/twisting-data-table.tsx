@@ -56,7 +56,7 @@ interface TensionRecord {
         operator: string;
         machine_number: string;
         item_number: string;
-        yarnCode: string;
+        yarn_code: string;
     };
     created_at?: string;
     updated_at?: string;
@@ -123,7 +123,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
     {
         accessorKey: 'Yarn Mat Code',
         header: 'Yarn Mat. Code',
-        accessorFn: (row) => row.metadata?.yarnCode,
+        accessorFn: (row) => row.metadata?.yarn_code,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),

@@ -81,7 +81,8 @@ class TensionRecordController extends Controller
             'metadata.operator' => 'nullable|string',
             'metadata.machine_number' => 'nullable|string',
             'metadata.item_number' => 'nullable|string',
-            'metadata.yarnCode' => 'nullable|string',
+            'metadata.item_description' => 'nullable|string',
+            'metadata.yarn_code' => 'nullable|string',
         ]);
 
         // Add user_id if authenticated

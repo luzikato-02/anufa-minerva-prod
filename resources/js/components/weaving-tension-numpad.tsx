@@ -1,5 +1,3 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
     AlertDialog,
     AlertDialogContent,
@@ -8,14 +6,24 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Delete, X } from 'lucide-react';
 import * as React from 'react';
+import { useState } from 'react';
 import { exportWeavingDataToCSV } from './utils/csv-export';
 import {
     clearAllAppData,
     loadFromLocalStorage,
     restoreProblemsWithDates,
 } from './utils/localStorage';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { DialogDescription } from '@/components/ui/dialog';
 
 interface SpindleData {
     max: number | null;
@@ -34,6 +42,7 @@ interface WeavingFormData {
     machineNumber: string;
     metersCheck: string;
     itemNumber: string;
+    itemDescription: string;
     operator: string;
     productionOrder: string;
     baleNumber: string;
@@ -98,6 +107,8 @@ export default function WeavingNumpad({
     const currentSpindleData = creelData[currentSide]?.[currentRow]?.[
         counter
     ] || { max: null, min: null };
+    const [isSpindleModalOpen, setIsSpindleModalOpen] = useState(false);
+    const [spindleInput, setSpindleInput] = useState(String(counter));
 
     const inputNumber = (num: string) => {
         setDisplay(display === '0' ? num : display + num);
@@ -190,7 +201,7 @@ export default function WeavingNumpad({
     };
 
     const finishValue = (keepTrigger: boolean) => {
-      setOpenFinishDialog(false);
+        setOpenFinishDialog(false);
         // 1. Get all data from localStorage and export to CSV
         const savedCreelData = loadFromLocalStorage('weaving-creel-data', {
             AI: {},
@@ -202,6 +213,7 @@ export default function WeavingNumpad({
             machineNumber: '',
             metersCheck: '',
             itemNumber: '',
+            itemDescription: '',
             operator: '',
             productionOrder: '',
             baleNumber: '',
@@ -247,7 +259,6 @@ export default function WeavingNumpad({
 
             console.log('All data cleared - ready for new session');
         }
-
     };
 
     const NumberButton = ({
@@ -391,9 +402,20 @@ export default function WeavingNumpad({
                                 <ChevronLeft className="h-3 w-3" />
                             </Button>
 
-                            <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
+                            {/* <div className="min-w-[50px] text-center text-sm font-semibold text-foreground">
                                 {counter} / 120
-                            </div>
+                            </div> */}
+
+                            <button
+                                onClick={() => {
+                                    setSpindleInput(String(counter));
+                                    setIsSpindleModalOpen(true);
+                                }}
+                                className="min-w-[50px] cursor-pointer rounded px-2 py-1 text-center text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+                                type="button"
+                            >
+                                {counter} / 120
+                            </button>
 
                             <Button
                                 variant="outline"
@@ -406,6 +428,70 @@ export default function WeavingNumpad({
                             </Button>
                         </div>
                     </div>
+
+                    {/* Spindle Number Modal */}
+                    <Dialog
+                        open={isSpindleModalOpen}
+                        onOpenChange={setIsSpindleModalOpen}
+                    >
+                        <DialogContent className="w-80">
+                            <DialogHeader>
+                                <DialogTitle>Go to Spindle</DialogTitle>
+                                <DialogDescription>
+                                    Enter a spindle number between 1 and 84
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="84"
+                                    value={spindleInput}
+                                    onChange={(e) =>
+                                        setSpindleInput(e.target.value)
+                                    }
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                                    placeholder="Enter spindle number"
+                                    autoFocus
+                                />
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setIsSpindleModalOpen(false)
+                                        }
+                                        className="flex-1"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            const num =
+                                                Number.parseInt(spindleInput);
+                                            if (
+                                                !isNaN(num) &&
+                                                num >= 1 &&
+                                                num <= 84
+                                            ) {
+                                                setCounter(num);
+                                                setIsSpindleModalOpen(false);
+                                                console.log(
+                                                    `Jumped to spindle ${num}`,
+                                                );
+                                            } else {
+                                                alert(
+                                                    'Please enter a number between 1 and 84',
+                                                );
+                                            }
+                                        }}
+                                        className="flex-1 bg-primary hover:bg-primary/90"
+                                    >
+                                        Go to Spindle
+                                    </Button>
+                                </div>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Value Type Toggle with Arrow Buttons */}
                     <div className="mb-3 flex items-center justify-between">
@@ -599,8 +685,15 @@ export default function WeavingNumpad({
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <Button variant="destructive" onClick={() => finishValue(false)}>Yes, clear all</Button>
-                        <Button onClick={() => finishValue(true)}>No, keep them</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => finishValue(false)}
+                        >
+                            Yes, clear all
+                        </Button>
+                        <Button onClick={() => finishValue(true)}>
+                            No, keep them
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
