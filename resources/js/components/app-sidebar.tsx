@@ -10,11 +10,16 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon } from 'lucide-react';
 import AppLogo from './app-logo';
+import { IconStack2 } from '@tabler/icons-react';
+import { InventoryNav } from './inventory-nav';
+import { ProcessParams } from './process-parameters';
+import RecordBatchStockTake from '@/pages/batch-stock-taking-main';
+import BatchStockTaking from './batch-stock-taking';
 
 const mainNavItems: NavItem[] = [
     {
@@ -24,6 +29,14 @@ const mainNavItems: NavItem[] = [
     },
 
     {
+        title: 'Maintain: User Maintenance Table',
+        href: underConstruction(),
+        icon: LayoutGrid,
+    },
+];
+
+const processParamsNavItems: NavItem[] = [
+   {
         title: 'Record: Twisting Tension',
         href: twistingTensionMain(),
         icon: ConeIcon,
@@ -53,22 +66,18 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
 
-    {
-        title: 'Maintain: Leaders Maintenance Table',
-        href: underConstruction(),
-        icon: LayoutGrid,
-    },
-
-    {
+];
+const inventoryNavItems: NavItem[] = [
+   {
         title: 'Record: Batch Stock Taking',
-        href: underConstruction(),
-        icon: LayoutGrid,
+        href: batchStockTakingMain(),
+        icon: NotebookIcon,
     },
 
     {
         title: 'Display: Stock Take Records',
-        href: underConstruction(),
-        icon: LayoutGrid,
+        href: stockTakeRecordsMain(),
+        icon: IconStack2,
     },
 
     {
@@ -82,14 +91,7 @@ const mainNavItems: NavItem[] = [
         href: underConstruction(),
         icon: LayoutGrid,
     },
-
-    {
-        title: 'Maintain: User Maintenance Table',
-        href: underConstruction(),
-        icon: LayoutGrid,
-    },
 ];
-
 const footerNavItems: NavItem[] = [
     {
         title: 'Repository',
@@ -120,6 +122,8 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                <ProcessParams items={processParamsNavItems} />
+                <InventoryNav items={inventoryNavItems} />
             </SidebarContent>
 
             <SidebarFooter>

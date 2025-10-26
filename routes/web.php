@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\StockTakeRecordController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Api\TensionRecordController;
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
 }); 
+
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', function () {
@@ -17,6 +19,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
 
+    // Stock Take Records Routes
+    Route::get('stock-take-records-main', function () {
+        return Inertia::render('stock-take-records-display');
+    })->name('stock-take-records-main');
+
+    Route::get('batch-stock-taking-main', function () {
+        return Inertia::render('batch-stock-taking-main');
+    })->name('batch-stock-taking-main');
+
+    // ✅ GET session data by ID
+    Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
+
+    // ✅ GET session data by ID
+    Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
+
+    Route::resource('stock-take-records', StockTakeRecordController::class)->only([
+        'index', 'store', 'show', 'destroy', 'update'
+    ]);
+
+    // Tension Records Routes
     Route::get('tension-records-display', function () {
         return Inertia::render('tension-records-display');
     })->name('tension-records-display');
@@ -47,8 +69,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
         ->whereIn('type', ['twisting', 'weaving'])
         ->name('tension-records.by-type');
-    
-    
+
 });
 
 
