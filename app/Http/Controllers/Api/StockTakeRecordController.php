@@ -41,6 +41,115 @@ class StockTakeRecordController extends Controller
         return response()->json($records);
     }
 
+    public function getSession(Request $request, $sessionId): JsonResponse
+    {
+        try {
+            // Find the stock taking record by session ID
+            $record = StockTakingRecord::where('id', $sessionId)
+                ->orWhere('session_id', $sessionId)
+                ->first();
+
+            if (!$record) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Session not found'
+                ], 404);
+            }
+
+            // Extract metadata and batch data
+            $metadata = $record->metadata ?? [];
+            $batchData = $record->indv_batch_data ?? [];
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'metadata' => [
+                        'total_batches' => $metadata['total_batches'] ?? count($batchData),
+                        'total_materials' => $metadata['total_materials'] ?? 0,
+                        'total_checked_batches' => $metadata['total_checked_batches'] ?? 0,
+                        'session_leader' => $metadata['session_leader'] ?? null,
+                        'session_status' => $metadata['session_status'] ?? 'active',
+                    ],
+                    'indv_batch_data' => $batchData,
+                ],
+                'message' => 'Session loaded successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load session: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function checkBatch(Request $request): JsonResponse
+    {
+        try {
+            $sessionId = $request->query('session_id');
+            $batchNumber = $request->query('batch_number');
+
+            if (!$sessionId || !$batchNumber) {
+                return response()->json([
+                    'exists' => false,
+                    'message' => 'Session ID and batch number are required'
+                ], 400);
+            }
+
+            // Find the session record
+            $record = StockTakingRecord::where('id', $sessionId)
+                ->orWhere('session_id', $sessionId)
+                ->first();
+
+            if (!$record) {
+                return response()->json([
+                    'exists' => false,
+                    'message' => 'Session not found'
+                ], 404);
+            }
+
+            // Search for the batch in indv_batch_data
+            $batchData = $record->indv_batch_data ?? [];
+            $foundBatch = null;
+
+            foreach ($batchData as $batch) {
+                $batchKey = $batch['Batch Number'] ?? $batch['batch_number'] ?? null;
+                if ($batchKey === $batchNumber) {
+                    $foundBatch = $batch;
+                    break;
+                }
+            }
+
+
+            if ($foundBatch) {
+                return response()->json([
+                    'exists' => true,
+                    'batch_data' => $foundBatch,
+                    'message' => 'Batch exists'
+                ]);
+            }
+
+            return response()->json([
+                'exists' => false,
+                'batch_data' => null,
+                'message' => 'Batch not found in this session'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Failed to check batch: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    protected function generateUniqueSessionId(): string
+    {
+        do {
+            $sessionId = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        } while (StockTakingRecord::where('session_id', $sessionId)->exists());
+
+        return $sessionId;
+    }
+
     /**
      * Store a newly created tension record
      */
@@ -55,6 +164,9 @@ class StockTakeRecordController extends Controller
             'metadata.session_leader' => 'nullable|string',
             'metadata.session_status' => 'nullable|string',
         ]);
+
+        // ✅ Add auto-generated 6-digit session ID
+        $validated['session_id'] = $this->generateUniqueSessionId();
 
         // Add user_id if authenticated
         if (auth()->check()) {
