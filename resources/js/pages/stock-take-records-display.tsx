@@ -52,7 +52,7 @@ export default function StockTakeRecordsDisplay() {
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        <TensionStatsCards />
+                        {/* <TensionStatsCards /> */}
 
                         <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
                             <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">

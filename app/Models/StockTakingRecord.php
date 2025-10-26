@@ -11,6 +11,7 @@ class StockTakingRecord extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'session_id',
         'indv_batch_data',
         'metadata',
         'user_id', // if you have user authentication

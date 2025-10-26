@@ -9,6 +9,7 @@ Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
 }); 
 
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', function () {
     return Inertia::render('welcome');
@@ -22,6 +23,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('stock-take-records-main', function () {
         return Inertia::render('stock-take-records-display');
     })->name('stock-take-records-main');
+
+    Route::get('batch-stock-taking-main', function () {
+        return Inertia::render('batch-stock-taking-main');
+    })->name('batch-stock-taking-main');
+
+    // ✅ GET session data by ID
+    Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
+
+    // ✅ GET session data by ID
+    Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
 
     Route::resource('stock-take-records', StockTakeRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'

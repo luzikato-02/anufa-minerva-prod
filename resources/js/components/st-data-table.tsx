@@ -1,4 +1,5 @@
 'use client';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -45,7 +46,9 @@ import {
     EyeIcon,
     MoreHorizontal,
     PencilIcon,
+    PlusIcon,
     UploadIcon,
+    VerifiedIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -63,6 +66,7 @@ interface StockTakeRecord {
     indv_batch_data: any;
     created_at?: string;
     updated_at?: string;
+    session_id?: any
 }
 
 interface LaravelPaginatedResponse<T> {
@@ -118,7 +122,7 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
     {
         accessorKey: 'Session ID',
         header: 'Session ID',
-        accessorFn: (row) => row.id,
+        accessorFn: (row) => row.session_id,
         cell: ({ getValue }) => (
             <div className="capitalize">{getValue() ?? 'N/A'}</div>
         ),
@@ -135,9 +139,27 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
         accessorKey: 'Session Status',
         header: 'Session Status',
         accessorFn: (row) => row.metadata?.session_status,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
-        ),
+        cell: ({ getValue }) => {
+            if (getValue() === 'In Progress') {
+                return <Badge variant="secondary">{getValue()}</Badge>;
+            } else if (getValue() === 'Completed') {
+                return (
+                    <Badge
+                        variant="secondary"
+                        className="bg-blue-500 text-white dark:bg-blue-600"
+                    >
+                        <VerifiedIcon></VerifiedIcon>
+                        {getValue()}
+                    </Badge>
+                );
+            } else {
+                return (
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-sm font-medium text-gray-800">
+                        {getValue() ?? 'N/A'}
+                    </span>
+                );
+            }
+        },
     },
     {
         accessorKey: 'Total Batches',
@@ -390,7 +412,7 @@ export function StockTakeDataTable() {
                 total_materials: getUniqueMaterialCount(),
                 total_checked_batches: 0,
                 session_leader: sessionLeader,
-                session_status: 'in_progress',
+                session_status: 'In Progress',
             },
         };
 
@@ -410,7 +432,7 @@ export function StockTakeDataTable() {
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
-                    "X-XSRF-TOKEN": csrfToken,
+                    'X-XSRF-TOKEN': csrfToken,
                 },
                 body: JSON.stringify(payload),
             });
@@ -447,7 +469,7 @@ export function StockTakeDataTable() {
                     >
                         <DialogTrigger asChild>
                             <Button className="bg-primary text-white hover:bg-primary/90">
-                                Create New Session
+                                <PlusIcon></PlusIcon>Create New Session
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
