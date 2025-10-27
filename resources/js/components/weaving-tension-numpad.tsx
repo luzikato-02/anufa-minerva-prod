@@ -471,7 +471,7 @@ export default function WeavingNumpad({
                                             if (
                                                 !isNaN(num) &&
                                                 num >= 1 &&
-                                                num <= 84
+                                                num <= 120
                                             ) {
                                                 setCounter(num);
                                                 setIsSpindleModalOpen(false);
@@ -480,13 +480,13 @@ export default function WeavingNumpad({
                                                 );
                                             } else {
                                                 alert(
-                                                    'Please enter a number between 1 and 84',
+                                                    'Please enter a number between 1 and 120',
                                                 );
                                             }
                                         }}
                                         className="flex-1 bg-primary hover:bg-primary/90"
                                     >
-                                        Go to Spindle
+                                        Jump!
                                     </Button>
                                 </div>
                             </div>
