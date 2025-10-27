@@ -98,6 +98,7 @@ export default function TwistingNumpad({
     const currentSpindleData = spindleData[counter] || { max: null, min: null };
     const [isSpindleModalOpen, setIsSpindleModalOpen] = useState(false);
     const [spindleInput, setSpindleInput] = useState(String(counter));
+    const [spindleError, setSpindleError] = useState('');
 
     // Calculate spec limits from formData
     const specTens = Number.parseFloat(formData.specTens) || 0;
@@ -275,6 +276,17 @@ export default function TwistingNumpad({
 
     const maxInSpec = isInSpec(currentSpindleData.max);
     const minInSpec = isInSpec(currentSpindleData.min);
+    const handleGoToSpindle = () => {
+        const num = Number.parseInt(spindleInput);
+        if (isNaN(num) || num < 1 || num > 84) {
+            setSpindleError('Please enter a number between 1 and 84');
+            return;
+        }
+        setCounter(num);
+        setIsSpindleModalOpen(false);
+        setSpindleError('');
+        console.log(`Jumped to spindle ${num}`);
+    };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-2">
@@ -405,6 +417,7 @@ export default function TwistingNumpad({
                             <button
                                 onClick={() => {
                                     setSpindleInput(String(counter));
+                                    setSpindleError('');
                                     setIsSpindleModalOpen(true);
                                 }}
                                 className="min-w-[50px] cursor-pointer rounded px-2 py-1 text-center text-sm font-semibold text-foreground transition-colors hover:bg-accent"
@@ -442,43 +455,35 @@ export default function TwistingNumpad({
                                     min="1"
                                     max="84"
                                     value={spindleInput}
-                                    onChange={(e) =>
-                                        setSpindleInput(e.target.value)
-                                    }
+                                    onChange={(e) => {
+                                        setSpindleInput(e.target.value);
+                                        setSpindleError('');
+                                    }}
                                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                                     placeholder="Enter spindle number"
                                     autoFocus
                                 />
+                                {spindleError && (
+                                    <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3">
+                                        <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-600" />
+                                        <span className="text-sm text-red-700">
+                                            {spindleError}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex gap-2">
                                     <Button
                                         variant="outline"
-                                        onClick={() =>
-                                            setIsSpindleModalOpen(false)
-                                        }
+                                        onClick={() => {
+                                            setIsSpindleModalOpen(false);
+                                            setSpindleError('');
+                                        }}
                                         className="flex-1"
                                     >
                                         Cancel
                                     </Button>
                                     <Button
-                                        onClick={() => {
-                                            const num =
-                                                Number.parseInt(spindleInput);
-                                            if (
-                                                !isNaN(num) &&
-                                                num >= 1 &&
-                                                num <= 84
-                                            ) {
-                                                setCounter(num);
-                                                setIsSpindleModalOpen(false);
-                                                console.log(
-                                                    `Jumped to spindle ${num}`,
-                                                );
-                                            } else {
-                                                alert(
-                                                    'Please enter a number between 1 and 84',
-                                                );
-                                            }
-                                        }}
+                                        onClick={handleGoToSpindle}
                                         className="flex-1 bg-primary hover:bg-primary/90"
                                     >
                                         Go to Spindle
