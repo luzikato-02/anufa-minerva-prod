@@ -9,7 +9,21 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, Delete, X } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    AlertCircle,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Delete,
+    X,
+} from 'lucide-react';
 import * as React from 'react';
 import { useState } from 'react';
 import { exportTwistingDataToCSV } from './utils/csv-export.js';
@@ -18,14 +32,6 @@ import {
     loadFromLocalStorage,
     restoreProblemsWithDates,
 } from './utils/localStorage.js';
-import {
-    Dialog,
-    DialogContent } from '@/components/ui/dialog';
-import {
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 
 interface SpindleData {
     max: number | null;
@@ -93,6 +99,18 @@ export default function TwistingNumpad({
     const [isSpindleModalOpen, setIsSpindleModalOpen] = useState(false);
     const [spindleInput, setSpindleInput] = useState(String(counter));
 
+    // Calculate spec limits from formData
+    const specTens = Number.parseFloat(formData.specTens) || 0;
+    const tensPlus = Number.parseFloat(formData.tensPlus) || 0;
+    const minSpec = specTens - tensPlus;
+    const maxSpec = specTens + tensPlus;
+
+    // Function to check if value is in spec
+    const isInSpec = (value: number | null): boolean => {
+        if (value === null) return true; // No value entered yet
+        return value >= minSpec && value <= maxSpec;
+    };
+
     const inputNumber = (num: string) => {
         setDisplay(display === '0' ? num : display + num);
     };
@@ -120,34 +138,49 @@ export default function TwistingNumpad({
     const toggleValueType = () => {
         setValueType(valueType === 'Max' ? 'Min' : 'Max');
     };
-
-    const storeValue = (numValue: number) => {
-        setSpindleData((prev) => {
-            // make sure we always have an object to spread
-            const prevEntry: SpindleData = prev[counter] ?? {
+    const submitValue = () => {
+        const numValue = Number.parseFloat(display);
+        if (!isNaN(numValue)) {
+            // Get the current spindle data before updating
+            const currentData = spindleData[counter] || {
                 max: null,
                 min: null,
             };
 
-            return {
-                ...prev,
-                [counter]: {
-                    ...prevEntry,
-                    [valueType.toLowerCase()]: numValue,
-                },
-            };
-        });
-    };
+            // Check if both values will be filled after this submission
+            const otherValue =
+                valueType === 'Max' ? currentData.min : currentData.max;
+            const bothWillBeFilled = otherValue !== null; // The other value already exists
 
-    const submitValue = () => {
-        const numValue = Number.parseFloat(display);
-        if (!isNaN(numValue)) {
-            storeValue(numValue);
+            // Store the value
+            setSpindleData((prev) => {
+                const prevEntry: SpindleData = prev[counter] ?? {
+                    max: null,
+                    min: null,
+                };
+
+                return {
+                    ...prev,
+                    [counter]: {
+                        ...prevEntry,
+                        [valueType.toLowerCase()]: numValue,
+                    },
+                };
+            });
+
             setDisplay('0');
             toggleValueType();
             console.log(
                 `Submitted ${valueType} value ${numValue} for Spindle ${counter}`,
             );
+            // If both values are now filled, move to next spindle
+            if (bothWillBeFilled && counter < 84) {
+                console.log(
+                    `Both values complete for Spindle ${counter}. Moving to Spindle ${counter + 1}`,
+                );
+                setCounter(counter + 1);
+                setValueType('Max'); // Reset to Max for next spindle
+            }
         }
     };
 
@@ -240,30 +273,118 @@ export default function TwistingNumpad({
         console.log(`Deleted ${valueType} value for Spindle ${counter}`);
     };
 
+    const maxInSpec = isInSpec(currentSpindleData.max);
+    const minInSpec = isInSpec(currentSpindleData.min);
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-2">
             <Card className="mx-auto w-full max-w-xs shadow-lg">
                 <CardHeader className="pb-2">
                     {/* Max and Min Value Displays for Current Spindle */}
                     <div className="mb-3 grid grid-cols-2 gap-2">
-                        <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-center">
+                        {/* <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-center">
                             <div className="mb-1 text-xs font-medium text-green-700">
                                 Max Value
                             </div>
                             <div className="font-mono text-sm font-bold text-green-800">
                                 {currentSpindleData.max ?? '--'}
                             </div>
-                        </div>
-                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-center">
+                        </div> */}
+                        {/* <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-center">
                             <div className="mb-1 text-xs font-medium text-blue-700">
                                 Min Value
                             </div>
                             <div className="font-mono text-sm font-bold text-blue-800">
                                 {currentSpindleData.min ?? '--'}
                             </div>
+                        </div> */}
+                        {/* Max Value Box */}
+                        <div
+                            className={`rounded-lg border-2 p-2 text-center transition-colors ${
+                                maxInSpec
+                                    ? 'border-green-200 bg-green-50'
+                                    : 'border-red-400 bg-red-50'
+                            }`}
+                        >
+                            <div className="mb-1 flex items-center justify-center gap-1">
+                                <div
+                                    className={`text-xs font-medium ${maxInSpec ? 'text-green-700' : 'text-red-700'}`}
+                                >
+                                    Max Value
+                                </div>
+                                {currentSpindleData.max !== null && (
+                                    <Check
+                                        className={`h-3 w-3 ${maxInSpec ? 'text-green-600' : 'text-red-600'}`}
+                                    />
+                                )}
+                                {!maxInSpec &&
+                                    currentSpindleData.max !== null && (
+                                        <AlertCircle className="h-3 w-3 text-red-600" />
+                                    )}
+                            </div>
+                            <div
+                                className={`font-mono text-sm font-bold ${maxInSpec ? 'text-green-800' : 'text-red-800'}`}
+                            >
+                                {currentSpindleData.max ?? '--'}
+                            </div>
+                            {!maxInSpec && currentSpindleData.max !== null && (
+                                <div className="mt-1 text-xs text-red-600">
+                                    Range: {minSpec.toFixed(1)}-
+                                    {maxSpec.toFixed(1)}
+                                </div>
+                            )}
+                        </div>
+                        {/* Min Value Box */}
+                        <div
+                            className={`rounded-lg border-2 p-2 text-center transition-colors ${
+                                minInSpec
+                                    ? 'border-blue-200 bg-blue-50'
+                                    : 'border-red-400 bg-red-50'
+                            }`}
+                        >
+                            <div className="mb-1 flex items-center justify-center gap-1">
+                                <div
+                                    className={`text-xs font-medium ${minInSpec ? 'text-blue-700' : 'text-red-700'}`}
+                                >
+                                    Min Value
+                                </div>
+                                {currentSpindleData.min !== null && (
+                                    <Check
+                                        className={`h-3 w-3 ${minInSpec ? 'text-blue-600' : 'text-red-600'}`}
+                                    />
+                                )}
+                                {!minInSpec &&
+                                    currentSpindleData.min !== null && (
+                                        <AlertCircle className="h-3 w-3 text-red-600" />
+                                    )}
+                            </div>
+                            <div
+                                className={`font-mono text-sm font-bold ${minInSpec ? 'text-blue-800' : 'text-red-800'}`}
+                            >
+                                {currentSpindleData.min ?? '--'}
+                            </div>
+                            {!minInSpec && (
+                                <div className="mt-1 text-xs text-red-600">
+                                    Range: {minSpec.toFixed(1)}-
+                                    {maxSpec.toFixed(1)}
+                                </div>
+                            )}
                         </div>
                     </div>
-
+                    {/* Spec Range Display */}
+                    {specTens > 0 && (
+                        <div className="mb-3 rounded-lg border border-purple-200 bg-purple-50 p-2 text-center">
+                            <div className="mb-1 text-xs font-medium text-purple-700">
+                                Specification Range
+                            </div>
+                            <div className="font-mono text-sm text-purple-800">
+                                {minSpec.toFixed(1)} - {maxSpec.toFixed(1)}
+                            </div>
+                            <div className="mt-1 text-xs text-purple-600">
+                                (Spec: {specTens} ± {tensPlus})
+                            </div>
+                        </div>
+                    )}
                     {/* Speed Number Counter with Arrow Buttons */}
                     <div className="mb-3 flex items-center justify-between">
                         <div className="text-sm font-semibold text-foreground">
@@ -304,46 +425,68 @@ export default function TwistingNumpad({
                         </div>
                     </div>
 
-                    <Dialog open={isSpindleModalOpen} onOpenChange={setIsSpindleModalOpen}>
-            <DialogContent className="w-80">
-              <DialogHeader>
-                <DialogTitle>Go to Spindle</DialogTitle>
-                <DialogDescription>Enter a spindle number between 1 and 84</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <input
-                  type="number"
-                  min="1"
-                  max="84"
-                  value={spindleInput}
-                  onChange={(e) => setSpindleInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Enter spindle number"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setIsSpindleModalOpen(false)} className="flex-1">
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const num = Number.parseInt(spindleInput)
-                      if (!isNaN(num) && num >= 1 && num <= 84) {
-                        setCounter(num)
-                        setIsSpindleModalOpen(false)
-                        console.log(`Jumped to spindle ${num}`)
-                      } else {
-                        alert("Please enter a number between 1 and 84")
-                      }
-                    }}
-                    className="flex-1 bg-primary hover:bg-primary/90"
-                  >
-                    Go to Spindle
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+                    <Dialog
+                        open={isSpindleModalOpen}
+                        onOpenChange={setIsSpindleModalOpen}
+                    >
+                        <DialogContent className="w-80">
+                            <DialogHeader>
+                                <DialogTitle>Go to Spindle</DialogTitle>
+                                <DialogDescription>
+                                    Enter a spindle number between 1 and 84
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="84"
+                                    value={spindleInput}
+                                    onChange={(e) =>
+                                        setSpindleInput(e.target.value)
+                                    }
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                                    placeholder="Enter spindle number"
+                                    autoFocus
+                                />
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setIsSpindleModalOpen(false)
+                                        }
+                                        className="flex-1"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            const num =
+                                                Number.parseInt(spindleInput);
+                                            if (
+                                                !isNaN(num) &&
+                                                num >= 1 &&
+                                                num <= 84
+                                            ) {
+                                                setCounter(num);
+                                                setIsSpindleModalOpen(false);
+                                                console.log(
+                                                    `Jumped to spindle ${num}`,
+                                                );
+                                            } else {
+                                                alert(
+                                                    'Please enter a number between 1 and 84',
+                                                );
+                                            }
+                                        }}
+                                        className="flex-1 bg-primary hover:bg-primary/90"
+                                    >
+                                        Go to Spindle
+                                    </Button>
+                                </div>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Value Type Toggle with Arrow Buttons */}
                     <div className="mb-3 flex items-center justify-between">

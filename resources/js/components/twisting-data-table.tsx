@@ -244,6 +244,7 @@ export function TwistingDataTable() {
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
     const [data, setData] = useState<TensionRecord[]>([]);
+    const [totalRows, setTotalRows] = useState(0);
     const [pageCount, setPageCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
@@ -325,6 +326,8 @@ export function TwistingDataTable() {
                 console.log(json);
 
             setData(json.data);
+            setTotalRows(json.total);
+            setPageCount(json.last_page);
         } catch (error: any) {
             if (error.name !== 'AbortError') {
                 console.error('Fetch error:', error);
