@@ -9,7 +9,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Tension Records',
+        title: 'Stock Take Records',
         href: dashboard().url,
     },
     {

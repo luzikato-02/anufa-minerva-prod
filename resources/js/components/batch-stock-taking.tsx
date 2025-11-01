@@ -2,18 +2,29 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
     AlertCircle,
     ArrowLeft,
+    Badge,
     CheckCircle2,
     Loader2,
     Search,
 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
+import { BarcodeScanner } from '@/components/barcode-scanning';
+import { Barcode } from 'lucide-react';
 
 export default function BatchStockTakingForm() {
     // Session management
@@ -28,6 +39,14 @@ export default function BatchStockTakingForm() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+
+    const [showRecordingModal, setShowRecordingModal] = useState(false);
+    const [currentBatchData, setCurrentBatchData] = useState<any>(null);
+    const [actualWeight, setActualWeight] = useState('');
+    const [totalBobbins, setTotalBobbins] = useState('');
+    const [recordingError, setRecordingError] = useState<string | null>(null);
+    const [recordingLoading, setRecordingLoading] = useState(false);
+    const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
 
     // Handle session ID fetch
     const handleSessionFetch = async () => {
@@ -64,7 +83,7 @@ export default function BatchStockTakingForm() {
             const data = await response.json();
 
             if (data.success) {
-                console.log('Session data loaded:', data.data);
+                console.log(data.message);
                 setSessionSelected(true);
             } else {
                 setSessionError(data.message || 'Session not found');
@@ -92,20 +111,18 @@ export default function BatchStockTakingForm() {
 
         try {
             // API call to check batch existence
-            // Expected endpoint: GET /api/batch-stock-taking/check-batch?session_id=${sessionId}&batch_number=${batchNumber}
-            // Response: { exists: boolean, batch_data?: {...}, message: string }
-
             console.log(
                 'Checking batch:',
                 batchNumber,
                 'for session:',
                 sessionId,
             );
-            const baseUrl = window.location.origin;
+
             const params = new URLSearchParams({
                 session_id: sessionId.toString(),
-                batch_number:batchNumber.toString(),
+                batch_number: batchNumber.toString(),
             });
+
             const response = await fetch(
                 `/stock-take-records/check-batch?${params.toString()}`,
                 {
@@ -120,20 +137,143 @@ export default function BatchStockTakingForm() {
             }
 
             const data = await response.json();
+            console.log('Batch check response:', data);
 
-            if (data.exists) {
-                setSuccess(true);
-                setSuccessMessage(data.message || 'Batch exists');
-                console.log('Batch data:', data.batch_data);
-                // TODO: Navigate to batch recording page with batch data
-            } else {
+            if (!data.exists) {
                 setError(data.message || 'Batch not found in this session');
+                return;
             }
+
+            // ✅ Handle if the batch was already recorded
+            if (data.already_recorded) {
+                setSuccess(true);
+                setSuccessMessage(data.message || 'Batch already recorded.');
+                setShowRecordingModal(false);
+                setCurrentBatchData(null);
+                setBatchNumber('');
+                return;
+            }
+
+            // ✅ Otherwise, open the recording modal for a valid batch
+            setSuccess(true);
+            setSuccessMessage(
+                data.message || 'Batch found and ready to record.',
+            );
+
+            const batch = data.batch_data;
+
+            // Normalize keys (handles both formats)
+            const normalizedBatch = {
+                batch_number: batch.batch_number ?? batch['Batch Number'] ?? '',
+                material_code:
+                    batch.material_code ?? batch['Material Code'] ?? '',
+                material_description:
+                    batch.material_description ??
+                    batch['Material Desciption'] ??
+                    '',
+            };
+
+            console.log('Normalized batch data:', normalizedBatch);
+
+            setCurrentBatchData(normalizedBatch);
+            setShowRecordingModal(true);
+            setActualWeight('');
+            setTotalBobbins('');
+            setRecordingError(null);
         } catch (err) {
             setError('Failed to check batch. Please try again.');
             console.error('Error checking batch:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Handle batch recording submission
+    const handleRecordingSubmit = async () => {
+        setRecordingError(null);
+
+        // Validate inputs
+        if (!actualWeight.trim()) {
+            setRecordingError('Please enter actual weight');
+            return;
+        }
+
+        if (!totalBobbins.trim()) {
+            setRecordingError('Please enter total bobbins');
+            return;
+        }
+
+        // Validate numeric values
+        const weight = Number.parseFloat(actualWeight);
+        const bobbins = Number.parseInt(totalBobbins, 10);
+
+        if (isNaN(weight) || weight <= 0) {
+            setRecordingError('Actual weight must be a valid positive number');
+            return;
+        }
+
+        if (isNaN(bobbins) || bobbins <= 0) {
+            setRecordingError('Total bobbins must be a valid positive number');
+            return;
+        }
+
+        setRecordingLoading(true);
+
+        try {
+            // Get current user (placeholder - adjust based on your auth system)
+            const currentUser =
+                localStorage.getItem('current-user') || 'Unknown User';
+
+            const recordData = {
+                session_id: sessionId,
+                batch_number: currentBatchData.batch_number,
+                material_code: currentBatchData.material_code,
+                material_description: currentBatchData.material_description,
+                actual_weight: weight,
+                total_bobbins: bobbins,
+                found_by: currentUser,
+                found_at: new Date().toISOString(),
+            };
+
+            console.log('Submitting batch record:', recordData);
+
+            const tokenRes = await fetch('/csrf-token', {
+                credentials: 'include',
+            });
+            const { csrfToken } = await tokenRes.json();
+            console.log('Extracted CSRF Token from cookie:', csrfToken);
+            // API call to save batch record
+            const response = await fetch('/stock-take-records/record-batch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify(recordData),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to record batch');
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                console.log('Batch recorded successfully:', data.data);
+                setShowRecordingModal(false);
+                setSuccess(true);
+                setSuccessMessage('Batch recorded successfully!');
+                setBatchNumber('');
+                setActualWeight('');
+                setTotalBobbins('');
+            } else {
+                setRecordingError(data.message || 'Failed to record batch');
+            }
+        } catch (err) {
+            setRecordingError('Failed to record batch. Please try again.');
+            console.error('Error recording batch:', err);
+        } finally {
+            setRecordingLoading(false);
         }
     };
 
@@ -152,6 +292,15 @@ export default function BatchStockTakingForm() {
         setBatchNumber('');
         setError(null);
         setSuccess(false);
+    };
+
+    const handleBarcodeScan = (scannedBarcode: string) => {
+        setBatchNumber(scannedBarcode)
+        setShowBarcodeScanner(false)
+        // Automatically fetch the batch after a short delay to ensure state is updated
+        setTimeout(() => {
+        handleBatchFetch()
+        }, 100)
     };
 
     // Session Selection UI
@@ -189,7 +338,7 @@ export default function BatchStockTakingForm() {
                                 className="h-10 text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
-                                e.g., SESSION-2024-001, ST-12345, etc.
+                                e.g., 123456, 567890, etc.
                             </p>
                         </div>
 
@@ -257,8 +406,8 @@ export default function BatchStockTakingForm() {
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        Session: {sessionId}
+                    <p className="text-md text-muted-foreground">
+                        Session ID: {sessionId}
                     </p>
                     <Separator className="mt-3" />
                 </CardHeader>
@@ -283,9 +432,19 @@ export default function BatchStockTakingForm() {
                             className="h-10 text-sm"
                         />
                         <p className="text-xs text-muted-foreground">
-                            e.g., BATCH-2024-001, BTH-12345, etc.
+                            e.g., TAXXXXXX, 000XXXXX, LTXXXXXXX etc.
                         </p>
                     </div>
+
+                     <Button
+                        variant="outline"
+                        onClick={() => setShowBarcodeScanner(true)}
+                        disabled={loading}
+                        className="w-full h-10 text-sm font-medium"
+                        >
+                        <Barcode className="w-4 h-4 mr-2" />
+                        Scan Barcode
+                    </Button>
 
                     {/* Error Message */}
                     {error && (
@@ -336,6 +495,143 @@ export default function BatchStockTakingForm() {
                     </div>
                 </CardContent>
             </Card>
+
+            <BarcodeScanner
+                open={showBarcodeScanner}
+                onClose={() => setShowBarcodeScanner(false)}
+                onScan={handleBarcodeScan}
+            />
+
+
+            <Dialog
+                open={showRecordingModal}
+                onOpenChange={setShowRecordingModal}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Record Batch Details</DialogTitle>
+                        <DialogDescription>
+                            Enter the actual weight and total bobbins.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        {/* Batch Info Display */}
+                        <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">
+                                    Material Code:
+                                </span>
+                                <span className="ml-2 text-muted-foreground">
+                                    {currentBatchData?.material_code}
+                                </span>
+                            </div>
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">
+                                    Description:
+                                </span>
+                                <span className="ml-2 text-muted-foreground">
+                                    {currentBatchData?.material_description}
+                                </span>
+                            </div>
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">
+                                    Batch Number:
+                                </span>
+                                <span className="ml-2 text-muted-foreground">
+                                    {currentBatchData?.batch_number}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Actual Weight Input */}
+                        <div className="space-y-2">
+                            <Label
+                                htmlFor="actual-weight"
+                                className="text-sm font-medium"
+                            >
+                                Actual Weight
+                            </Label>
+                            <Input
+                                id="actual-weight"
+                                type="number"
+                                placeholder="Enter actual weight..."
+                                value={actualWeight}
+                                onChange={(e) =>
+                                    setActualWeight(e.target.value)
+                                }
+                                disabled={recordingLoading}
+                                className="h-10 text-sm"
+                                step="0.01"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                e.g., 25.5, 100.25
+                            </p>
+                        </div>
+
+                        {/* Total Bobbins Input */}
+                        <div className="space-y-2">
+                            <Label
+                                htmlFor="total-bobbins"
+                                className="text-sm font-medium"
+                            >
+                                Total Bobbins
+                            </Label>
+                            <Input
+                                id="total-bobbins"
+                                type="number"
+                                placeholder="Enter total bobbins..."
+                                value={totalBobbins}
+                                onChange={(e) =>
+                                    setTotalBobbins(e.target.value)
+                                }
+                                disabled={recordingLoading}
+                                className="h-10 text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                e.g., 10, 25, 50
+                            </p>
+                        </div>
+
+                        {/* Recording Error */}
+                        {recordingError && (
+                            <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                                <span>{recordingError}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowRecordingModal(false)}
+                            disabled={recordingLoading}
+                            className="h-10"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleRecordingSubmit}
+                            disabled={
+                                recordingLoading ||
+                                !actualWeight.trim() ||
+                                !totalBobbins.trim()
+                            }
+                            className="h-10"
+                        >
+                            {recordingLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Recording...
+                                </>
+                            ) : (
+                                'Submit'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
