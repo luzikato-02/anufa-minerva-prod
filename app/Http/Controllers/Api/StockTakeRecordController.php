@@ -62,16 +62,16 @@ class StockTakeRecordController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'metadata' => [
-                        'total_batches' => $metadata['total_batches'] ?? count($batchData),
-                        'total_materials' => $metadata['total_materials'] ?? 0,
-                        'total_checked_batches' => $metadata['total_checked_batches'] ?? 0,
-                        'session_leader' => $metadata['session_leader'] ?? null,
-                        'session_status' => $metadata['session_status'] ?? 'active',
-                    ],
-                    'indv_batch_data' => $batchData,
-                ],
+                // 'data' => [
+                //     'metadata' => [
+                //         'total_batches' => $metadata['total_batches'] ?? count($batchData),
+                //         'total_materials' => $metadata['total_materials'] ?? 0,
+                //         'total_checked_batches' => $metadata['total_checked_batches'] ?? 0,
+                //         'session_leader' => $metadata['session_leader'] ?? null,
+                //         'session_status' => $metadata['session_status'] ?? 'active',
+                //     ],
+                //     'indv_batch_data' => $batchData,
+                // ],
                 'message' => 'Session loaded successfully'
             ]);
         } catch (\Exception $e) {
@@ -82,64 +82,212 @@ class StockTakeRecordController extends Controller
         }
     }
 
-    public function checkBatch(Request $request): JsonResponse
-    {
-        try {
-            $sessionId = $request->query('session_id');
-            $batchNumber = $request->query('batch_number');
+    public function updateSessionStatus(Request $request, $id): JsonResponse
+{
+    try {
+        // Validate request input
+        $validated = $request->validate([
+            'session_status' => [
+                'required',
+                Rule::in(['Completed', 'In Progress']), // ✅ limit to allowed statuses
+            ],
+        ]);
 
-            if (!$sessionId || !$batchNumber) {
-                return response()->json([
-                    'exists' => false,
-                    'message' => 'Session ID and batch number are required'
-                ], 400);
-            }
+        // Find the record by id or session_id
+        $record = StockTakingRecord::where('id', $id)
+            ->orWhere('session_id', $id)
+            ->first();
 
-            // Find the session record
-            $record = StockTakingRecord::where('id', $sessionId)
-                ->orWhere('session_id', $sessionId)
-                ->first();
-
-            if (!$record) {
-                return response()->json([
-                    'exists' => false,
-                    'message' => 'Session not found'
-                ], 404);
-            }
-
-            // Search for the batch in indv_batch_data
-            $batchData = $record->indv_batch_data ?? [];
-            $foundBatch = null;
-
-            foreach ($batchData as $batch) {
-                $batchKey = $batch['Batch Number'] ?? $batch['batch_number'] ?? null;
-                if ($batchKey === $batchNumber) {
-                    $foundBatch = $batch;
-                    break;
-                }
-            }
-
-
-            if ($foundBatch) {
-                return response()->json([
-                    'exists' => true,
-                    'batch_data' => $foundBatch,
-                    'message' => 'Batch exists'
-                ]);
-            }
-
+        if (!$record) {
             return response()->json([
-                'exists' => false,
-                'batch_data' => null,
-                'message' => 'Batch not found in this session'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'exists' => false,
-                'message' => 'Failed to check batch: ' . $e->getMessage()
-            ], 500);
+                'success' => false,
+                'message' => 'Session not found',
+            ], 404);
         }
+
+        // Update the metadata’s session_status field
+        $metadata = $record->metadata ?? [];
+        $metadata['session_status'] = $validated['session_status'];
+        $record->metadata = $metadata;
+        $record->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Session status updated successfully.',
+            'data' => [
+                'session_id' => $record->session_id,
+                'session_status' => $metadata['session_status'],
+            ],
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid status value.',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to update session status: ' . $e->getMessage(),
+        ], 500);
     }
+}
+
+
+    public function checkBatch(Request $request): JsonResponse
+{
+    try {
+        $sessionId = $request->query('session_id');
+        $batchNumber = $request->query('batch_number');
+
+        if (!$sessionId || !$batchNumber) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Session ID and batch number are required'
+            ], 400);
+        }
+
+        // 🔍 Find the session record
+        $record = StockTakingRecord::where('id', $sessionId)
+            ->orWhere('session_id', $sessionId)
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Session not found'
+            ], 404);
+        }
+
+        // 🔍 Check if batch exists in the master list
+        $batchData = $record->indv_batch_data ?? [];
+        $foundBatch = collect($batchData)->first(function ($batch) use ($batchNumber) {
+            $batchKey = $batch['Batch Number'] ?? $batch['batch_number'] ?? null;
+            return $batchKey === $batchNumber;
+        });
+
+        if (!$foundBatch) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Batch not found in this session',
+            ]);
+        }
+
+        // ✅ Check if this batch has already been recorded
+        $recordedBatches = $record->recorded_batches ?? [];
+        $alreadyRecorded = collect($recordedBatches)->contains(function ($recorded) use ($batchNumber) {
+            return ($recorded['batch_number'] ?? null) === $batchNumber;
+        });
+
+        if ($alreadyRecorded) {
+            return response()->json([
+                'exists' => true,
+                'already_recorded' => true,
+                'batch_data' => $foundBatch,
+                'message' => 'Batch already found. Move to the next batch.'
+            ]);
+        }
+
+        // ✅ Otherwise, return batch is valid and ready to record
+        return response()->json([
+            'exists' => true,
+            'already_recorded' => false,
+            'batch_data' => $foundBatch,
+            'message' => 'Batch is valid but not "found" yet.'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'exists' => false,
+            'message' => 'Failed to check batch: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+
+    public function recordBatch(Request $request): JsonResponse
+{
+    try {
+        // Step 1️⃣: Accept both naming formats
+        $data = $request->all();
+
+        // Normalize keys so both formats work
+        $normalized = [
+            'session_id'          => $data['session_id'] ?? null,
+            'batch_number'        => $data['batch_number'] ?? $data['Batch Number'] ?? null,
+            'material_code'       => $data['material_code'] ?? $data['Material Code'] ?? null,
+            'material_description'=> $data['material_description'] ?? $data['Material Desciption'] ?? null,
+            'actual_weight'       => $data['actual_weight'] ?? null,
+            'total_bobbins'       => $data['total_bobbins'] ?? null,
+            'timestamp'           => $data['timestamp'] ?? $data['found_at'] ?? null,
+            'user_found'          => $data['user_found'] ?? $data['found_by'] ?? null,
+        ];
+
+        // Step 2️⃣: Validate normalized fields
+        $validated = validator($normalized, [
+            'session_id'           => 'required|string',
+            'batch_number'         => 'required|string',
+            'material_code'        => 'required|string',
+            'material_description' => 'required|string',
+            'actual_weight'        => 'required|numeric|min:0',
+            'total_bobbins'        => 'required|integer|min:0',
+            'timestamp'            => 'required|date',
+            'user_found'           => 'required|string',
+        ])->validate();
+
+        // Step 3️⃣: Find session
+        $record = StockTakingRecord::where('id', $validated['session_id'])
+            ->orWhere('session_id', $validated['session_id'])
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Session not found'
+            ], 404);
+        }
+
+        // Step 4️⃣: Append new batch entry
+        $batchRecording = [
+            'batch_number'        => $validated['batch_number'],
+            'material_code'       => $validated['material_code'],
+            'material_description'=> $validated['material_description'],
+            'actual_weight'       => $validated['actual_weight'],
+            'total_bobbins'       => $validated['total_bobbins'],
+            'timestamp_found'     => $validated['timestamp'],
+            'user_found'          => $validated['user_found'],
+            'recorded_at'         => now()->toIso8601String(),
+        ];
+
+        $recordedBatches = $record->recorded_batches ?? [];
+        $recordedBatches[] = $batchRecording;
+        $record->recorded_batches = $recordedBatches;
+
+        // Update metadata count
+        $metadata = $record->metadata ?? [];
+        $metadata['total_checked_batches'] = ($metadata['total_checked_batches'] ?? 0) + 1;
+        $record->metadata = $metadata;
+        $record->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Batch recorded successfully',
+            'data' => $batchRecording
+        ], 201);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to record batch: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
 
     protected function generateUniqueSessionId(): string
     {
@@ -228,17 +376,53 @@ class StockTakeRecordController extends Controller
     /**
      * Download CSV data for a specific record
      */
-    public function downloadCsv(StockTakingRecord $stockTakeRecord)
-    {
-        $filename = sprintf(
-            '%s-%s.csv',
-            $stockTakeRecord->created_at->format('Y-m-d'),
-            $tensionRecord->session_leader ?? 'unknown'
-        );
-        return response($stockTakeRecord->csv_data)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+  public function downloadCsv(StockTakingRecord $stockTakeRecord)
+{
+    // Step 1️⃣: Extract stock_take_summary from the record
+    $summary = $stockTakeRecord->stock_take_summary ?? null;
+
+    if (empty($summary)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'No stock_take_summary data found for this session.'
+        ], 404);
     }
+
+    // Step 2️⃣: Ensure the summary is an array (if stored as JSON)
+    if (is_string($summary)) {
+        $summary = json_decode($summary, true);
+    }
+
+    // Step 3️⃣: Generate CSV string from summary array
+    if (!is_array($summary) || empty($summary)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid or empty summary data.'
+        ], 422);
+    }
+
+    // Convert associative array to CSV text
+    $headers = array_keys($summary[0]);
+    $csv = implode(',', $headers) . "\n";
+
+    foreach ($summary as $row) {
+        $csv .= implode(',', array_map(function ($value) {
+            return '"' . str_replace('"', '""', $value) . '"';
+        }, $row)) . "\n";
+    }
+
+    // Step 4️⃣: Generate filename
+    $filename = sprintf(
+        'stock_take_summary_%s.csv',
+        $stockTakeRecord->session_id ?? $stockTakeRecord->id
+    );
+
+    // Step 5️⃣: Return the CSV response
+    return response($csv)
+        ->header('Content-Type', 'text/csv')
+        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+}
+
 
     /**
      * Get statistics for dashboard

@@ -34,6 +34,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ✅ GET session data by ID
     Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
 
+    Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch']);
+
+    Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus']);
+
+    Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
+
+
+
     Route::resource('stock-take-records', StockTakeRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
     ]);
