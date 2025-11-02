@@ -1,132 +1,292 @@
-"use client"
+'use client';
 
-import { useRef, useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { AlertCircle } from "lucide-react"
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { debug } from 'console';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 interface BarcodeScannerProps {
-  open: boolean
-  onClose: () => void
-  onScan: (barcode: string) => void
+    open: boolean;
+    onClose: () => void;
+    onScan: (barcode: string) => void;
+}
+
+async function loadQuagga() {
+    if (window.Quagga) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src =
+            'https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.body.appendChild(script);
+    });
 }
 
 export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [scanError, setScanError] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [scanError, setScanError] = useState<string | null>(null);
+    const [isScanning, setIsScanning] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const streamRef = useRef<MediaStream | null>(null);
+    const quaggaInitialized = useRef(false);
 
-  useEffect(() => {
-    if (!open) return
-
-    const startCamera = async () => {
-      try {
-        setScanError(null)
-        setIsScanning(true)
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        })
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
+    useEffect(() => {
+        if (!open) {
+            quaggaInitialized.current = false;
+            return;
         }
-      } catch (err) {
-        setScanError("Unable to access camera. Please check permissions.")
-        setIsScanning(false)
-        console.error("Camera error:", err)
-      }
-    }
 
-    startCamera()
+        let isMounted = true;
 
-    return () => {
-      if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
-        tracks.forEach((track) => track.stop())
-      }
-    }
-  }, [open])
+        const initQuagga = async () => {
+            try {
+                setIsLoading(true);
+                setScanError(null);
 
-  useEffect(() => {
-    if (!isScanning || !videoRef.current) return
+                // Load Quagga library
+                await loadQuagga();
+                if (!isMounted) return;
 
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")
+                // Wait for dialog to render
+                await new Promise(resolve => setTimeout(resolve, 100));
+                if (!isMounted || !videoRef.current) {
+                    console.log('Video ref not ready');
+                    return;
+                }
 
-    const scanInterval = setInterval(() => {
-      if (videoRef.current && ctx) {
-        canvas.width = videoRef.current.videoWidth
-        canvas.height = videoRef.current.videoHeight
-        ctx.drawImage(videoRef.current, 0, 0)
+                console.log('Requesting camera access...');
+                
+                // Get camera stream
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                });
 
-        // This is a placeholder - integrate with jsQR or similar library
-        // For now, this demonstrates the flow
-        console.log("[v0] Scanning frame...")
-      }
-    }, 500)
+                console.log('Camera stream obtained');
 
-    return () => clearInterval(scanInterval)
-  }, [isScanning])
+                if (!isMounted) {
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
 
-//   const handleManualInput = () => {
-//     const input = prompt("Enter batch number manually:")
-//     if (input?.trim()) {
-//       onScan(input.trim())
-//       onClose()
-//     }
-//   }
+                streamRef.current = stream;
 
-  const handleClose = () => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
-      tracks.forEach((track) => track.stop())
-    }
-    setIsScanning(false)
-    setScanError(null)
-    onClose()
-  }
+                // Attach stream to video
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    
+                    // Wait a bit for video to start playing
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Scan Batch Barcode</DialogTitle>
-          <DialogDescription>Point your camera at the barcode to scan</DialogDescription>
-        </DialogHeader>
+                if (!isMounted || quaggaInitialized.current) return;
 
-        <div className="space-y-4">
-          {scanError ? (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-destructive">Camera Error</p>
-                <p className="text-xs text-destructive/80 mt-1">{scanError}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-8 border-2 border-yellow-400 rounded-lg opacity-75" />
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 text-xs text-yellow-400 font-medium">
-                  Align barcode within frame
+                console.log('Initializing Quagga...');
+
+                // Initialize Quagga
+                const config = {
+                    inputStream: {
+                        type: 'LiveStream',
+                        target: videoRef.current,
+                    },
+                    decoder: {
+                        readers: [
+                            'code_128_reader',
+                            'ean_reader',
+                            'ean_8_reader',
+                            'code_39_reader',
+                            'upc_reader',
+                            'upc_e_reader',
+                        ],
+                    },
+                    locator: {
+                        patchSize: 'medium',
+                        halfSample: true,
+                    },
+                    numOfWorkers: navigator.hardwareConcurrency || 4,
+                    frequency: 10,
+                };
+
+                window.Quagga.init(config, (err: any) => {
+                    if (!isMounted) return;
+                    
+                    if (err) {
+                        console.error('Quagga init error:', err);
+                        setScanError(
+                            'Failed to initialize scanner. Please try again.',
+                        );
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    console.log('Quagga initialized successfully');
+                    quaggaInitialized.current = true;
+                    setIsLoading(false);
+                    setIsScanning(true);
+                    
+                    window.Quagga.start();
+
+                    window.Quagga.onDetected((result: any) => {
+                        if (result?.codeResult?.code) {
+                            const code = result.codeResult.code;
+                            console.log('[SCAN SUCCESS]', code);
+                            onScan(code);
+                            handleClose();
+                        }
+                    });
+                });
+            } catch (err: any) {
+                if (!isMounted) return;
+                
+                console.error('Scanner error:', err);
+                if (err.name === 'NotAllowedError') {
+                    setScanError(
+                        'Camera access denied. Please allow camera permission.',
+                    );
+                } else if (err.name === 'NotFoundError') {
+                    setScanError('No camera device found.');
+                } else if (err.name === 'NotReadableError') {
+                    setScanError('Camera is in use by another app.');
+                } else {
+                    setScanError(`Error: ${err.message}`);
+                }
+                setIsLoading(false);
+            }
+        };
+
+        initQuagga();
+
+        return () => {
+            isMounted = false;
+            stopCamera();
+        };
+    }, [open]);
+
+    const stopCamera = () => {
+        if (window.Quagga && quaggaInitialized.current) {
+            try {
+                window.Quagga.stop();
+                window.Quagga.offDetected();
+                quaggaInitialized.current = false;
+            } catch (err) {
+                console.warn('Error stopping Quagga:', err);
+            }
+        }
+        
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((t) => t.stop());
+            streamRef.current = null;
+        }
+        
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+    };
+
+    const handleManualInput = () => {
+        const input = prompt('Enter batch number manually:');
+        if (input?.trim()) {
+            onScan(input.trim());
+            handleClose();
+        }
+    };
+
+    const handleClose = () => {
+        stopCamera();
+        setScanError(null);
+        setIsScanning(false);
+        setIsLoading(false);
+        onClose();
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Scan Batch Barcode</DialogTitle>
+                    <DialogDescription>
+                        Point your camera at the barcode to scan
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    {scanError ? (
+                        <div className="flex gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-4">
+                            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+                            <div>
+                                <p className="text-sm font-medium text-destructive">
+                                    Scanner Error
+                                </p>
+                                <p className="mt-1 text-xs text-destructive/80">
+                                    {scanError}
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="h-full w-full object-cover"
+                            />
+                            {isLoading && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Loader2 className="h-8 w-8 animate-spin text-yellow-400" />
+                                        <p className="text-xs text-yellow-400">
+                                            Initializing scanner...
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                            {isScanning && (
+                                <div className="pointer-events-none absolute inset-0">
+                                    <div className="absolute inset-8 rounded-lg border-2 border-yellow-400 opacity-75" />
+                                    <div className="absolute top-2 left-1/2 -translate-x-1/2 text-xs font-medium text-yellow-400">
+                                        Align barcode within frame
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                        <Button
+                            variant="outline"
+                            onClick={handleClose}
+                            className="h-10 flex-1 bg-transparent"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleManualInput}
+                            className="h-10 flex-1"
+                        >
+                            Enter Manually
+                        </Button>
+                    </div>
                 </div>
-              </div>
-            </div>
-          )}
+            </DialogContent>
+        </Dialog>
+    );
+}
 
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={handleClose} className="flex-1 h-10 bg-transparent">
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
+declare global {
+    interface Window {
+        Quagga: any;
+    }
 }

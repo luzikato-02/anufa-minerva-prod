@@ -376,52 +376,42 @@ class StockTakeRecordController extends Controller
     /**
      * Download CSV data for a specific record
      */
-  public function downloadCsv(StockTakingRecord $stockTakeRecord)
+  /**
+ * Send stock_take_summary data as JSON for frontend CSV conversion
+ */
+public function downloadCsv(StockTakingRecord $stockTakeRecord): JsonResponse
 {
-    // Step 1️⃣: Extract stock_take_summary from the record
+    // Step 1: Get stock_take_summary safely
     $summary = $stockTakeRecord->stock_take_summary ?? null;
 
-    if (empty($summary)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'No stock_take_summary data found for this session.'
-        ], 404);
-    }
-
-    // Step 2️⃣: Ensure the summary is an array (if stored as JSON)
+    // Step 2: Decode JSON if stored as string
     if (is_string($summary)) {
         $summary = json_decode($summary, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid JSON in stock_take_summary.',
+            ], 422);
+        }
     }
 
-    // Step 3️⃣: Generate CSV string from summary array
+    // Step 3: Validate the summary is a non-empty array
     if (!is_array($summary) || empty($summary)) {
         return response()->json([
             'success' => false,
-            'message' => 'Invalid or empty summary data.'
-        ], 422);
+            'message' => 'No stock_take_summary data found for this session.',
+        ], 404);
     }
 
-    // Convert associative array to CSV text
-    $headers = array_keys($summary[0]);
-    $csv = implode(',', $headers) . "\n";
-
-    foreach ($summary as $row) {
-        $csv .= implode(',', array_map(function ($value) {
-            return '"' . str_replace('"', '""', $value) . '"';
-        }, $row)) . "\n";
-    }
-
-    // Step 4️⃣: Generate filename
-    $filename = sprintf(
-        'stock_take_summary_%s.csv',
-        $stockTakeRecord->session_id ?? $stockTakeRecord->id
-    );
-
-    // Step 5️⃣: Return the CSV response
-    return response($csv)
-        ->header('Content-Type', 'text/csv')
-        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    // Step 4: Return JSON to frontend
+    return response()->json([
+        'success' => true,
+        'session_id' => $stockTakeRecord->session_id ?? $stockTakeRecord->id,
+        'summary' => $summary,
+    ]);
 }
+
 
 
     /**
