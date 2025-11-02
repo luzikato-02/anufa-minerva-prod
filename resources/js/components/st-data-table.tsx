@@ -214,15 +214,49 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
               )
             : 0;
 
-    const handleDownloadCSV = () => {
+    const handleDownloadCSV = async () => {
+    try {
         const baseUrl = window.location.origin;
         const url = `${baseUrl}/stock-take-records/${record.id}/download`;
 
+        // Fetch JSON from backend
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success || !data.summary || data.summary.length === 0) {
+            alert(data.message || 'No data available for download.');
+            return;
+        }
+
+        const summary = data.summary;
+
+        // Convert JSON array to CSV
+        const headers = Object.keys(summary[0]);
+        const csvRows = [
+            headers.join(','), // header row
+            ...summary.map(row =>
+                headers.map(field => `"${(row[field] ?? '').toString().replace(/"/g, '""')}"`).join(',')
+            )
+        ];
+        const csvString = csvRows.join('\n');
+
+        // Create a Blob and trigger download
+        const blob = new Blob([csvString], { type: 'text/csv' });
+        const downloadUrl = URL.createObjectURL(blob);
+
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
+        a.download = `stock_take_summary_${data.session_id}.csv`;
         a.click();
-        URL.revokeObjectURL(url);
-    };
+
+        // Cleanup
+        URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+        console.error('Failed to download CSV:', error);
+        alert('Failed to download CSV.');
+    }
+};
+
 
     const handleChangeStatus = async () => {
         const baseUrl = window.location.origin;
@@ -464,7 +498,6 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                 <DialogFooter className="px-6 pb-6">
                     <Button
                         variant="outline"
-                        className="bg-green-500 text-emerald-50"
                         onClick={handleDownloadCSV}
                     >
                         <DownloadIcon className="mr-2 h-4 w-4" />
@@ -520,7 +553,7 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                                     Cancel
                                 </Button>
                                 <Button onClick={handleChangeStatus}>
-                                    Update Status
+                                    Commit
                                 </Button>
                             </DialogFooter>
                         </DialogContent>

@@ -40,8 +40,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
 
-
-
     Route::resource('stock-take-records', StockTakeRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
     ]);
