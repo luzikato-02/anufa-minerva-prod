@@ -68,9 +68,12 @@ class StockTakingRecord extends Model
             'is_recorded' => $recorded ? true : false,
             'actual_weight' => $recorded['actual_weight'] ?? null,
             'total_bobbins' => $recorded['total_bobbins'] ?? null,
+            'line_position' => $recorded['line_position'] ?? null,
+            'row_position' => $recorded['row_position'] ?? null,
             'timestamp_found' => $recorded['timestamp_found'] ?? null,
             'recorded_at' => $recorded['recorded_at'] ?? null,
             'user_found' => $recorded['user_found'] ?? null,
+            'explanation' => $recorded['explanation'] ?? null,
         ];
     });
 

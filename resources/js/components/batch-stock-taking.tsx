@@ -1,5 +1,6 @@
 'use client';
 
+import { BarcodeScanner } from '@/components/barcode-scanning';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -16,15 +17,13 @@ import { Separator } from '@/components/ui/separator';
 import {
     AlertCircle,
     ArrowLeft,
-    Badge,
+    Barcode,
     CheckCircle2,
     Loader2,
     Search,
 } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
-import { BarcodeScanner } from '@/components/barcode-scanning';
-import { Barcode } from 'lucide-react';
 
 export default function BatchStockTakingForm() {
     // Session management
@@ -44,9 +43,12 @@ export default function BatchStockTakingForm() {
     const [currentBatchData, setCurrentBatchData] = useState<any>(null);
     const [actualWeight, setActualWeight] = useState('');
     const [totalBobbins, setTotalBobbins] = useState('');
+    const [linePosition, setLinePosition] = useState('');
+    const [rowPosition, setRowPosition] = useState('');
     const [recordingError, setRecordingError] = useState<string | null>(null);
     const [recordingLoading, setRecordingLoading] = useState(false);
-    const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+    const [explanation, setExplanation] = useState("");
+    const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
     // Handle session ID fetch
     const handleSessionFetch = async () => {
@@ -144,7 +146,7 @@ export default function BatchStockTakingForm() {
                 return;
             }
 
-            // ✅ Handle if the batch was already recorded
+            // Handle if the batch was already recorded
             if (data.already_recorded) {
                 setSuccess(true);
                 setSuccessMessage(data.message || 'Batch already recorded.');
@@ -154,7 +156,7 @@ export default function BatchStockTakingForm() {
                 return;
             }
 
-            // ✅ Otherwise, open the recording modal for a valid batch
+            // Otherwise, open the recording modal for a valid batch
             setSuccess(true);
             setSuccessMessage(
                 data.message || 'Batch found and ready to record.',
@@ -177,8 +179,11 @@ export default function BatchStockTakingForm() {
 
             setCurrentBatchData(normalizedBatch);
             setShowRecordingModal(true);
-            setActualWeight('');
-            setTotalBobbins('');
+            setActualWeight(batch.weight ?? '');
+            setTotalBobbins(batch.bobbin_qty ?? '');
+            setLinePosition('');
+            setRowPosition('');
+            setExplanation("");
             setRecordingError(null);
         } catch (err) {
             setError('Failed to check batch. Please try again.');
@@ -203,9 +208,25 @@ export default function BatchStockTakingForm() {
             return;
         }
 
+        // if (!linePosition.trim()) {
+        //     setRecordingError('Please enter line number');
+        //     return;
+        // }
+
+        // if (!rowPosition.trim()) {
+        //     setRecordingError('Please enter row number');
+        //     return;
+        // }
+
+        // if (!explanation.trim()) {
+        // setRecordingError("Please enter an explanation")
+        // return
+        // }
+
         // Validate numeric values
         const weight = Number.parseFloat(actualWeight);
         const bobbins = Number.parseInt(totalBobbins, 10);
+        const line = Number.parseInt(linePosition, 10);
 
         if (isNaN(weight) || weight <= 0) {
             setRecordingError('Actual weight must be a valid positive number');
@@ -216,6 +237,12 @@ export default function BatchStockTakingForm() {
             setRecordingError('Total bobbins must be a valid positive number');
             return;
         }
+
+        // if (isNaN(line) || line <= 0) {
+        //     setRecordingError('Line number must be a valid positive number');
+        //     return;
+        // }
+
 
         setRecordingLoading(true);
 
@@ -231,6 +258,9 @@ export default function BatchStockTakingForm() {
                 material_description: currentBatchData.material_description,
                 actual_weight: weight,
                 total_bobbins: bobbins,
+                line_position: line,
+                row_position: rowPosition,
+                explanation: explanation.trim(),
                 found_by: currentUser,
                 found_at: new Date().toISOString(),
             };
@@ -266,6 +296,9 @@ export default function BatchStockTakingForm() {
                 setBatchNumber('');
                 setActualWeight('');
                 setTotalBobbins('');
+                setLinePosition('');
+                setRowPosition('');
+                setExplanation("") // Reset explanation
             } else {
                 setRecordingError(data.message || 'Failed to record batch');
             }
@@ -292,15 +325,18 @@ export default function BatchStockTakingForm() {
         setBatchNumber('');
         setError(null);
         setSuccess(false);
+        setLinePosition('');
+        setRowPosition('');
+        setExplanation("") // Reset explanation
     };
 
     const handleBarcodeScan = (scannedBarcode: string) => {
-        setBatchNumber(scannedBarcode)
-        setShowBarcodeScanner(false)
+        setBatchNumber(scannedBarcode);
+        setShowBarcodeScanner(false);
         // Automatically fetch the batch after a short delay to ensure state is updated
         setTimeout(() => {
-        handleBatchFetch()
-        }, 100)
+            handleBatchFetch();
+        }, 100);
     };
 
     // Session Selection UI
@@ -436,13 +472,13 @@ export default function BatchStockTakingForm() {
                         </p>
                     </div>
 
-                     <Button
+                    <Button
                         variant="outline"
                         onClick={() => setShowBarcodeScanner(true)}
                         disabled={loading}
-                        className="w-full h-10 text-sm font-medium"
-                        >
-                        <Barcode className="w-4 h-4 mr-2" />
+                        className="h-10 w-full text-sm font-medium"
+                    >
+                        <Barcode className="mr-2 h-4 w-4" />
                         Scan Barcode
                     </Button>
 
@@ -502,7 +538,6 @@ export default function BatchStockTakingForm() {
                 onScan={handleBarcodeScan}
             />
 
-
             <Dialog
                 open={showRecordingModal}
                 onOpenChange={setShowRecordingModal}
@@ -544,54 +579,119 @@ export default function BatchStockTakingForm() {
                             </div>
                         </div>
 
-                        {/* Actual Weight Input */}
-                        <div className="space-y-2">
-                            <Label
-                                htmlFor="actual-weight"
-                                className="text-sm font-medium"
-                            >
-                                Actual Weight
-                            </Label>
-                            <Input
-                                id="actual-weight"
-                                type="number"
-                                placeholder="Enter actual weight..."
-                                value={actualWeight}
-                                onChange={(e) =>
-                                    setActualWeight(e.target.value)
-                                }
-                                disabled={recordingLoading}
-                                className="h-10 text-sm"
-                                step="0.01"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                e.g., 25.5, 100.25
-                            </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* Actual Weight Input */}
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="actual-weight"
+                                    className="text-sm font-medium"
+                                >
+                                    Actual Weight
+                                </Label>
+                                <Input
+                                    id="actual-weight"
+                                    type="number"
+                                    placeholder="Enter actual weight..."
+                                    value={actualWeight}
+                                    onChange={(e) =>
+                                        setActualWeight(e.target.value)
+                                    }
+                                    disabled={recordingLoading}
+                                    className="h-10 text-sm"
+                                    step="0.01"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    e.g., 25.5, 100.25
+                                </p>
+                            </div>
+                            {/* Total Bobbins Input */}
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="total-bobbins"
+                                    className="text-sm font-medium"
+                                >
+                                    Total Bobbins
+                                </Label>
+                                <Input
+                                    id="total-bobbins"
+                                    type="number"
+                                    placeholder="Enter total bobbins..."
+                                    value={totalBobbins}
+                                    onChange={(e) =>
+                                        setTotalBobbins(e.target.value)
+                                    }
+                                    disabled={recordingLoading}
+                                    className="h-10 text-sm"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    e.g., 10, 25, 50
+                                </p>
+                            </div>
+                        </div>
+                        {/* Line and Row Inputs */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="line-number"
+                                    className="text-sm font-medium"
+                                >
+                                    Line Number
+                                </Label>
+                                <Input
+                                    id="line-number"
+                                    type="number"
+                                    placeholder="Enter line..."
+                                    value={linePosition}
+                                    onChange={(e) =>
+                                        setLinePosition(e.target.value)
+                                    }
+                                    disabled={recordingLoading}
+                                    className="h-10 text-sm"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    e.g., 1, 2, 3
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="row-number"
+                                    className="text-sm font-medium"
+                                >
+                                    Row Number
+                                </Label>
+                                <Input
+                                    id="row-number"
+                                    type="text"
+                                    placeholder="Enter row..."
+                                    value={rowPosition}
+                                    onChange={(e) =>
+                                        setRowPosition(e.target.value)
+                                    }
+                                    disabled={recordingLoading}
+                                    className="h-10 text-sm"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    e.g., A, B, C 
+                                </p>
+                            </div>
                         </div>
 
-                        {/* Total Bobbins Input */}
-                        <div className="space-y-2">
-                            <Label
-                                htmlFor="total-bobbins"
-                                className="text-sm font-medium"
-                            >
-                                Total Bobbins
-                            </Label>
-                            <Input
-                                id="total-bobbins"
-                                type="number"
-                                placeholder="Enter total bobbins..."
-                                value={totalBobbins}
-                                onChange={(e) =>
-                                    setTotalBobbins(e.target.value)
-                                }
-                                disabled={recordingLoading}
-                                className="h-10 text-sm"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                e.g., 10, 25, 50
-                            </p>
-                        </div>
+                        {/* Explanation Input Field */}
+            <div className="space-y-2">
+              <Label htmlFor="explanation" className="text-sm font-medium">
+                Explanation
+              </Label>
+              <textarea
+                id="explanation"
+                placeholder="Enter any notes or explanation for this batch..."
+                value={explanation}
+                onChange={(e) => setExplanation(e.target.value)}
+                disabled={recordingLoading}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background border-input placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent min-h-20 resize-none"
+              />
+              <p className="text-xs text-muted-foreground">e.g., Batch found in storage area B, condition noted</p>
+            </div>
 
                         {/* Recording Error */}
                         {recordingError && (
@@ -616,7 +716,7 @@ export default function BatchStockTakingForm() {
                             disabled={
                                 recordingLoading ||
                                 !actualWeight.trim() ||
-                                !totalBobbins.trim()
+                                !totalBobbins.trim() 
                             }
                             className="h-10"
                         >

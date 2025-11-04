@@ -10,10 +10,10 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierRecord, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck } from 'lucide-react';
 import AppLogo from './app-logo';
 import { IconStack2 } from '@tabler/icons-react';
 import { InventoryNav } from './inventory-nav';
@@ -29,9 +29,9 @@ const mainNavItems: NavItem[] = [
     },
 
     {
-        title: 'Maintain: User Maintenance Table',
-        href: underConstruction(),
-        icon: LayoutGrid,
+        title: 'User Maintenance Table',
+        href: userMaintenance(),
+        icon: UserCheck,
     },
 ];
 
@@ -56,13 +56,13 @@ const processParamsNavItems: NavItem[] = [
 
     {
         title: 'Record: Finish Earlier Spindles',
-        href: underConstruction(),
+        href: finishEarlierRecord(),
         icon: LayoutGrid,
     },
 
     {
         title: 'Display: Finish Earlier Records',
-        href: underConstruction(),
+        href: finishEarlierDisplay(),
         icon: LayoutGrid,
     },
 

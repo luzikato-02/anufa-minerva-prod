@@ -162,6 +162,14 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
         },
     },
     {
+        accessorKey: 'Total Materials',
+        header: 'Total Materials',
+        accessorFn: (row) => row.metadata?.total_materials,
+        cell: ({ getValue }) => (
+            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+        ),
+    },
+    {
         accessorKey: 'Total Batches',
         header: 'Total Batches',
         accessorFn: (row) => row.metadata?.total_batches,
@@ -215,48 +223,52 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
             : 0;
 
     const handleDownloadCSV = async () => {
-    try {
-        const baseUrl = window.location.origin;
-        const url = `${baseUrl}/stock-take-records/${record.id}/download`;
+        try {
+            const baseUrl = window.location.origin;
+            const url = `${baseUrl}/stock-take-records/${record.id}/download`;
 
-        // Fetch JSON from backend
-        const response = await fetch(url);
-        const data = await response.json();
+            // Fetch JSON from backend
+            const response = await fetch(url);
+            const data = await response.json();
 
-        if (!data.success || !data.summary || data.summary.length === 0) {
-            alert(data.message || 'No data available for download.');
-            return;
+            if (!data.success || !data.summary || data.summary.length === 0) {
+                alert(data.message || 'No data available for download.');
+                return;
+            }
+
+            const summary = data.summary;
+
+            // Convert JSON array to CSV
+            const headers = Object.keys(summary[0]);
+            const csvRows = [
+                headers.join(','), // header row
+                ...summary.map((row) =>
+                    headers
+                        .map(
+                            (field) =>
+                                `"${(row[field] ?? '').toString().replace(/"/g, '""')}"`,
+                        )
+                        .join(','),
+                ),
+            ];
+            const csvString = csvRows.join('\n');
+
+            // Create a Blob and trigger download
+            const blob = new Blob([csvString], { type: 'text/csv' });
+            const downloadUrl = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `stock_take_summary_${data.session_id}.csv`;
+            a.click();
+
+            // Cleanup
+            URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            console.error('Failed to download CSV:', error);
+            alert('Failed to download CSV.');
         }
-
-        const summary = data.summary;
-
-        // Convert JSON array to CSV
-        const headers = Object.keys(summary[0]);
-        const csvRows = [
-            headers.join(','), // header row
-            ...summary.map(row =>
-                headers.map(field => `"${(row[field] ?? '').toString().replace(/"/g, '""')}"`).join(',')
-            )
-        ];
-        const csvString = csvRows.join('\n');
-
-        // Create a Blob and trigger download
-        const blob = new Blob([csvString], { type: 'text/csv' });
-        const downloadUrl = URL.createObjectURL(blob);
-
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `stock_take_summary_${data.session_id}.csv`;
-        a.click();
-
-        // Cleanup
-        URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-        console.error('Failed to download CSV:', error);
-        alert('Failed to download CSV.');
-    }
-};
-
+    };
 
     const handleChangeStatus = async () => {
         const baseUrl = window.location.origin;
@@ -444,7 +456,16 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                                                     Actual Bbn Qty
                                                 </TableHead>
                                                 <TableHead className="py-2">
+                                                    Line Position
+                                                </TableHead>
+                                                <TableHead className="py-2">
+                                                    Row Position
+                                                </TableHead>
+                                                <TableHead className="py-2">
                                                     Found By
+                                                </TableHead>
+                                                <TableHead className="py-2">
+                                                    Explanation
                                                 </TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -483,7 +504,19 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                                                                 '-'}
                                                         </TableCell>
                                                         <TableCell className="py-1 text-xs">
+                                                            {batch.line_position ||
+                                                                '-'}
+                                                        </TableCell>
+                                                        <TableCell className="py-1 text-xs">
+                                                            {batch.row_position ||
+                                                                '-'}
+                                                        </TableCell>
+                                                        <TableCell className="py-1 text-xs">
                                                             {batch.user_found ||
+                                                                '-'}
+                                                        </TableCell>
+                                                         <TableCell className="py-1 text-xs">
+                                                            {batch.explanation ||
                                                                 '-'}
                                                         </TableCell>
                                                     </TableRow>
@@ -496,10 +529,7 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                 </div>
 
                 <DialogFooter className="px-6 pb-6">
-                    <Button
-                        variant="outline"
-                        onClick={handleDownloadCSV}
-                    >
+                    <Button variant="outline" onClick={handleDownloadCSV}>
                         <DownloadIcon className="mr-2 h-4 w-4" />
                         Download CSV
                     </Button>
@@ -735,13 +765,15 @@ export function StockTakeDataTable() {
         return result;
     }
 
+    // Count unique material codes in the uploaded data
     const getUniqueMaterialCount = () => {
         const uniqueCodes = new Set(
-            jsonData.map((row) => row['Material code']?.trim()),
+            jsonData.map((row) => row['material_code']?.trim()),
         );
         return uniqueCodes.size;
     };
 
+    // Action when submitting new session
     const handleSubmit = async () => {
         if (!sessionLeader || jsonData.length === 0) {
             alert('Please provide a session leader and upload a CSV file.');

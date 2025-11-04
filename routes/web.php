@@ -57,6 +57,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('weaving-tension-main');
     })->name('weaving-tension-main');
 
+    Route::get('user-maintenance', function () {
+        return Inertia::render('user-maintenance-main');
+    })->name('user-maintenance');
+
+    Route::get('finish-earlier-record', function () {
+        return Inertia::render('under-construction');
+    })->name('finish-earlier-record');
+
+    Route::get('finish-earlier-display', function () {
+        return Inertia::render('under-construction');
+    })->name('finish-earlier-display');
+
     Route::get('under-construction', function () {
         return Inertia::render('under-construction');
     })->name('under-construction');
@@ -77,8 +89,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('tension-records.by-type');
 
 });
-
-
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
