@@ -147,7 +147,7 @@ class StockTakeRecordController extends Controller
             ], 400);
         }
 
-        // 🔍 Find the session record
+        // Find the session record
         $record = StockTakingRecord::where('id', $sessionId)
             ->orWhere('session_id', $sessionId)
             ->first();
@@ -159,7 +159,7 @@ class StockTakeRecordController extends Controller
             ], 404);
         }
 
-        // 🔍 Check if batch exists in the master list
+        // Check if batch exists in the master list
         $batchData = $record->indv_batch_data ?? [];
         $foundBatch = collect($batchData)->first(function ($batch) use ($batchNumber) {
             $batchKey = $batch['Batch Number'] ?? $batch['batch_number'] ?? null;
@@ -212,14 +212,17 @@ class StockTakeRecordController extends Controller
 
         // Normalize keys so both formats work
         $normalized = [
-            'session_id'          => $data['session_id'] ?? null,
-            'batch_number'        => $data['batch_number'] ?? $data['Batch Number'] ?? null,
-            'material_code'       => $data['material_code'] ?? $data['Material Code'] ?? null,
-            'material_description'=> $data['material_description'] ?? $data['Material Desciption'] ?? null,
-            'actual_weight'       => $data['actual_weight'] ?? null,
-            'total_bobbins'       => $data['total_bobbins'] ?? null,
-            'timestamp'           => $data['timestamp'] ?? $data['found_at'] ?? null,
-            'user_found'          => $data['user_found'] ?? $data['found_by'] ?? null,
+            'session_id'           => $data['session_id'] ?? null,
+            'batch_number'         => $data['batch_number'] ?? $data['Batch Number'] ?? null,
+            'material_code'        => $data['material_code'] ?? $data['Material Code'] ?? null,
+            'material_description' => $data['material_description'] ?? $data['Material Desciption'] ?? null,
+            'actual_weight'        => $data['actual_weight'] ?? null,
+            'total_bobbins'        => $data['total_bobbins'] ?? null,
+            'line_position'        => $data['line_position'] ?? null,   // ✅ added
+            'row_position'         => $data['row_position'] ?? null,    // ✅ added
+            'timestamp'            => $data['timestamp'] ?? $data['found_at'] ?? null,
+            'user_found'           => $data['user_found'] ?? $data['found_by'] ?? null,
+            'explanation'          => $data['explanation'] ?? null,     // ✅ added
         ];
 
         // Step 2️⃣: Validate normalized fields
@@ -230,8 +233,11 @@ class StockTakeRecordController extends Controller
             'material_description' => 'required|string',
             'actual_weight'        => 'required|numeric|min:0',
             'total_bobbins'        => 'required|integer|min:0',
+            'line_position'        => 'nullable|numeric',    // ✅ corrected
+            'row_position'         => 'nullable|string',
             'timestamp'            => 'required|date',
             'user_found'           => 'required|string',
+            'explanation'          => 'nullable|string',
         ])->validate();
 
         // Step 3️⃣: Find session
@@ -253,8 +259,11 @@ class StockTakeRecordController extends Controller
             'material_description'=> $validated['material_description'],
             'actual_weight'       => $validated['actual_weight'],
             'total_bobbins'       => $validated['total_bobbins'],
+            'line_position'       => $validated['line_position'],  // ✅ fixed
+            'row_position'        => $validated['row_position'],   // ✅ fixed
             'timestamp_found'     => $validated['timestamp'],
             'user_found'          => $validated['user_found'],
+            'explanation'         => $validated['explanation'],
             'recorded_at'         => now()->toIso8601String(),
         ];
 
@@ -374,43 +383,40 @@ class StockTakeRecordController extends Controller
     }
 
     /**
-     * Download CSV data for a specific record
+     * Send stock_take_summary data as JSON for frontend CSV conversion
      */
-  /**
- * Send stock_take_summary data as JSON for frontend CSV conversion
- */
-public function downloadCsv(StockTakingRecord $stockTakeRecord): JsonResponse
-{
-    // Step 1: Get stock_take_summary safely
-    $summary = $stockTakeRecord->stock_take_summary ?? null;
+    public function downloadCsv(StockTakingRecord $stockTakeRecord): JsonResponse
+    {
+        // Step 1: Get stock_take_summary safely
+        $summary = $stockTakeRecord->stock_take_summary ?? null;
 
-    // Step 2: Decode JSON if stored as string
-    if (is_string($summary)) {
-        $summary = json_decode($summary, true);
+        // Step 2: Decode JSON if stored as string
+        if (is_string($summary)) {
+            $summary = json_decode($summary, true);
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid JSON in stock_take_summary.',
+                ], 422);
+            }
+        }
+
+        // Step 3: Validate the summary is a non-empty array
+        if (!is_array($summary) || empty($summary)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid JSON in stock_take_summary.',
-            ], 422);
+                'message' => 'No stock_take_summary data found for this session.',
+            ], 404);
         }
-    }
 
-    // Step 3: Validate the summary is a non-empty array
-    if (!is_array($summary) || empty($summary)) {
+        // Step 4: Return JSON to frontend
         return response()->json([
-            'success' => false,
-            'message' => 'No stock_take_summary data found for this session.',
-        ], 404);
+            'success' => true,
+            'session_id' => $stockTakeRecord->session_id ?? $stockTakeRecord->id,
+            'summary' => $summary,
+        ]);
     }
-
-    // Step 4: Return JSON to frontend
-    return response()->json([
-        'success' => true,
-        'session_id' => $stockTakeRecord->session_id ?? $stockTakeRecord->id,
-        'summary' => $summary,
-    ]);
-}
 
 
 
