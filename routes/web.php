@@ -29,16 +29,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('batch-stock-taking-main');
 
     // ✅ GET session data by ID
-    Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
+    Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession'])
+    -> middleware('permission:005');
 
-    // ✅ GET session data by ID
-    Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
+    Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch'])
+    -> middleware('permission:005');
 
-    Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch']);
+    Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch'])
+    -> middleware('permission:005');
 
-    Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus']);
+    Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus'])
+    ->middleware('permission:004');
 
-    Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
+    Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv'])
+    ->middleware('permission:004|005');
 
     Route::resource('stock-take-records', StockTakeRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
@@ -51,11 +55,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('twisting-tension-main', function () {
         return Inertia::render('twisting-tension-main');
-    })->name('twisting-tension-main');
+    })->name('twisting-tension-main') -> middleware('permission:002','permission:003');
     
     Route::get('weaving-tension-main', function () {
         return Inertia::render('weaving-tension-main');
-    })->name('weaving-tension-main');
+    })->name('weaving-tension-main') -> middleware('permission:002','permission:003');;
 
     Route::get('user-maintenance', function () {
         return Inertia::render('user-maintenance-main');
