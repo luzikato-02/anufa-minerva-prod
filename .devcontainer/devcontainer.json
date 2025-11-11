@@ -1,0 +1,26 @@
+{
+  "name": "Laravel Dev Environment",
+  "dockerFile": "Dockerfile",
+  "forwardPorts": [8000, 3306],
+  "postCreateCommand": "composer install && cp .env.example .env && php artisan key:generate && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bmewburn.vscode-intelephense-client",
+        "junstyle.php-cs-fixer",
+        "mikestead.dotenv",
+        "esbenp.prettier-vscode",
+        "MehediDracula.php-namespace-resolver"
+      ]
+    }
+  },
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/mysql:1": {
+      "version": "8.0",
+      "mysqlDatabase": "laravel",
+      "mysqlUser": "laravel",
+      "mysqlPassword": "secret"
+    }
+  }
+}
