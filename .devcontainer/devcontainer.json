@@ -1,6 +1,7 @@
 {
   "name": "Laravel Dev",
   "dockerFile": "Dockerfile",
+  "context": "..",
   "forwardPorts": [8000, 3306],
   "postCreateCommand": "composer install && cp .env.example .env && php artisan key:generate",
   "customizations": {
