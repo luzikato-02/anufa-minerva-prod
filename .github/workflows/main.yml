@@ -31,7 +31,7 @@ jobs:
         run: echo "${{ secrets.MINERVA_ENV_PROD }}" > .env
 
       - name: Deploy backend via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4
+        uses: SamKirkland/FTP-Deploy-Action@4.0.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
