@@ -37,7 +37,7 @@ jobs:
           echo "Password starts with: ${FTP_PASSWORD:0:3}"
           echo ".env starts with: $(echo "${MINERVA_ENV_DEV}" | head -c 50)..."
         env:
-          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_HOST: "ftp.anufa-technologies.my.id"
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           MINERVA_ENV_DEV: ${{ secrets.MINERVA_ENV_DEV }}
