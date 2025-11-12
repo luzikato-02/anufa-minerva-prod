@@ -32,8 +32,8 @@ jobs:
       
       - name: Debug secrets (safe)
         run: |
-          echo "Host: ${FTP_SERVER}"
-          echo "Username: ${FTP_USERNAME}"
+          echo "Host: ${FTP_SERVER:0:5}"
+          echo "Username: ${FTP_USERNAME:0:5}"
           echo "Password starts with: ${FTP_PASSWORD:0:3}"
           echo ".env starts with: $(echo "${MINERVA_ENV_DEV}" | head -c 50)..."
         env:
