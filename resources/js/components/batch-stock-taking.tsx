@@ -121,8 +121,8 @@ export default function BatchStockTakingForm() {
             );
 
             const params = new URLSearchParams({
-                session_id: sessionId.toString(),
-                batch_number: batchNumber.toString(),
+                record_key: sessionId.toString(),
+                batch: batchNumber.toString(),
             });
 
             const response = await fetch(
