@@ -137,8 +137,8 @@ class StockTakeRecordController extends Controller
     public function checkBatch(Request $request): JsonResponse
 {
     try {
-        $sessionId = $request->query('session_id');
-        $batchNumber = $request->query('batch_number');
+        $sessionId = $request->query('record_key');
+        $batchNumber = $request->query('batch');
 
         if (!$sessionId || !$batchNumber) {
             return response()->json([
