@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
+use App\Http\Controllers\Api\FinishEarlierRecordController;
 
 // Mobile routes group
 Route::prefix('mobile')->group(function () {
@@ -60,17 +61,22 @@ Route::prefix('mobile')->group(function () {
 
         // Stock taking features endpoints
         Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
-
         Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
-
         Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch']);
-
         Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus']);
-
         Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
-
         Route::resource('stock-take-records', StockTakeRecordController::class)->only([
             'index', 'store', 'show', 'destroy', 'update'
         ]);
+
+        // Finish Earlier Record Endpoints
+        Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
+        Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
+        Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
+        Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
+        Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
+        Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
+        Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish']);
+        Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy']);
     });
 });

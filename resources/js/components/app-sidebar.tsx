@@ -10,16 +10,13 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierRecord, finishEarlierDisplay } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon } from 'lucide-react';
 import AppLogo from './app-logo';
-import { IconStack2 } from '@tabler/icons-react';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
-import RecordBatchStockTake from '@/pages/batch-stock-taking-main';
-import BatchStockTaking from './batch-stock-taking';
 
 const mainNavItems: NavItem[] = [
     {
@@ -55,12 +52,6 @@ const processParamsNavItems: NavItem[] = [
     },
 
     {
-        title: 'Record: Finish Earlier Spindles',
-        href: finishEarlierRecord(),
-        icon: LayoutGrid,
-    },
-
-    {
         title: 'Display: Finish Earlier Records',
         href: finishEarlierDisplay(),
         icon: LayoutGrid,
@@ -77,7 +68,7 @@ const inventoryNavItems: NavItem[] = [
     {
         title: 'Display: Stock Take Records',
         href: stockTakeRecordsMain(),
-        icon: IconStack2,
+        icon: BookAIcon,
     },
 
     {
