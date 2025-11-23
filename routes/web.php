@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\StockTakeRecordController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
+use App\Http\Controllers\Api\FinishEarlierRecordController;
 
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
@@ -61,12 +62,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('user-maintenance-main');
     })->name('user-maintenance');
 
-    Route::get('finish-earlier-record', function () {
-        return Inertia::render('under-construction');
-    })->name('finish-earlier-record');
-
     Route::get('finish-earlier-display', function () {
-        return Inertia::render('under-construction');
+        return Inertia::render('finish-earlier-records-display');
     })->name('finish-earlier-display');
 
     Route::get('under-construction', function () {
@@ -88,6 +85,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereIn('type', ['twisting', 'weaving'])
         ->name('tension-records.by-type');
 
+    // Finish Earlier Record Endpoints
+    Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
+    Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
+    Route::get('/finish-earlier/{productionOrder}/pdf', [FinishEarlierRecordController::class, 'exportPdf']);
+    Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
+    Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
+    Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
+    Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
+    Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish']);
+    Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy']);
+    
 });
 
 require __DIR__.'/settings.php';
