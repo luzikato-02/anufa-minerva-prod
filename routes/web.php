@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
+use App\Http\Controllers\Api\ControlPlanController;
 
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
@@ -69,6 +70,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('under-construction', function () {
         return Inertia::render('under-construction');
     })->name('under-construction');
+
+    // Control Plans Routes
+    Route::get('control-plans-display', function () {
+        return Inertia::render('control-plans-display');
+    })->name('control-plans-display');
+
+    Route::get('/control-plans/statistics', [ControlPlanController::class, 'statistics']);
+    Route::resource('control-plans', ControlPlanController::class)->only([
+        'index', 'store', 'show', 'update', 'destroy'
+    ]);
+    Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
+    Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);
+    Route::delete('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'deleteItem']);
+    Route::post('/control-plans/{controlPlan}/reorder', [ControlPlanController::class, 'reorderItems']);
 
     Route::resource('tension-records', TensionRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
