@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
+use App\Http\Controllers\Api\ControlPlanController;
 
 // Mobile routes group
 Route::prefix('mobile')->group(function () {
@@ -78,5 +79,16 @@ Route::prefix('mobile')->group(function () {
         Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
         Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish']);
         Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy']);
+
+        // Control Plan Endpoints
+        Route::get('/control-plans/statistics', [ControlPlanController::class, 'statistics']);
+        Route::resource('control-plans', ControlPlanController::class)->only([
+            'index', 'store', 'show', 'update', 'destroy'
+        ]);
+        // Control Plan Item Management
+        Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
+        Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);
+        Route::delete('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'deleteItem']);
+        Route::post('/control-plans/{controlPlan}/reorder', [ControlPlanController::class, 'reorderItems']);
     });
 });
