@@ -1,0 +1,64 @@
+---
+###############################################################################
+# cPanel Git Version Control Deployment Configuration
+# This file is used by cPanel's Git Version Control feature
+# Documentation: https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-version-control/
+###############################################################################
+
+deployment:
+  tasks:
+    # Export PHP composer path (adjust based on your cPanel PHP version)
+    - export COMPOSER_HOME=/home/$USER/.config/composer
+    - export PATH=/opt/cpanel/ea-php84/root/usr/bin:$PATH
+    
+    # Install Composer dependencies (production only)
+    - /opt/cpanel/ea-php84/root/usr/bin/php /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+    
+    # Install Node dependencies and build assets
+    - /usr/bin/node --version || echo "Node.js not found, skipping npm build"
+    - |
+      if command -v npm &> /dev/null; then
+        npm ci --only=production
+        npm run build
+        rm -rf node_modules
+      else
+        echo "npm not found, skipping frontend build"
+      fi
+    
+    # Create .env file if it doesn't exist
+    - |
+      if [ ! -f .env ]; then
+        if [ -f .env.example ]; then
+          cp .env.example .env
+          echo ".env file created from .env.example"
+        fi
+      fi
+    
+    # Generate application key if not set
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan key:generate --ansi --no-interaction || echo "Key already exists"
+    
+    # Create storage symlink
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan storage:link --no-interaction || echo "Storage link already exists"
+    
+    # Set proper permissions
+    - find storage -type f -exec chmod 644 {} \; 2>/dev/null || true
+    - find storage -type d -exec chmod 755 {} \; 2>/dev/null || true
+    - find bootstrap/cache -type f -exec chmod 644 {} \; 2>/dev/null || true
+    - find bootstrap/cache -type d -exec chmod 755 {} \; 2>/dev/null || true
+    
+    # Clear and optimize caches
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan config:clear --no-interaction
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan cache:clear --no-interaction
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan route:clear --no-interaction
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan view:clear --no-interaction
+    
+    # Cache configurations for production
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan config:cache --no-interaction
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan route:cache --no-interaction
+    - /opt/cpanel/ea-php84/root/usr/bin/php artisan view:cache --no-interaction
+    
+    # Run database migrations (uncomment if you want automatic migrations)
+    # - /opt/cpanel/ea-php84/root/usr/bin/php artisan migrate --force --no-interaction
+    
+    # Display deployment success message
+    - echo "✅ Deployment completed successfully!"
