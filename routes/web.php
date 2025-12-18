@@ -90,6 +90,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('control-plans', ControlPlanController::class)->only([
         'index', 'store', 'show', 'update', 'destroy'
     ]);
+    Route::get('/control-plans/{controlPlan}/pdf', [ControlPlanController::class, 'exportPdf'])->name('control-plans.pdf');
+    Route::get('/control-plans/{controlPlan}/pdf/view', [ControlPlanController::class, 'viewPdf'])->name('control-plans.pdf.view');
     Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
     Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);
     Route::delete('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'deleteItem']);

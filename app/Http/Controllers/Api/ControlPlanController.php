@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class ControlPlanController extends Controller
 {
@@ -368,5 +370,65 @@ class ControlPlanController extends Controller
             'status' => 'success',
             'data' => $stats
         ]);
+    }
+
+    /**
+     * Export control plan as PDF
+     */
+    public function exportPdf(ControlPlan $controlPlan)
+    {
+        $controlPlan->load('items');
+
+        // Calculate next review date (1 year from last update)
+        $nextReviewDate = $controlPlan->updated_at 
+            ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
+            : '-';
+
+        // Get revision number (could be stored in DB, for now we'll use 1)
+        $revision = 1;
+
+        $pdf = Pdf::loadView('pdf.control_plan', [
+            'controlPlan' => $controlPlan,
+            'nextReviewDate' => $nextReviewDate,
+            'revision' => $revision,
+        ]);
+
+        // Set paper to landscape A4
+        $pdf->setPaper('a4', 'landscape');
+
+        $filename = sprintf(
+            'ControlPlan_%s_%s.pdf',
+            $controlPlan->document_number,
+            now()->format('Y-m-d')
+        );
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Stream control plan PDF (view in browser)
+     */
+    public function viewPdf(ControlPlan $controlPlan)
+    {
+        $controlPlan->load('items');
+
+        // Calculate next review date (1 year from last update)
+        $nextReviewDate = $controlPlan->updated_at 
+            ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
+            : '-';
+
+        // Get revision number
+        $revision = 1;
+
+        $pdf = Pdf::loadView('pdf.control_plan', [
+            'controlPlan' => $controlPlan,
+            'nextReviewDate' => $nextReviewDate,
+            'revision' => $revision,
+        ]);
+
+        // Set paper to landscape A4
+        $pdf->setPaper('a4', 'landscape');
+
+        return $pdf->stream('ControlPlan_' . $controlPlan->document_number . '.pdf');
     }
 }
