@@ -76,6 +76,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('control-plans-display');
     })->name('control-plans-display');
 
+    Route::get('control-plans-create', function () {
+        return Inertia::render('control-plan-create');
+    })->name('control-plans-create');
+
+    Route::get('control-plans/{controlPlan}/edit', function ($controlPlan) {
+        return Inertia::render('control-plan-edit', [
+            'controlPlanId' => $controlPlan
+        ]);
+    })->name('control-plans-edit');
+
     Route::get('/control-plans/statistics', [ControlPlanController::class, 'statistics']);
     Route::resource('control-plans', ControlPlanController::class)->only([
         'index', 'store', 'show', 'update', 'destroy'

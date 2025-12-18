@@ -19,7 +19,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Table,
     TableBody,
@@ -42,16 +41,15 @@ import {
 } from '@tanstack/react-table';
 import {
     ChevronDown,
-    DownloadIcon,
     EditIcon,
     EyeIcon,
     PlusIcon,
     TrashIcon,
-    SaveIcon,
-    XIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
+import { Link, router } from '@inertiajs/react';
+import { controlPlansCreate } from '@/routes';
 
 interface ControlPlanItem {
     id?: number;
@@ -171,7 +169,7 @@ export const columns: ColumnDef<ControlPlan>[] = [
             return (
                 <div className="flex items-center gap-1">
                     <ViewControlPlanDialog record={record} />
-                    <EditControlPlanDialog record={record} onSave={() => meta?.refreshData()} />
+                    <EditControlPlanButton record={record} />
                     <DeleteControlPlanDialog record={record} onDelete={() => meta?.refreshData()} />
                 </div>
             );
@@ -305,271 +303,15 @@ function ViewControlPlanDialog({ record }: { record: ControlPlan }) {
     );
 }
 
-function EditControlPlanDialog({ record, onSave }: { record: ControlPlan; onSave: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [documentNumber, setDocumentNumber] = useState(record.document_number);
-    const [title, setTitle] = useState(record.title ?? '');
-    const [description, setDescription] = useState(record.description ?? '');
-    const [items, setItems] = useState<ControlPlanItem[]>(record.items ?? []);
-
-    const handleAddItem = () => {
-        setItems([
-            ...items,
-            {
-                process_no: '',
-                process_step: '',
-                process_items: '',
-                machine_device_jig_tools: '',
-                product_process_characteristics: '',
-                special_characteristics: '',
-                product_process_specification_tolerance: '',
-                sample_size: '',
-                sample_frequency: '',
-                control_method: '',
-                reaction_plan: '',
-                sort_order: items.length,
-            },
-        ]);
-    };
-
-    const handleRemoveItem = (index: number) => {
-        setItems(items.filter((_, i) => i !== index));
-    };
-
-    const handleItemChange = (index: number, field: keyof ControlPlanItem, value: string) => {
-        const newItems = [...items];
-        (newItems[index] as Record<string, unknown>)[field] = value;
-        setItems(newItems);
-    };
-
-    const handleSave = async () => {
-        setLoading(true);
-        try {
-            const baseUrl = window.location.origin;
-            const response = await fetch(`${baseUrl}/control-plans/${record.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    document_number: documentNumber,
-                    title,
-                    description,
-                    items: items.map((item, index) => ({
-                        ...item,
-                        sort_order: index,
-                    })),
-                }),
-            });
-
-            if (response.ok) {
-                setOpen(false);
-                onSave();
-            } else {
-                const error = await response.json();
-                alert(error.message || 'Failed to update control plan');
-            }
-        } catch (error) {
-            console.error('Failed to update control plan:', error);
-            alert('Failed to update control plan');
-        } finally {
-            setLoading(false);
-        }
+function EditControlPlanButton({ record }: { record: ControlPlan }) {
+    const handleEdit = () => {
+        router.visit(`/control-plans/${record.id}/edit`);
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                    <EditIcon className="h-4 w-4" />
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-[1000px]">
-                <DialogHeader className="px-6 pt-6">
-                    <DialogTitle>Edit Control Plan</DialogTitle>
-                    <DialogDescription>
-                        Update control plan details and items
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 px-6 pb-6">
-                    {/* Document Info */}
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div>
-                            <label className="text-sm font-medium">Document Number</label>
-                            <Input
-                                value={documentNumber}
-                                onChange={(e) => setDocumentNumber(e.target.value)}
-                                placeholder="Enter document number"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium">Title</label>
-                            <Input
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Enter title"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium">Description</label>
-                            <Input
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Enter description"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Items */}
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-medium">Control Plan Items</h3>
-                            <Button size="sm" onClick={handleAddItem}>
-                                <PlusIcon className="mr-1 h-4 w-4" />
-                                Add Item
-                            </Button>
-                        </div>
-
-                        <div className="rounded-lg border">
-                            <div className="max-h-[400px] overflow-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process No.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process Step</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process Items</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Machine/Device</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Characteristics</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Special Char.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Spec/Tolerance</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Sample Size</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Sample Freq.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Control Method</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Reaction Plan</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_no}
-                                                        onChange={(e) => handleItemChange(index, 'process_no', e.target.value)}
-                                                        className="min-w-[60px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_step}
-                                                        onChange={(e) => handleItemChange(index, 'process_step', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_items}
-                                                        onChange={(e) => handleItemChange(index, 'process_items', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.machine_device_jig_tools}
-                                                        onChange={(e) => handleItemChange(index, 'machine_device_jig_tools', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.product_process_characteristics}
-                                                        onChange={(e) => handleItemChange(index, 'product_process_characteristics', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.special_characteristics}
-                                                        onChange={(e) => handleItemChange(index, 'special_characteristics', e.target.value)}
-                                                        className="min-w-[80px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.product_process_specification_tolerance}
-                                                        onChange={(e) => handleItemChange(index, 'product_process_specification_tolerance', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.sample_size}
-                                                        onChange={(e) => handleItemChange(index, 'sample_size', e.target.value)}
-                                                        className="min-w-[60px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.sample_frequency}
-                                                        onChange={(e) => handleItemChange(index, 'sample_frequency', e.target.value)}
-                                                        className="min-w-[80px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.control_method}
-                                                        onChange={(e) => handleItemChange(index, 'control_method', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.reaction_plan}
-                                                        onChange={(e) => handleItemChange(index, 'reaction_plan', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                                                        onClick={() => handleRemoveItem(index)}
-                                                    >
-                                                        <TrashIcon className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                        {items.length === 0 && (
-                                            <TableRow>
-                                                <TableCell colSpan={12} className="text-center text-gray-500">
-                                                    No items. Click "Add Item" to add a new row.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <DialogFooter className="px-6 pb-6">
-                    <Button variant="outline" onClick={() => setOpen(false)}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} disabled={loading}>
-                        <SaveIcon className="mr-2 h-4 w-4" />
-                        {loading ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <Button variant="ghost" className="h-8 w-8 p-0" onClick={handleEdit}>
+            <EditIcon className="h-4 w-4" />
+        </Button>
     );
 }
 
@@ -630,281 +372,14 @@ function DeleteControlPlanDialog({ record, onDelete }: { record: ControlPlan; on
     );
 }
 
-function CreateControlPlanDialog({ onSave }: { onSave: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [documentNumber, setDocumentNumber] = useState('');
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [items, setItems] = useState<ControlPlanItem[]>([]);
-
-    const handleAddItem = () => {
-        setItems([
-            ...items,
-            {
-                process_no: '',
-                process_step: '',
-                process_items: '',
-                machine_device_jig_tools: '',
-                product_process_characteristics: '',
-                special_characteristics: '',
-                product_process_specification_tolerance: '',
-                sample_size: '',
-                sample_frequency: '',
-                control_method: '',
-                reaction_plan: '',
-                sort_order: items.length,
-            },
-        ]);
-    };
-
-    const handleRemoveItem = (index: number) => {
-        setItems(items.filter((_, i) => i !== index));
-    };
-
-    const handleItemChange = (index: number, field: keyof ControlPlanItem, value: string) => {
-        const newItems = [...items];
-        (newItems[index] as Record<string, unknown>)[field] = value;
-        setItems(newItems);
-    };
-
-    const handleSave = async () => {
-        if (!documentNumber.trim()) {
-            alert('Document number is required');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const baseUrl = window.location.origin;
-            const response = await fetch(`${baseUrl}/control-plans`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    document_number: documentNumber,
-                    title,
-                    description,
-                    items: items.map((item, index) => ({
-                        ...item,
-                        sort_order: index,
-                    })),
-                }),
-            });
-
-            if (response.ok) {
-                setOpen(false);
-                setDocumentNumber('');
-                setTitle('');
-                setDescription('');
-                setItems([]);
-                onSave();
-            } else {
-                const error = await response.json();
-                alert(error.message || 'Failed to create control plan');
-            }
-        } catch (error) {
-            console.error('Failed to create control plan:', error);
-            alert('Failed to create control plan');
-        } finally {
-            setLoading(false);
-        }
-    };
-
+function CreateControlPlanButton() {
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <PlusIcon className="mr-2 h-4 w-4" />
-                    New Control Plan
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-[1000px]">
-                <DialogHeader className="px-6 pt-6">
-                    <DialogTitle>Create New Control Plan</DialogTitle>
-                    <DialogDescription>
-                        Enter control plan details and add items
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 px-6 pb-6">
-                    {/* Document Info */}
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div>
-                            <label className="text-sm font-medium">Document Number *</label>
-                            <Input
-                                value={documentNumber}
-                                onChange={(e) => setDocumentNumber(e.target.value)}
-                                placeholder="e.g., CP-2025-001"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium">Title</label>
-                            <Input
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Enter title"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium">Description</label>
-                            <Input
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Enter description"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Items */}
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-medium">Control Plan Items</h3>
-                            <Button size="sm" onClick={handleAddItem}>
-                                <PlusIcon className="mr-1 h-4 w-4" />
-                                Add Item
-                            </Button>
-                        </div>
-
-                        <div className="rounded-lg border">
-                            <div className="max-h-[400px] overflow-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process No.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process Step</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Process Items</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Machine/Device</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Characteristics</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Special Char.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Spec/Tolerance</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Sample Size</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Sample Freq.</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Control Method</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Reaction Plan</TableHead>
-                                            <TableHead className="sticky top-0 bg-background whitespace-nowrap">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_no}
-                                                        onChange={(e) => handleItemChange(index, 'process_no', e.target.value)}
-                                                        className="min-w-[60px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_step}
-                                                        onChange={(e) => handleItemChange(index, 'process_step', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.process_items}
-                                                        onChange={(e) => handleItemChange(index, 'process_items', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.machine_device_jig_tools}
-                                                        onChange={(e) => handleItemChange(index, 'machine_device_jig_tools', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.product_process_characteristics}
-                                                        onChange={(e) => handleItemChange(index, 'product_process_characteristics', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.special_characteristics}
-                                                        onChange={(e) => handleItemChange(index, 'special_characteristics', e.target.value)}
-                                                        className="min-w-[80px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.product_process_specification_tolerance}
-                                                        onChange={(e) => handleItemChange(index, 'product_process_specification_tolerance', e.target.value)}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.sample_size}
-                                                        onChange={(e) => handleItemChange(index, 'sample_size', e.target.value)}
-                                                        className="min-w-[60px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.sample_frequency}
-                                                        onChange={(e) => handleItemChange(index, 'sample_frequency', e.target.value)}
-                                                        className="min-w-[80px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.control_method}
-                                                        onChange={(e) => handleItemChange(index, 'control_method', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={item.reaction_plan}
-                                                        onChange={(e) => handleItemChange(index, 'reaction_plan', e.target.value)}
-                                                        className="min-w-[100px]"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                                                        onClick={() => handleRemoveItem(index)}
-                                                    >
-                                                        <TrashIcon className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                        {items.length === 0 && (
-                                            <TableRow>
-                                                <TableCell colSpan={12} className="text-center text-gray-500">
-                                                    No items. Click "Add Item" to add a new row.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <DialogFooter className="px-6 pb-6">
-                    <Button variant="outline" onClick={() => setOpen(false)}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} disabled={loading}>
-                        <SaveIcon className="mr-2 h-4 w-4" />
-                        {loading ? 'Creating...' : 'Create Control Plan'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <Link href={controlPlansCreate().url}>
+            <Button>
+                <PlusIcon className="mr-2 h-4 w-4" />
+                New Control Plan
+            </Button>
+        </Link>
     );
 }
 
@@ -1028,7 +503,7 @@ export function ControlPlanDataTable() {
                     className="max-w-sm"
                 />
                 <div className="ml-auto flex items-center gap-2">
-                    <CreateControlPlanDialog onSave={refreshData} />
+                    <CreateControlPlanButton />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="ml-auto bg-transparent">
