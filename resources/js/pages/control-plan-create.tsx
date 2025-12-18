@@ -105,6 +105,10 @@ export default function ControlPlanCreate() {
         setItems(newItems);
     };
 
+    const getCsrfToken = () => {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    };
+
     const handleSave = async () => {
         if (!documentNumber.trim()) {
             alert('Document number is required');
@@ -119,6 +123,7 @@ export default function ControlPlanCreate() {
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'include',
                 body: JSON.stringify({

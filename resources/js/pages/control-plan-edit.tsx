@@ -115,6 +115,10 @@ export default function ControlPlanEdit() {
         }
     }, [controlPlan]);
 
+    const getCsrfToken = () => {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    };
+
     const handleAddItem = () => {
         setItems([
             ...items,
@@ -166,6 +170,7 @@ export default function ControlPlanEdit() {
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'include',
                 body: JSON.stringify({

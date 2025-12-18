@@ -337,6 +337,10 @@ function DownloadPdfButton({ record }: { record: ControlPlan }) {
     );
 }
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+}
+
 function DeleteControlPlanDialog({ record, onDelete }: { record: ControlPlan; onDelete: () => void }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -349,6 +353,7 @@ function DeleteControlPlanDialog({ record, onDelete }: { record: ControlPlan; on
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'include',
             });
