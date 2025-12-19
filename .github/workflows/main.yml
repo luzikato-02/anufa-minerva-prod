@@ -1,4 +1,4 @@
-name: Deploy Laravel to cPanel Subdomain
+name: Deploy Laravel to cPanel via SFTP
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup PHP
@@ -34,16 +34,15 @@ jobs:
           php artisan route:clear
           php artisan view:clear
 
-      - name: Deploy to subdomain folder
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: Upload project via SFTP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.CPANEL_HOST }}
+          host: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASSWORD }}
-          local-dir: ./
-          server-dir: ${{ secrets.CPANEL_SUBDOMAIN_PATH }}/
-          exclude: |
-            **/.git*
-            **/.github*
-            **/node_modules/**
-            **/.env
+          port: ${{ secrets.CPANEL_PORT }}
+          source: "."
+          target: ${{ secrets.CPANEL_SUBDOMAIN_PATH }}
+          rm: true
+          strip_components: 0
+          overwrite: true
