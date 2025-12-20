@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ControlPlan;
 use App\Models\ControlPlanItem;
+use App\Models\ControlPlanRevisionHistory;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -50,19 +51,43 @@ class ControlPlanController extends Controller
             'document_number' => 'required|string|max:255|unique:control_plans,document_number',
             'title' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'control_plan_number' => 'nullable|string|max:255',
+            'part_number_latest_change_level' => 'nullable|string|max:255',
+            'part_name_description' => 'nullable|string|max:255',
+            'key_contact_phone' => 'nullable|string|max:255',
+            'core_team' => 'nullable|string|max:255',
+            'organization_plant' => 'nullable|string|max:255',
+            'organization_code' => 'nullable|string|max:255',
+            'customer_engineering_approval_date' => 'nullable|string|max:255',
+            'customer_quality_approval_date' => 'nullable|string|max:255',
+            'other_approval_date' => 'nullable|string|max:255',
+            'manufacturing_step' => 'nullable|in:prototype,pre-launch,production',
+            'production_area' => 'nullable|string|max:255',
+            'referensi_sp' => 'nullable|string|max:255',
+            'tanggal_diterbitkan_sp' => 'nullable|date',
+            'tanggal_diterbitkan' => 'nullable|date',
+            'no_revisi_tanggal_revisi_terakhir' => 'nullable|string|max:255',
+            'tanggal_review_berikutnya' => 'nullable|date',
+            'signatures_dibuat_oleh' => 'nullable|array',
+            'signatures_disetujui_oleh' => 'nullable|array',
+            'asterisk_legend' => 'nullable|string',
             'items' => 'array',
             'items.*.process_no' => 'nullable|string|max:255',
             'items.*.process_step' => 'nullable|string|max:255',
             'items.*.process_items' => 'nullable|string',
             'items.*.machine_device_jig_tools' => 'nullable|string',
             'items.*.product_process_characteristics' => 'nullable|string',
+            'items.*.product_characteristics' => 'nullable|string',
+            'items.*.process_characteristics' => 'nullable|string',
             'items.*.special_characteristics' => 'nullable|string|max:255',
             'items.*.product_process_specification_tolerance' => 'nullable|string',
+            'items.*.evaluation_measurement_technique' => 'nullable|string',
             'items.*.sample_size' => 'nullable|string|max:255',
             'items.*.sample_frequency' => 'nullable|string|max:255',
             'items.*.control_method' => 'nullable|string',
             'items.*.reaction_plan' => 'nullable|string',
             'items.*.sort_order' => 'nullable|integer|min:0',
+            'items.*.is_new_revision' => 'nullable|boolean',
         ]);
 
         try {
@@ -74,6 +99,26 @@ class ControlPlanController extends Controller
                 'title' => $validated['title'] ?? null,
                 'description' => $validated['description'] ?? null,
                 'created_by' => auth()->id(),
+                'control_plan_number' => $validated['control_plan_number'] ?? null,
+                'part_number_latest_change_level' => $validated['part_number_latest_change_level'] ?? null,
+                'part_name_description' => $validated['part_name_description'] ?? null,
+                'key_contact_phone' => $validated['key_contact_phone'] ?? null,
+                'core_team' => $validated['core_team'] ?? null,
+                'organization_plant' => $validated['organization_plant'] ?? null,
+                'organization_code' => $validated['organization_code'] ?? null,
+                'customer_engineering_approval_date' => $validated['customer_engineering_approval_date'] ?? null,
+                'customer_quality_approval_date' => $validated['customer_quality_approval_date'] ?? null,
+                'other_approval_date' => $validated['other_approval_date'] ?? null,
+                'manufacturing_step' => $validated['manufacturing_step'] ?? 'production',
+                'production_area' => $validated['production_area'] ?? null,
+                'referensi_sp' => $validated['referensi_sp'] ?? null,
+                'tanggal_diterbitkan_sp' => $validated['tanggal_diterbitkan_sp'] ?? null,
+                'tanggal_diterbitkan' => $validated['tanggal_diterbitkan'] ?? null,
+                'no_revisi_tanggal_revisi_terakhir' => $validated['no_revisi_tanggal_revisi_terakhir'] ?? null,
+                'tanggal_review_berikutnya' => $validated['tanggal_review_berikutnya'] ?? null,
+                'signatures_dibuat_oleh' => $validated['signatures_dibuat_oleh'] ?? null,
+                'signatures_disetujui_oleh' => $validated['signatures_disetujui_oleh'] ?? null,
+                'asterisk_legend' => $validated['asterisk_legend'] ?? null,
             ]);
 
             // Create items if provided
@@ -111,12 +156,33 @@ class ControlPlanController extends Controller
      */
     public function show(ControlPlan $controlPlan): JsonResponse
     {
-        $controlPlan->load('items');
+        try {
+            $controlPlan->load(['items', 'revisionHistory', 'creator']);
+            
+            // Get latest revision number for auto-suggestion
+            $latestRevision = $controlPlan->revisionHistory()->orderBy('date_of_revision', 'desc')->first();
+            $nextRevisionNumber = '01';
+            if ($latestRevision) {
+                $revisionNum = intval($latestRevision->revision_number);
+                $nextRevisionNumber = str_pad($revisionNum + 1, 2, '0', STR_PAD_LEFT);
+            }
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $controlPlan
-        ]);
+            return response()->json([
+                'status' => 'success',
+                'data' => $controlPlan,
+                'next_revision_number' => $nextRevisionNumber
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading control plan: ' . $e->getMessage(), [
+                'control_plan_id' => $controlPlan->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to load control plan: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -133,6 +199,23 @@ class ControlPlanController extends Controller
             ],
             'title' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'control_plan_number' => 'nullable|string|max:255',
+            'part_number_latest_change_level' => 'nullable|string|max:255',
+            'part_name_description' => 'nullable|string|max:255',
+            'key_contact_phone' => 'nullable|string|max:255',
+            'core_team' => 'nullable|string|max:255',
+            'organization_plant' => 'nullable|string|max:255',
+            'organization_code' => 'nullable|string|max:255',
+            'customer_engineering_approval_date' => 'nullable|string|max:255',
+            'customer_quality_approval_date' => 'nullable|string|max:255',
+            'other_approval_date' => 'nullable|string|max:255',
+            'manufacturing_step' => 'nullable|in:prototype,pre-launch,production',
+            'production_area' => 'nullable|string|max:255',
+            'referensi_sp' => 'nullable|string|max:255',
+            'tanggal_diterbitkan_sp' => 'nullable|date',
+            'tanggal_diterbitkan' => 'nullable|date',
+            'no_revisi_tanggal_revisi_terakhir' => 'nullable|string|max:255',
+            'tanggal_review_berikutnya' => 'nullable|date',
             'items' => 'array',
             'items.*.id' => 'nullable|integer|exists:control_plan_items,id',
             'items.*.process_no' => 'nullable|string|max:255',
@@ -140,13 +223,28 @@ class ControlPlanController extends Controller
             'items.*.process_items' => 'nullable|string',
             'items.*.machine_device_jig_tools' => 'nullable|string',
             'items.*.product_process_characteristics' => 'nullable|string',
+            'items.*.product_characteristics' => 'nullable|string',
+            'items.*.process_characteristics' => 'nullable|string',
             'items.*.special_characteristics' => 'nullable|string|max:255',
             'items.*.product_process_specification_tolerance' => 'nullable|string',
+            'items.*.evaluation_measurement_technique' => 'nullable|string',
             'items.*.sample_size' => 'nullable|string|max:255',
             'items.*.sample_frequency' => 'nullable|string|max:255',
             'items.*.control_method' => 'nullable|string',
             'items.*.reaction_plan' => 'nullable|string',
             'items.*.sort_order' => 'nullable|integer|min:0',
+            'revision_history' => 'nullable|array',
+            'revision_history.page' => 'nullable|string|max:255',
+            'revision_history.date_of_revision' => 'nullable|date',
+            'revision_history.revision_number' => 'nullable|string|max:255',
+            'revision_history.description' => 'nullable|string',
+            'revision_history.revised_by' => 'nullable|string|max:255',
+            'override_revision_history' => 'nullable|array',
+            'override_revision_history.*.page' => 'nullable|string|max:255',
+            'override_revision_history.*.date_of_revision' => 'nullable|date',
+            'override_revision_history.*.revision_number' => 'nullable|string|max:255',
+            'override_revision_history.*.description' => 'nullable|string',
+            'override_revision_history.*.revised_by' => 'nullable|string|max:255',
         ]);
 
         try {
@@ -157,7 +255,56 @@ class ControlPlanController extends Controller
                 'document_number' => $validated['document_number'] ?? $controlPlan->document_number,
                 'title' => $validated['title'] ?? $controlPlan->title,
                 'description' => $validated['description'] ?? $controlPlan->description,
+                'control_plan_number' => $validated['control_plan_number'] ?? $controlPlan->control_plan_number,
+                'part_number_latest_change_level' => $validated['part_number_latest_change_level'] ?? $controlPlan->part_number_latest_change_level,
+                'part_name_description' => $validated['part_name_description'] ?? $controlPlan->part_name_description,
+                'key_contact_phone' => $validated['key_contact_phone'] ?? $controlPlan->key_contact_phone,
+                'core_team' => $validated['core_team'] ?? $controlPlan->core_team,
+                'organization_plant' => $validated['organization_plant'] ?? $controlPlan->organization_plant,
+                'organization_code' => $validated['organization_code'] ?? $controlPlan->organization_code,
+                'customer_engineering_approval_date' => $validated['customer_engineering_approval_date'] ?? $controlPlan->customer_engineering_approval_date,
+                'customer_quality_approval_date' => $validated['customer_quality_approval_date'] ?? $controlPlan->customer_quality_approval_date,
+                'other_approval_date' => $validated['other_approval_date'] ?? $controlPlan->other_approval_date,
+                'manufacturing_step' => $validated['manufacturing_step'] ?? $controlPlan->manufacturing_step,
+                'production_area' => $validated['production_area'] ?? $controlPlan->production_area,
+                'referensi_sp' => $validated['referensi_sp'] ?? $controlPlan->referensi_sp,
+                'tanggal_diterbitkan_sp' => $validated['tanggal_diterbitkan_sp'] ?? $controlPlan->tanggal_diterbitkan_sp,
+                'tanggal_diterbitkan' => $validated['tanggal_diterbitkan'] ?? $controlPlan->tanggal_diterbitkan,
+                'no_revisi_tanggal_revisi_terakhir' => $validated['no_revisi_tanggal_revisi_terakhir'] ?? $controlPlan->no_revisi_tanggal_revisi_terakhir,
+                'tanggal_review_berikutnya' => $validated['tanggal_review_berikutnya'] ?? $controlPlan->tanggal_review_berikutnya,
+                'signatures_dibuat_oleh' => $validated['signatures_dibuat_oleh'] ?? $controlPlan->signatures_dibuat_oleh,
+                'signatures_disetujui_oleh' => $validated['signatures_disetujui_oleh'] ?? $controlPlan->signatures_disetujui_oleh,
+                'asterisk_legend' => $validated['asterisk_legend'] ?? $controlPlan->asterisk_legend,
             ]);
+
+            // Handle revision history override or new entry
+            if (isset($validated['override_revision_history']) && is_array($validated['override_revision_history'])) {
+                // Delete existing revision history
+                $controlPlan->revisionHistory()->delete();
+                // Create new revision history entries
+                foreach ($validated['override_revision_history'] as $revisionData) {
+                    if (!empty($revisionData['revision_number'])) {
+                        ControlPlanRevisionHistory::create([
+                            'control_plan_id' => $controlPlan->id,
+                            'page' => $revisionData['page'] ?? null,
+                            'date_of_revision' => $revisionData['date_of_revision'] ?? now(),
+                            'revision_number' => $revisionData['revision_number'],
+                            'description' => $revisionData['description'] ?? null,
+                            'revised_by' => $revisionData['revised_by'] ?? null,
+                        ]);
+                    }
+                }
+            } elseif (isset($validated['revision_history']) && !empty($validated['revision_history']['revision_number'])) {
+                // Create new revision history entry
+                ControlPlanRevisionHistory::create([
+                    'control_plan_id' => $controlPlan->id,
+                    'page' => $validated['revision_history']['page'] ?? null,
+                    'date_of_revision' => $validated['revision_history']['date_of_revision'] ?? now(),
+                    'revision_number' => $validated['revision_history']['revision_number'],
+                    'description' => $validated['revision_history']['description'] ?? null,
+                    'revised_by' => $validated['revision_history']['revised_by'] ?? null,
+                ]);
+            }
 
             // Update items if provided
             if (isset($validated['items'])) {
@@ -232,6 +379,7 @@ class ControlPlanController extends Controller
             'product_process_characteristics' => 'nullable|string',
             'special_characteristics' => 'nullable|string|max:255',
             'product_process_specification_tolerance' => 'nullable|string',
+            'evaluation_measurement_technique' => 'nullable|string',
             'sample_size' => 'nullable|string|max:255',
             'sample_frequency' => 'nullable|string|max:255',
             'control_method' => 'nullable|string',
@@ -276,6 +424,7 @@ class ControlPlanController extends Controller
             'product_process_characteristics' => 'nullable|string',
             'special_characteristics' => 'nullable|string|max:255',
             'product_process_specification_tolerance' => 'nullable|string',
+            'evaluation_measurement_technique' => 'nullable|string',
             'sample_size' => 'nullable|string|max:255',
             'sample_frequency' => 'nullable|string|max:255',
             'control_method' => 'nullable|string',
@@ -377,15 +526,16 @@ class ControlPlanController extends Controller
      */
     public function exportPdf(ControlPlan $controlPlan)
     {
-        $controlPlan->load('items');
+        $controlPlan->load(['items', 'revisionHistory', 'creator']);
 
         // Calculate next review date (1 year from last update)
         $nextReviewDate = $controlPlan->updated_at 
             ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
             : '-';
 
-        // Get revision number (could be stored in DB, for now we'll use 1)
-        $revision = 1;
+        // Get revision number from latest revision history or default to 1
+        $latestRevision = $controlPlan->revisionHistory()->orderBy('date_of_revision', 'desc')->first();
+        $revision = $latestRevision ? $latestRevision->revision_number : '1';
 
         $pdf = Pdf::loadView('pdf.control_plan', [
             'controlPlan' => $controlPlan,
@@ -395,6 +545,11 @@ class ControlPlanController extends Controller
 
         // Set paper to landscape A4
         $pdf->setPaper('a4', 'landscape');
+        
+        // Set options for better rendering
+        $pdf->setOption('enable-local-file-access', true);
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
 
         $filename = sprintf(
             'ControlPlan_%s_%s.pdf',
@@ -410,15 +565,16 @@ class ControlPlanController extends Controller
      */
     public function viewPdf(ControlPlan $controlPlan)
     {
-        $controlPlan->load('items');
+        $controlPlan->load(['items', 'revisionHistory', 'creator']);
 
         // Calculate next review date (1 year from last update)
         $nextReviewDate = $controlPlan->updated_at 
             ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
             : '-';
 
-        // Get revision number
-        $revision = 1;
+        // Get revision number from latest revision history or default to 1
+        $latestRevision = $controlPlan->revisionHistory()->orderBy('date_of_revision', 'desc')->first();
+        $revision = $latestRevision ? $latestRevision->revision_number : '1';
 
         $pdf = Pdf::loadView('pdf.control_plan', [
             'controlPlan' => $controlPlan,
@@ -428,6 +584,11 @@ class ControlPlanController extends Controller
 
         // Set paper to landscape A4
         $pdf->setPaper('a4', 'landscape');
+        
+        // Set options for better rendering
+        $pdf->setOption('enable-local-file-access', true);
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
 
         return $pdf->stream('ControlPlan_' . $controlPlan->document_number . '.pdf');
     }

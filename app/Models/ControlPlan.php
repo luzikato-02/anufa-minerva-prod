@@ -17,12 +17,34 @@ class ControlPlan extends Model
         'title',
         'description',
         'created_by',
+        'control_plan_number',
+        'part_number_latest_change_level',
+        'part_name_description',
+        'key_contact_phone',
+        'core_team',
+        'organization_plant',
+        'organization_code',
+        'customer_engineering_approval_date',
+        'customer_quality_approval_date',
+        'other_approval_date',
+        'manufacturing_step',
+        'production_area',
+        'referensi_sp',
+        'tanggal_diterbitkan_sp',
+        'tanggal_diterbitkan',
+        'no_revisi_tanggal_revisi_terakhir',
+        'tanggal_review_berikutnya',
+        'signatures_dibuat_oleh',
+        'signatures_disetujui_oleh',
+        'asterisk_legend',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
+        'signatures_dibuat_oleh' => 'array',
+        'signatures_disetujui_oleh' => 'array',
     ];
 
     /**
@@ -31,6 +53,14 @@ class ControlPlan extends Model
     public function items(): HasMany
     {
         return $this->hasMany(ControlPlanItem::class)->orderBy('sort_order');
+    }
+
+    /**
+     * Get the revision history for this control plan
+     */
+    public function revisionHistory(): HasMany
+    {
+        return $this->hasMany(ControlPlanRevisionHistory::class)->orderBy('date_of_revision', 'desc');
     }
 
     /**

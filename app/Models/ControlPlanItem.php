@@ -16,18 +16,23 @@ class ControlPlanItem extends Model
         'process_step',
         'process_items',
         'machine_device_jig_tools',
-        'product_process_characteristics',
+        'product_process_characteristics', // Keep for backward compatibility
+        'product_characteristics',
+        'process_characteristics',
         'special_characteristics',
         'product_process_specification_tolerance',
+        'evaluation_measurement_technique',
         'sample_size',
         'sample_frequency',
         'control_method',
         'reaction_plan',
         'sort_order',
+        'is_new_revision',
     ];
 
     protected $casts = [
         'sort_order' => 'integer',
+        'is_new_revision' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

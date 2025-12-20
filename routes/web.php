@@ -6,6 +6,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\ControlPlanController;
+use App\Models\ControlPlan;
 
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
@@ -80,9 +81,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('control-plan-create');
     })->name('control-plans-create');
 
-    Route::get('control-plans/{controlPlan}/edit', function ($controlPlan) {
+    Route::get('control-plans/{controlPlan}/edit', function (ControlPlan $controlPlan) {
+        // Don't pass the full control plan to avoid serialization issues
+        // The component will fetch it via API
         return Inertia::render('control-plan-edit', [
-            'controlPlanId' => $controlPlan
+            'controlPlan' => null
         ]);
     })->name('control-plans-edit');
 
