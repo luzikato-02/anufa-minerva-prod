@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller; 
 use App\Models\FinishEarlierRecord;
 use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class FinishEarlierRecordController extends Controller
 {
@@ -156,29 +155,6 @@ class FinishEarlierRecordController extends Controller
         ]);
     }
 
-    /**
-     * Generate a pdf file.
-     */
-    public function exportPdf($productionOrder)
-    {
-        $record = FinishEarlierRecord::where('metadata->production_order', $productionOrder)->first();
-
-        if (!$record) {
-            return response()->json(['message' => 'Session not found'], 404);
-        }
-
-        $metadata = $record->metadata;
-        $entries = $record->entries ?? [];
-
-        $pdf = Pdf::loadView('pdf.finish_earlier_report', [
-            'metadata' => $metadata,
-            'entries'  => $entries,
-        ])->setPaper('A4', 'portrait');
-
-        return $pdf->download("FinishEarlier_{$productionOrder}.pdf");
-    }
-
-    
     /**
      * Return CSV format for user to download
      */

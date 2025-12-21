@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
+use App\Http\Controllers\Api\ControlPlanController;
+use App\Models\ControlPlan;
 
 Route::get('/csrf-token', function () {
     return response()->json(['csrfToken' => csrf_token()]);
@@ -70,6 +72,33 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('under-construction');
     })->name('under-construction');
 
+    // Control Plans Routes
+    Route::get('control-plans-display', function () {
+        return Inertia::render('control-plans-display');
+    })->name('control-plans-display');
+
+    Route::get('control-plans-create', function () {
+        return Inertia::render('control-plan-create');
+    })->name('control-plans-create');
+
+    Route::get('control-plans/{controlPlan}/edit', function (ControlPlan $controlPlan) {
+        // Don't pass the full control plan to avoid serialization issues
+        // The component will fetch it via API
+        return Inertia::render('control-plan-edit', [
+            'controlPlan' => null
+        ]);
+    })->name('control-plans-edit');
+
+    Route::get('/control-plans/statistics', [ControlPlanController::class, 'statistics']);
+    Route::resource('control-plans', ControlPlanController::class)->only([
+        'index', 'store', 'show', 'update', 'destroy'
+    ]);
+    Route::get('/control-plans/{controlPlan}/pdf', [ControlPlanController::class, 'generatePdf'])->name('control-plans.pdf');
+    Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
+    Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);
+    Route::delete('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'deleteItem']);
+    Route::post('/control-plans/{controlPlan}/reorder', [ControlPlanController::class, 'reorderItems']);
+
     Route::resource('tension-records', TensionRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
     ]);
@@ -88,7 +117,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Finish Earlier Record Endpoints
     Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
     Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
-    Route::get('/finish-earlier/{productionOrder}/pdf', [FinishEarlierRecordController::class, 'exportPdf']);
     Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
     Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
     Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);

@@ -10,10 +10,10 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay, controlPlansDisplay } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon, ClipboardListIcon } from 'lucide-react';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
@@ -55,6 +55,12 @@ const processParamsNavItems: NavItem[] = [
         title: 'Display: Finish Earlier Records',
         href: finishEarlierDisplay(),
         icon: LayoutGrid,
+    },
+
+    {
+        title: 'Display: Control Plans',
+        href: controlPlansDisplay(),
+        icon: ClipboardListIcon,
     },
 
 ];
