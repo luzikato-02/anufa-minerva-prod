@@ -41,10 +41,8 @@ import {
 } from '@tanstack/react-table';
 import {
     ChevronDown,
-    DownloadIcon,
     EditIcon,
     EyeIcon,
-    FileTextIcon,
     PlusIcon,
     TrashIcon,
 } from 'lucide-react';
@@ -172,7 +170,6 @@ export const columns: ColumnDef<ControlPlan>[] = [
                 <div className="flex items-center gap-1">
                     <ViewControlPlanDialog record={record} />
                     <EditControlPlanButton record={record} />
-                    <DownloadPdfButton record={record} />
                     <DeleteControlPlanDialog record={record} onDelete={() => meta?.refreshData()} />
                 </div>
             );
@@ -297,13 +294,6 @@ function ViewControlPlanDialog({ record }: { record: ControlPlan }) {
                 </div>
 
                 <DialogFooter className="px-6 pb-6">
-                    <Button
-                        variant="outline"
-                        onClick={() => window.open(`/control-plans/${record.id}/pdf`, '_blank')}
-                    >
-                        <DownloadIcon className="mr-2 h-4 w-4" />
-                        Download PDF
-                    </Button>
                     <Button variant="outline" onClick={() => setOpen(false)}>
                         Close
                     </Button>
@@ -321,18 +311,6 @@ function EditControlPlanButton({ record }: { record: ControlPlan }) {
     return (
         <Button variant="ghost" className="h-8 w-8 p-0" onClick={handleEdit} title="Edit">
             <EditIcon className="h-4 w-4" />
-        </Button>
-    );
-}
-
-function DownloadPdfButton({ record }: { record: ControlPlan }) {
-    const handleDownload = () => {
-        window.open(`/control-plans/${record.id}/pdf`, '_blank');
-    };
-
-    return (
-        <Button variant="ghost" className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700" onClick={handleDownload} title="Download PDF">
-            <FileTextIcon className="h-4 w-4" />
         </Button>
     );
 }

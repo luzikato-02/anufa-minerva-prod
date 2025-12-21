@@ -688,15 +688,6 @@ X-XSRF-TOKEN: {csrf_token}
 }
 ```
 
-#### Export to PDF
-
-```http
-GET /finish-earlier/{productionOrder}/pdf
-Authorization: Bearer {token}
-```
-
-**Response:** PDF file download
-
 #### Download CSV Data
 
 ```http

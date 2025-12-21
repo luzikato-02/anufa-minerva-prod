@@ -85,6 +85,7 @@ Route::prefix('mobile')->group(function () {
         Route::resource('control-plans', ControlPlanController::class)->only([
             'index', 'store', 'show', 'update', 'destroy'
         ]);
+        Route::get('/control-plans/{controlPlan}/pdf', [ControlPlanController::class, 'generatePdf']);
         // Control Plan Item Management
         Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
         Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);

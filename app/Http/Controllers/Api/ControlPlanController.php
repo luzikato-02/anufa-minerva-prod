@@ -10,8 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
+use Dompdf\Dompdf;
 
 class ControlPlanController extends Controller
 {
@@ -522,74 +521,50 @@ class ControlPlanController extends Controller
     }
 
     /**
-     * Export control plan as PDF
+     * Generate PDF for the specified control plan
      */
-    public function exportPdf(ControlPlan $controlPlan)
+    public function generatePdf(ControlPlan $controlPlan)
     {
-        $controlPlan->load(['items', 'revisionHistory', 'creator']);
-
-        // Calculate next review date (1 year from last update)
-        $nextReviewDate = $controlPlan->updated_at 
-            ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
-            : '-';
-
-        // Get revision number from latest revision history or default to 1
-        $latestRevision = $controlPlan->revisionHistory()->orderBy('date_of_revision', 'desc')->first();
-        $revision = $latestRevision ? $latestRevision->revision_number : '1';
-
-        $pdf = Pdf::loadView('pdf.control_plan', [
-            'controlPlan' => $controlPlan,
-            'nextReviewDate' => $nextReviewDate,
-            'revision' => $revision,
-        ]);
-
-        // Set paper to landscape A4
-        $pdf->setPaper('a4', 'landscape');
-        
-        // Set options for better rendering
-        $pdf->setOption('enable-local-file-access', true);
-        $pdf->setOption('isHtml5ParserEnabled', true);
-        $pdf->setOption('isRemoteEnabled', true);
-
-        $filename = sprintf(
-            'ControlPlan_%s_%s.pdf',
-            $controlPlan->document_number,
-            now()->format('Y-m-d')
-        );
-
-        return $pdf->download($filename);
+        try {
+            // Load all necessary relationships
+            $controlPlan->load(['items', 'revisionHistory']);
+            
+            // Generate PDF using DomPDF directly
+            $view = view('pdf.control-plan', [
+                'controlPlan' => $controlPlan
+            ])->render();
+            
+            // Use DomPDF directly - the class should be autoloaded by Composer
+            // // If not, we'll catch the error and provide a helpful message
+            // if (!class_exists(Dompdf::class)) {
+            //     throw new \RuntimeException('Dompdf class not found. Please ensure dompdf/dompdf is installed.');
+            // }
+            $dompdf = new Dompdf();
+            $dompdf->loadHtml($view);
+            $dompdf->setPaper('A4', 'landscape');
+            $dompdf->render();
+            
+            // Generate filename
+            $filename = 'control-plan-' . ($controlPlan->document_number ?? $controlPlan->id) . '.pdf';
+            
+            // Return PDF download
+            return response()->streamDownload(function () use ($dompdf) {
+                echo $dompdf->output();
+            }, $filename, [
+                'Content-Type' => 'application/pdf',
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error generating PDF: ' . $e->getMessage(), [
+                'control_plan_id' => $controlPlan->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate PDF: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    /**
-     * Stream control plan PDF (view in browser)
-     */
-    public function viewPdf(ControlPlan $controlPlan)
-    {
-        $controlPlan->load(['items', 'revisionHistory', 'creator']);
-
-        // Calculate next review date (1 year from last update)
-        $nextReviewDate = $controlPlan->updated_at 
-            ? Carbon::parse($controlPlan->updated_at)->addYear()->format('d F Y')
-            : '-';
-
-        // Get revision number from latest revision history or default to 1
-        $latestRevision = $controlPlan->revisionHistory()->orderBy('date_of_revision', 'desc')->first();
-        $revision = $latestRevision ? $latestRevision->revision_number : '1';
-
-        $pdf = Pdf::loadView('pdf.control_plan', [
-            'controlPlan' => $controlPlan,
-            'nextReviewDate' => $nextReviewDate,
-            'revision' => $revision,
-        ]);
-
-        // Set paper to landscape A4
-        $pdf->setPaper('a4', 'landscape');
-        
-        // Set options for better rendering
-        $pdf->setOption('enable-local-file-access', true);
-        $pdf->setOption('isHtml5ParserEnabled', true);
-        $pdf->setOption('isRemoteEnabled', true);
-
-        return $pdf->stream('ControlPlan_' . $controlPlan->document_number . '.pdf');
-    }
 }

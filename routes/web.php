@@ -93,8 +93,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('control-plans', ControlPlanController::class)->only([
         'index', 'store', 'show', 'update', 'destroy'
     ]);
-    Route::get('/control-plans/{controlPlan}/pdf', [ControlPlanController::class, 'exportPdf'])->name('control-plans.pdf');
-    Route::get('/control-plans/{controlPlan}/pdf/view', [ControlPlanController::class, 'viewPdf'])->name('control-plans.pdf.view');
+    Route::get('/control-plans/{controlPlan}/pdf', [ControlPlanController::class, 'generatePdf'])->name('control-plans.pdf');
     Route::post('/control-plans/{controlPlan}/items', [ControlPlanController::class, 'addItem']);
     Route::put('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'updateItem']);
     Route::delete('/control-plans/{controlPlan}/items/{item}', [ControlPlanController::class, 'deleteItem']);
@@ -118,7 +117,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Finish Earlier Record Endpoints
     Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
     Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
-    Route::get('/finish-earlier/{productionOrder}/pdf', [FinishEarlierRecordController::class, 'exportPdf']);
     Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
     Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
     Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
