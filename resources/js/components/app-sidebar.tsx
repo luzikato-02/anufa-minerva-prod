@@ -11,26 +11,42 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
+
+// Database sync route for Electron desktop app
+const databaseSyncRoute = () => '/database-sync';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, BookAIcon, CloudIcon } from 'lucide-react';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
+import { useIsElectron, useSyncStatus } from '@/hooks/use-electron';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Home',
-        href: dashboard(),
-        icon: HomeIcon,
-    },
+const getMainNavItems = (isElectron: boolean): NavItem[] => {
+    const items: NavItem[] = [
+        {
+            title: 'Home',
+            href: dashboard(),
+            icon: HomeIcon,
+        },
+        {
+            title: 'User Maintenance Table',
+            href: userMaintenance(),
+            icon: UserCheck,
+        },
+    ];
 
-    {
-        title: 'User Maintenance Table',
-        href: userMaintenance(),
-        icon: UserCheck,
-    },
-];
+    // Add Database Sync option for Electron desktop app
+    if (isElectron) {
+        items.push({
+            title: 'Database Sync',
+            href: databaseSyncRoute(),
+            icon: CloudIcon,
+        });
+    }
+
+    return items;
+};
 
 const processParamsNavItems: NavItem[] = [
    {
@@ -97,6 +113,10 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const isElectron = useIsElectron();
+    const { status } = useSyncStatus();
+    const mainNavItems = getMainNavItems(isElectron);
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -112,7 +132,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={mainNavItems} syncStatus={isElectron ? status : undefined} />
                 <ProcessParams items={processParamsNavItems} />
                 <InventoryNav items={inventoryNavItems} />
             </SidebarContent>
