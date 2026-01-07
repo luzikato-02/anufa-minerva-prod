@@ -1,6 +1,10 @@
 {
+    "name": "manufacturing-desktop-app",
+    "version": "1.0.0",
+    "description": "Manufacturing Desktop Application with Local Database and Sync",
     "private": true,
     "type": "module",
+    "main": "dist-electron/main.js",
     "scripts": {
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",
@@ -8,12 +12,69 @@
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
-        "types": "tsc --noEmit"
+        "types": "tsc --noEmit",
+        "electron:dev": "concurrently \"npm run dev\" \"npm run electron:watch\"",
+        "electron:watch": "tsc -p electron/tsconfig.json && electron .",
+        "electron:build": "npm run build:electron && npm run electron:compile",
+        "build:electron": "vite build --config vite.electron.config.ts",
+        "electron:compile": "tsc -p electron/tsconfig.json",
+        "electron:start": "electron .",
+        "electron:pack": "npm run electron:build && electron-builder --dir",
+        "electron:dist": "npm run electron:build && electron-builder",
+        "electron:dist:win": "npm run electron:build && electron-builder --win",
+        "electron:dist:mac": "npm run electron:build && electron-builder --mac",
+        "electron:dist:linux": "npm run electron:build && electron-builder --linux"
+    },
+    "build": {
+        "appId": "com.manufacturing.desktop",
+        "productName": "Manufacturing Desktop App",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "dist-electron/**/*",
+            "public/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "public",
+                "to": "public"
+            }
+        ],
+        "mac": {
+            "category": "public.app-category.business",
+            "target": [
+                "dmg",
+                "zip"
+            ]
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ]
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Office"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",
         "@laravel/vite-plugin-wayfinder": "^0.1.7",
+        "@types/better-sqlite3": "^7.6.11",
         "@types/node": "^22.13.5",
+        "electron": "^33.2.0",
+        "electron-builder": "^25.1.8",
+        "electron-squirrel-startup": "^1.0.1",
         "eslint": "^9.17.0",
         "eslint-config-prettier": "^10.0.1",
         "eslint-plugin-react": "^7.37.3",
@@ -47,6 +108,7 @@
         "@types/react": "^19.0.3",
         "@types/react-dom": "^19.0.2",
         "@vitejs/plugin-react": "^4.6.0",
+        "better-sqlite3": "^11.6.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "concurrently": "^9.0.1",

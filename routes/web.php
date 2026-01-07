@@ -70,6 +70,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('under-construction');
     })->name('under-construction');
 
+    // Database Sync Page (for Electron desktop app)
+    Route::get('database-sync', function () {
+        return Inertia::render('database-sync');
+    })->name('database-sync');
+
     Route::resource('tension-records', TensionRecordController::class)->only([
         'index', 'store', 'show', 'destroy', 'update'
     ]);
