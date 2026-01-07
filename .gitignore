@@ -4,8 +4,10 @@
 /public/build
 /public/hot
 /public/storage
-/resources/js/actions
-/resources/js/routes
+# Wayfinder auto-generated files (commented out to allow Electron stub files)
+# Note: Laravel Wayfinder will regenerate these when running the web app
+# /resources/js/actions
+# /resources/js/routes
 /resources/js/wayfinder
 /storage/*.key
 /storage/pail
