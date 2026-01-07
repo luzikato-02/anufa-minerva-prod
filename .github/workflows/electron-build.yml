@@ -1,6 +1,19 @@
 name: Build Electron App
 
 on:
+  push:
+    branches:
+      - main
+      - master
+      - 'release/**'
+      - 'feature/**'
+    paths:
+      - 'electron/**'
+      - 'resources/js/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.electron.config.ts'
+      - 'index.html'
   workflow_dispatch:
     inputs:
       platform:
@@ -21,7 +34,7 @@ on:
 
 jobs:
   build-windows:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -52,7 +65,7 @@ jobs:
           if-no-files-found: warn
 
   build-macos:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos' }}
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -82,7 +95,7 @@ jobs:
           if-no-files-found: warn
 
   build-linux:
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -115,9 +128,10 @@ jobs:
 
   create-release:
     needs: [build-windows, build-macos, build-linux]
-    # Run even if some builds were skipped, but only if release is requested
+    # Run only for manual triggers with release enabled, and if at least one build succeeded
     if: |
       always() && 
+      github.event_name == 'workflow_dispatch' &&
       github.event.inputs.release == 'true' &&
       (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
       (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') &&
