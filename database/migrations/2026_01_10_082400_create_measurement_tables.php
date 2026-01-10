@@ -21,78 +21,82 @@ return new class extends Migration
         // =====================================================================
         // TWISTING MEASUREMENTS TABLE
         // =====================================================================
-        Schema::create('twisting_measurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tension_record_id')
-                ->constrained('tension_records')
-                ->onDelete('cascade');
+        if (!Schema::hasTable('twisting_measurements')) {
+            Schema::create('twisting_measurements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tension_record_id')
+                    ->constrained('tension_records')
+                    ->onDelete('cascade');
 
-            // Spindle identification
-            $table->unsignedTinyInteger('spindle_number');
+                // Spindle identification
+                $table->unsignedTinyInteger('spindle_number');
 
-            // Measurement values
-            $table->decimal('max_value', 8, 2)->nullable();
-            $table->decimal('min_value', 8, 2)->nullable();
+                // Measurement values
+                $table->decimal('max_value', 8, 2)->nullable();
+                $table->decimal('min_value', 8, 2)->nullable();
 
-            // Calculated fields (computed in application layer for SQLite compatibility)
-            $table->decimal('avg_value', 8, 2)->nullable();
-            $table->decimal('range_value', 8, 2)->nullable();
+                // Calculated fields (computed in application layer for SQLite compatibility)
+                $table->decimal('avg_value', 8, 2)->nullable();
+                $table->decimal('range_value', 8, 2)->nullable();
 
-            // Status flags
-            $table->boolean('is_complete')->default(false);
-            $table->boolean('is_out_of_spec')->default(false);
+                // Status flags
+                $table->boolean('is_complete')->default(false);
+                $table->boolean('is_out_of_spec')->default(false);
 
-            // Timestamps
-            $table->timestamp('measured_at')->nullable();
-            $table->timestamps();
+                // Timestamps
+                $table->timestamp('measured_at')->nullable();
+                $table->timestamps();
 
-            // Indexes for efficient querying
-            $table->unique(['tension_record_id', 'spindle_number'], 'idx_record_spindle');
-            $table->index(['tension_record_id', 'is_complete'], 'idx_twisting_record_complete');
-            $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_twisting_record_out_of_spec');
-            $table->index(['spindle_number'], 'idx_spindle');
-        });
+                // Indexes for efficient querying
+                $table->unique(['tension_record_id', 'spindle_number'], 'idx_record_spindle');
+                $table->index(['tension_record_id', 'is_complete'], 'idx_twisting_record_complete');
+                $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_twisting_record_out_of_spec');
+                $table->index(['spindle_number'], 'idx_spindle');
+            });
+        }
 
         // =====================================================================
         // WEAVING MEASUREMENTS TABLE
         // =====================================================================
-        Schema::create('weaving_measurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tension_record_id')
-                ->constrained('tension_records')
-                ->onDelete('cascade');
+        if (!Schema::hasTable('weaving_measurements')) {
+            Schema::create('weaving_measurements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tension_record_id')
+                    ->constrained('tension_records')
+                    ->onDelete('cascade');
 
-            // Creel position identification (using string for SQLite compatibility)
-            $table->string('creel_side', 2); // AI, BI, AO, BO
-            $table->string('row_number', 2); // R1-R5
-            $table->unsignedSmallInteger('column_number'); // 1-120
+                // Creel position identification (using string for SQLite compatibility)
+                $table->string('creel_side', 2); // AI, BI, AO, BO
+                $table->string('row_number', 2); // R1-R5
+                $table->unsignedSmallInteger('column_number'); // 1-120
 
-            // Measurement values
-            $table->decimal('max_value', 8, 2)->nullable();
-            $table->decimal('min_value', 8, 2)->nullable();
+                // Measurement values
+                $table->decimal('max_value', 8, 2)->nullable();
+                $table->decimal('min_value', 8, 2)->nullable();
 
-            // Calculated fields (computed in application layer for SQLite compatibility)
-            $table->decimal('avg_value', 8, 2)->nullable();
-            $table->decimal('range_value', 8, 2)->nullable();
+                // Calculated fields (computed in application layer for SQLite compatibility)
+                $table->decimal('avg_value', 8, 2)->nullable();
+                $table->decimal('range_value', 8, 2)->nullable();
 
-            // Status flags
-            $table->boolean('is_complete')->default(false);
-            $table->boolean('is_out_of_spec')->default(false);
+                // Status flags
+                $table->boolean('is_complete')->default(false);
+                $table->boolean('is_out_of_spec')->default(false);
 
-            // Timestamps
-            $table->timestamp('measured_at')->nullable();
-            $table->timestamps();
+                // Timestamps
+                $table->timestamp('measured_at')->nullable();
+                $table->timestamps();
 
-            // Indexes for efficient querying
-            $table->unique(
-                ['tension_record_id', 'creel_side', 'row_number', 'column_number'],
-                'idx_record_position'
-            );
-            $table->index(['tension_record_id', 'creel_side'], 'idx_record_side');
-            $table->index(['tension_record_id', 'is_complete'], 'idx_weaving_record_complete');
-            $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_weaving_record_out_of_spec');
-            $table->index(['creel_side', 'row_number'], 'idx_side_row');
-        });
+                // Indexes for efficient querying
+                $table->unique(
+                    ['tension_record_id', 'creel_side', 'row_number', 'column_number'],
+                    'idx_record_position'
+                );
+                $table->index(['tension_record_id', 'creel_side'], 'idx_record_side');
+                $table->index(['tension_record_id', 'is_complete'], 'idx_weaving_record_complete');
+                $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_weaving_record_out_of_spec');
+                $table->index(['creel_side', 'row_number'], 'idx_side_row');
+            });
+        }
 
         // =====================================================================
         // MIGRATE EXISTING DATA
