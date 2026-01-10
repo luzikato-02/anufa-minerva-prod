@@ -10,6 +10,7 @@ use App\Models\WeavingMeasurement;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class TensionRecordController extends Controller
@@ -191,10 +192,21 @@ class TensionRecordController extends Controller
             // Create the record
             $record = TensionRecord::create($recordData);
 
+            // Log measurement data for debugging
+            Log::info('Creating measurements for record', [
+                'record_id' => $record->id,
+                'record_type' => $record->record_type,
+                'measurement_data_structure' => json_encode($validated['measurement_data'] ?? []),
+            ]);
+
             // Create measurement records from the measurement_data array
             $measurementData = $validated['measurement_data'] ?? [];
             if (!empty($measurementData)) {
-                $this->createMeasurementsFromArray($record, $measurementData);
+                $measurementCount = $this->createMeasurementsFromArray($record, $measurementData);
+                Log::info('Measurements created', [
+                    'record_id' => $record->id,
+                    'count' => $measurementCount,
+                ]);
             }
 
             // Create problem records from the problems array
@@ -745,16 +757,17 @@ class TensionRecordController extends Controller
 
     /**
      * Create measurements from legacy array format
+     * Returns the count of measurements created
      */
-    private function createMeasurementsFromArray(TensionRecord $record, array $measurementData): void
+    private function createMeasurementsFromArray(TensionRecord $record, array $measurementData): int
     {
         $specTension = $record->spec_tension;
         $tolerance = $record->tension_tolerance ?? 0;
 
         if ($record->isTwisting()) {
-            $this->createTwistingMeasurements($record, $measurementData, $specTension, $tolerance);
+            return $this->createTwistingMeasurements($record, $measurementData, $specTension, $tolerance);
         } else {
-            $this->createWeavingMeasurements($record, $measurementData, $specTension, $tolerance);
+            return $this->createWeavingMeasurements($record, $measurementData, $specTension, $tolerance);
         }
     }
 
@@ -766,12 +779,17 @@ class TensionRecordController extends Controller
         array $measurementData,
         ?float $specTension,
         float $tolerance
-    ): void {
+    ): int {
         $measurements = [];
         $now = now();
 
         foreach ($measurementData as $spindleNumber => $data) {
             if (!is_numeric($spindleNumber) || !is_array($data)) {
+                Log::warning('Skipping invalid twisting measurement', [
+                    'record_id' => $record->id,
+                    'spindle_number' => $spindleNumber,
+                    'data' => $data,
+                ]);
                 continue;
             }
 
@@ -812,43 +830,116 @@ class TensionRecordController extends Controller
         if (!empty($measurements)) {
             TwistingMeasurement::insert($measurements);
         }
+
+        return count($measurements);
     }
 
     /**
      * Create weaving measurements from array
+     * FIXED VERSION with better error handling and logging
      */
     private function createWeavingMeasurements(
         TensionRecord $record,
         array $measurementData,
         ?float $specTension,
         float $tolerance
-    ): void {
+    ): int {
         $measurements = [];
         $now = now();
         $validSides = array_keys(WeavingMeasurement::getCreelSides());
+        $validRows = array_keys(WeavingMeasurement::getRows());
+        
+        Log::info('Processing weaving measurements', [
+            'record_id' => $record->id,
+            'data_keys' => array_keys($measurementData),
+            'valid_sides' => $validSides,
+            'valid_rows' => $validRows,
+        ]);
 
         foreach ($measurementData as $side => $rows) {
-            if (!in_array($side, $validSides) || !is_array($rows)) {
+            // Normalize side format
+            $normalizedSide = strtoupper($side);
+            
+            if (!in_array($normalizedSide, $validSides)) {
+                Log::warning('Invalid creel side', [
+                    'record_id' => $record->id,
+                    'side' => $side,
+                    'normalized' => $normalizedSide,
+                    'valid_sides' => $validSides,
+                ]);
                 continue;
             }
 
+            if (!is_array($rows)) {
+                Log::warning('Rows is not an array', [
+                    'record_id' => $record->id,
+                    'side' => $normalizedSide,
+                    'rows_type' => gettype($rows),
+                ]);
+                continue;
+            }
+
+            Log::info('Processing side', [
+                'record_id' => $record->id,
+                'side' => $normalizedSide,
+                'row_keys' => array_keys($rows),
+            ]);
+
             foreach ($rows as $row => $columns) {
                 if (!is_array($columns)) {
+                    Log::warning('Columns is not an array', [
+                        'record_id' => $record->id,
+                        'side' => $normalizedSide,
+                        'row' => $row,
+                        'columns_type' => gettype($columns),
+                    ]);
                     continue;
                 }
 
-                // Normalize row format
-                $rowNumber = $row;
-                if (!preg_match('/^R[1-5]$/', $rowNumber)) {
+                // Normalize row format - handle A-E or numeric 1-5 formats
+                $rowNumber = strtoupper($row);
+                if (!in_array($rowNumber, $validRows)) {
+                    // Try to convert numeric row (1-5) to letter format (A-E)
                     if (is_numeric($row) && $row >= 1 && $row <= 5) {
-                        $rowNumber = 'R' . $row;
+                        $rowNumber = chr(64 + (int)$row); // 1=>A, 2=>B, 3=>C, 4=>D, 5=>E
                     } else {
+                        Log::warning('Invalid row format', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $row,
+                            'valid_rows' => $validRows,
+                        ]);
                         continue;
                     }
                 }
 
+                Log::info('Processing row', [
+                    'record_id' => $record->id,
+                    'side' => $normalizedSide,
+                    'row' => $rowNumber,
+                    'column_count' => count($columns),
+                    'column_keys' => array_keys($columns),
+                ]);
+
                 foreach ($columns as $column => $data) {
-                    if (!is_numeric($column) || !is_array($data)) {
+                    if (!is_numeric($column)) {
+                        Log::warning('Column is not numeric', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $rowNumber,
+                            'column' => $column,
+                        ]);
+                        continue;
+                    }
+
+                    if (!is_array($data)) {
+                        Log::warning('Measurement data is not an array', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $rowNumber,
+                            'column' => $column,
+                            'data_type' => gettype($data),
+                        ]);
                         continue;
                     }
 
@@ -873,7 +964,7 @@ class TensionRecordController extends Controller
 
                     $measurements[] = [
                         'tension_record_id' => $record->id,
-                        'creel_side' => $side,
+                        'creel_side' => $normalizedSide,
                         'row_number' => $rowNumber,
                         'column_number' => (int) $column,
                         'max_value' => $maxValue,
@@ -890,10 +981,24 @@ class TensionRecordController extends Controller
             }
         }
 
+        Log::info('Weaving measurements prepared', [
+            'record_id' => $record->id,
+            'total_measurements' => count($measurements),
+        ]);
+
         // Insert in chunks to avoid memory issues
+        $insertedCount = 0;
         foreach (array_chunk($measurements, 500) as $chunk) {
             WeavingMeasurement::insert($chunk);
+            $insertedCount += count($chunk);
         }
+
+        Log::info('Weaving measurements inserted', [
+            'record_id' => $record->id,
+            'inserted_count' => $insertedCount,
+        ]);
+
+        return $insertedCount;
     }
 
     /**

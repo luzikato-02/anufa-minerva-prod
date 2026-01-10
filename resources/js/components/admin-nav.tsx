@@ -15,7 +15,7 @@ export function AdminNav({ items = [] }: { items: NavItem[] }) {
     // Check if user has admin role - this will be passed from the backend
     const auth = page.props.auth as { user?: { roles?: string[] } } | undefined;
     const userRoles = auth?.user?.roles || [];
-    const isAdmin = userRoles.some(role => ['admin', 'super-admin'].includes(role));
+    const isAdmin = userRoles.some(role => ['admin', 'master'].includes(role));
 
     // Don't render if user is not an admin
     if (!isAdmin) {

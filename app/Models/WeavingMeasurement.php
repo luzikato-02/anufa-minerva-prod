@@ -5,10 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class WeavingMeasurement extends Model
 {
     use HasFactory;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'weaving_measurements';
 
     /**
      * Creel side constants
@@ -19,13 +27,13 @@ class WeavingMeasurement extends Model
     public const SIDE_BO = 'BO'; // B-side Outer
 
     /**
-     * Row constants
+     * Row constants (A-E)
      */
-    public const ROW_1 = 'R1';
-    public const ROW_2 = 'R2';
-    public const ROW_3 = 'R3';
-    public const ROW_4 = 'R4';
-    public const ROW_5 = 'R5';
+    public const ROW_A = 'A';
+    public const ROW_B = 'B';
+    public const ROW_C = 'C';
+    public const ROW_D = 'D';
+    public const ROW_E = 'E';
 
     /**
      * Maximum columns per row
@@ -107,11 +115,11 @@ class WeavingMeasurement extends Model
     public static function getRows(): array
     {
         return [
-            self::ROW_1 => 'Row 1',
-            self::ROW_2 => 'Row 2',
-            self::ROW_3 => 'Row 3',
-            self::ROW_4 => 'Row 4',
-            self::ROW_5 => 'Row 5',
+            self::ROW_A => 'Row A',
+            self::ROW_B => 'Row B',
+            self::ROW_C => 'Row C',
+            self::ROW_D => 'Row D',
+            self::ROW_E => 'Row E',
         ];
     }
 
@@ -206,13 +214,41 @@ class WeavingMeasurement extends Model
     }
 
     /**
-     * Scope to order by position
+     * Scope to order by position (Database-agnostic)
      */
     public function scopeOrderByPosition($query, string $direction = 'asc')
     {
-        return $query->orderByRaw("FIELD(creel_side, 'AI', 'AO', 'BI', 'BO') {$direction}")
-            ->orderByRaw("FIELD(row_number, 'R1', 'R2', 'R3', 'R4', 'R5') {$direction}")
+        $driver = $query->getConnection()->getDriverName();
+        
+        if ($driver === 'mysql') {
+            // MySQL/MariaDB supports FIELD() function
+            return $query
+                ->orderByRaw("FIELD(`creel_side`, 'AI', 'AO', 'BI', 'BO') {$direction}")
+                ->orderByRaw("FIELD(`row_number`, 'A', 'B', 'C', 'D', 'E') {$direction}")
+                ->orderBy('column_number', $direction);
+        } else {
+            // SQLite, PostgreSQL, and others - use CASE statements
+            return $query->orderByRaw("
+                CASE `creel_side`
+                    WHEN 'AI' THEN 1 
+                    WHEN 'AO' THEN 2 
+                    WHEN 'BI' THEN 3 
+                    WHEN 'BO' THEN 4 
+                    ELSE 5 
+                END {$direction}
+            ")
+            ->orderByRaw("
+                CASE `row_number`
+                    WHEN 'A' THEN 1 
+                    WHEN 'B' THEN 2 
+                    WHEN 'C' THEN 3 
+                    WHEN 'D' THEN 4 
+                    WHEN 'E' THEN 5 
+                    ELSE 6 
+                END {$direction}
+            ")
             ->orderBy('column_number', $direction);
+        }
     }
 
     /**
@@ -252,7 +288,7 @@ class WeavingMeasurement extends Model
     // =========================================================================
 
     /**
-     * Get the position code (e.g., "AI-R2-45")
+     * Get the position code (e.g., "AI-B-45")
      */
     public function getPositionCodeAttribute(): string
     {

@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
+import { TensionRecordViewDialog } from './tension-record-view-dialog';
 
 interface TensionProblem {
     id: number;
@@ -202,6 +203,12 @@ export const columns: ColumnDef<TensionProblem>[] = [
 
             const handleResolve = async () => {
                 try {
+                    // Step 1: Ensure CSRF cookie is set
+                    await fetch(`${baseUrl}/csrf-token`, { credentials: "include" })
+
+                    // Step 2: Extract token from cookie
+                    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
+                    const csrfToken = match ? decodeURIComponent(match[1]) : ""
                     const response = await fetch(
                         `${baseUrl}/tension-problems/${problem.id}/resolve`,
                         {
@@ -209,6 +216,7 @@ export const columns: ColumnDef<TensionProblem>[] = [
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Accept': 'application/json',
+                                'X-XSRF-TOKEN': csrfToken
                             },
                             credentials: 'include',
                         }
@@ -381,9 +389,9 @@ export function TensionProblemsDataTable() {
                                         {header.isPlaceholder
                                             ? null
                                             : flexRender(
-                                                  header.column.columnDef.header,
-                                                  header.getContext()
-                                              )}
+                                                header.column.columnDef.header,
+                                                header.getContext()
+                                            )}
                                     </TableHead>
                                 ))}
                             </TableRow>

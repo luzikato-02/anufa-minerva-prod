@@ -67,7 +67,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Create roles and assign permissions
         
         // Super Admin - has all permissions
-        $superAdmin = Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+        $superAdmin = Role::firstOrCreate(['name' => 'master', 'guard_name' => 'web']);
         $superAdmin->givePermissionTo(Permission::all());
 
         // Admin - has most permissions except system-level ones
@@ -109,7 +109,7 @@ class RolesAndPermissionsSeeder extends Seeder
         ]);
 
         // Viewer - can only view
-        $viewer = Role::firstOrCreate(['name' => 'viewer', 'guard_name' => 'web']);
+        $viewer = Role::firstOrCreate(['name' => 'guest', 'guard_name' => 'web']);
         $viewer->givePermissionTo([
             'stock-taking.view',
             'tension-records.view',
@@ -119,7 +119,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Optionally assign admin role to the first user
         $firstUser = User::first();
         if ($firstUser) {
-            $firstUser->assignRole('super-admin');
+            $firstUser->assignRole('master');
         }
     }
 }

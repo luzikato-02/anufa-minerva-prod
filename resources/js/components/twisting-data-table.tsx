@@ -117,7 +117,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Item Number',
         accessorFn: (row) => row.metadata?.item_number,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -125,7 +125,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Yarn Mat. Code',
         accessorFn: (row) => row.metadata?.yarn_code,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -133,7 +133,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Operator',
         accessorFn: (row) => row.metadata?.operator,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -141,7 +141,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Machine Number',
         accessorFn: (row) => row.form_data?.machineNumber,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
 
@@ -150,7 +150,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Density (Dtex)',
         accessorFn: (row) => row.form_data?.dtexNumber,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -158,7 +158,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Table Twist (TPM)',
         accessorFn: (row) => row.form_data?.tpm,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -166,7 +166,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Cycle Speed (RPM)',
         accessorFn: (row) => row.form_data?.rpm,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -174,7 +174,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Spec. Tension (cN)',
         accessorFn: (row) => row.form_data?.specTens,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -182,7 +182,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Tens. Deviation (cN)',
         accessorFn: (row) => row.form_data?.tensPlus,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {
@@ -190,7 +190,7 @@ const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef
         header: 'Meters Check (m)',
         accessorFn: (row) => row.form_data?.metersCheck,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{getValue() as string ?? 'N/A'}</div>
         ),
     },
     {

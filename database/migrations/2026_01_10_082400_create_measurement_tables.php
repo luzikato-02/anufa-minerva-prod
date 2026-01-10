@@ -14,7 +14,7 @@ return new class extends Migration
      * to normalize the measurement_data JSON blob into proper relational tables.
      *
      * Twisting: Simple spindle-based measurements (1-84 spindles per machine)
-     * Weaving: Complex creel-based measurements (4 sides × 5 rows × 120 columns)
+     * Weaving: Complex creel-based measurements (4 sides × 5 rows (A-E) × 120 columns)
      */
     public function up(): void
     {
@@ -67,7 +67,7 @@ return new class extends Migration
 
                 // Creel position identification (using string for SQLite compatibility)
                 $table->string('creel_side', 2); // AI, BI, AO, BO
-                $table->string('row_number', 2); // R1-R5
+                $table->string('row_number', 1); // A, B, C, D, E
                 $table->unsignedSmallInteger('column_number'); // 1-120
 
                 // Measurement values
@@ -192,10 +192,14 @@ return new class extends Migration
             $specTension = $record->spec_tension;
             $tolerance = $record->tension_tolerance ?? 0;
             $validSides = ['AI', 'BI', 'AO', 'BO'];
+            $validRows = ['A', 'B', 'C', 'D', 'E'];
             $measurements = [];
 
             foreach ($measurementData as $side => $rows) {
-                if (!in_array($side, $validSides) || !is_array($rows)) {
+                // Normalize side to uppercase
+                $normalizedSide = strtoupper($side);
+                
+                if (!in_array($normalizedSide, $validSides) || !is_array($rows)) {
                     continue;
                 }
 
@@ -204,12 +208,12 @@ return new class extends Migration
                         continue;
                     }
 
-                    // Normalize row format (R1, R2, etc.)
-                    $rowNumber = $row;
-                    if (!preg_match('/^R[1-5]$/', $rowNumber)) {
-                        // Try to convert numeric row to R format
+                    // Normalize row format (A, B, C, D, E or numeric 1-5)
+                    $rowNumber = strtoupper($row);
+                    if (!in_array($rowNumber, $validRows)) {
+                        // Try to convert numeric row (1-5) to letter (A-E)
                         if (is_numeric($row) && $row >= 1 && $row <= 5) {
-                            $rowNumber = 'R' . $row;
+                            $rowNumber = chr(64 + (int)$row); // 1=>A, 2=>B, 3=>C, 4=>D, 5=>E
                         } else {
                             continue;
                         }
@@ -242,7 +246,7 @@ return new class extends Migration
 
                         $measurements[] = [
                             'tension_record_id' => $record->id,
-                            'creel_side' => $side,
+                            'creel_side' => $normalizedSide,
                             'row_number' => $rowNumber,
                             'column_number' => (int) $column,
                             'max_value' => $maxValue,

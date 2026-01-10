@@ -108,14 +108,20 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
             return;
         }
         const data = Object.entries(record.measurement_data).map(
-            ([key, value]) => ({
-                spindle_number: parseInt(key),
-                max_value: value?.max ?? null,
-                min_value: value?.min ?? null,
-                avg_value: value?.max && value?.min ? (value.max + value.min) / 2 : null,
-                is_complete: value?.max !== null && value?.min !== null,
-                is_out_of_spec: false,
-            })
+            ([key, value]) => {
+                const maxValue = value?.max !== null && value?.max !== undefined ? Number(value.max) : null;
+                const minValue = value?.min !== null && value?.min !== undefined ? Number(value.min) : null;
+                const avgValue = maxValue !== null && minValue !== null ? (maxValue + minValue) / 2 : null;
+                
+                return {
+                    spindle_number: parseInt(key),
+                    max_value: maxValue,
+                    min_value: minValue,
+                    avg_value: avgValue,
+                    is_complete: maxValue !== null && minValue !== null,
+                    is_out_of_spec: false,
+                };
+            }
         );
         setMeasurements(data.sort((a, b) => a.spindle_number - b.spindle_number));
     }, [record.measurement_data, record.record_type]);
@@ -149,25 +155,41 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
         if (record.record_type === 'twisting') {
             return (measurements as TwistingMeasurement[])
                 .filter((m) => m.is_complete || (m.max_value !== null && m.min_value !== null))
-                .map((m) => ({
-                    name: `#${m.spindle_number}`,
-                    position: m.spindle_number,
-                    max: m.max_value,
-                    min: m.min_value,
-                    avg: m.avg_value ?? (m.max_value && m.min_value ? (m.max_value + m.min_value) / 2 : null),
-                }));
+                .map((m) => {
+                    const maxValue = m.max_value !== null ? Number(m.max_value) : null;
+                    const minValue = m.min_value !== null ? Number(m.min_value) : null;
+                    const avgValue = m.avg_value !== null 
+                        ? Number(m.avg_value) 
+                        : (maxValue !== null && minValue !== null ? (maxValue + minValue) / 2 : null);
+                    
+                    return {
+                        name: `#${m.spindle_number}`,
+                        position: m.spindle_number,
+                        max: maxValue,
+                        min: minValue,
+                        avg: avgValue,
+                    };
+                });
         } else {
             // For weaving, group by side and show averages
             return (measurements as WeavingMeasurement[])
                 .filter((m) => m.is_complete || (m.max_value !== null && m.min_value !== null))
                 .slice(0, 50) // Limit to first 50 for readability
-                .map((m, index) => ({
-                    name: `${m.creel_side}-${m.row_number}-${m.column_number}`,
-                    position: index + 1,
-                    max: m.max_value,
-                    min: m.min_value,
-                    avg: m.avg_value ?? (m.max_value && m.min_value ? (m.max_value + m.min_value) / 2 : null),
-                }));
+                .map((m, index) => {
+                    const maxValue = m.max_value !== null ? Number(m.max_value) : null;
+                    const minValue = m.min_value !== null ? Number(m.min_value) : null;
+                    const avgValue = m.avg_value !== null 
+                        ? Number(m.avg_value) 
+                        : (maxValue !== null && minValue !== null ? (maxValue + minValue) / 2 : null);
+                    
+                    return {
+                        name: `${m.creel_side}-${m.row_number}-${m.column_number}`,
+                        position: index + 1,
+                        max: maxValue,
+                        min: minValue,
+                        avg: avgValue,
+                    };
+                });
         }
     };
 
@@ -268,7 +290,17 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                                 fontSize={12}
                                             />
                                             <Tooltip
-                                                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : 'N/A', '']}
+                                                formatter={(value, name) => {
+                                                    // Convert to number if it's a string
+                                                    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+                                                    const formattedValue = typeof numValue === 'number' && !isNaN(numValue) 
+                                                        ? `${numValue.toFixed(2)} cN` 
+                                                        : 'N/A';
+                                                    const label = name === 'max' ? 'Max Tension' : 
+                                                                 name === 'min' ? 'Min Tension' : 
+                                                                 name === 'avg' ? 'Avg Tension' : name;
+                                                    return [formattedValue, label];
+                                                }}
                                                 labelFormatter={(label) => `Position: ${label}`}
                                             />
                                             <Legend verticalAlign="top" height={36} />

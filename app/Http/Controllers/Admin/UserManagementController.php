@@ -26,8 +26,8 @@ class UserManagementController extends Controller
                 'roles' => $user->roles->pluck('name'),
                 'permissions' => $user->getAllPermissions()->pluck('name'),
                 'email_verified_at' => $user->email_verified_at,
-                'created_at' => $user->created_at->toDateTimeString(),
-                'updated_at' => $user->updated_at->toDateTimeString(),
+                'created_at' => $user->created_at?->toDateTimeString(),
+                'updated_at' => $user->updated_at?->toDateTimeString(),
             ];
         });
 
