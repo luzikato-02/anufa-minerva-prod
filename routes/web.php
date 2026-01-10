@@ -76,7 +76,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
         ->name('tension-records.statistics');
 
-     // ✅ Filtered endpoints (now conflict-free)
+    // Tension Problems endpoints
+    Route::get('tension-problems', [TensionRecordController::class, 'allProblems'])
+        ->name('tension-problems.index');
+    
+    Route::get('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'problems'])
+        ->name('tension-records.problems');
+    
+    Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
+        ->name('tension-records.problems.store');
+    
+    Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
+        ->name('tension-problems.resolve');
+
+    // Filtered endpoints by type
     Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
         ->whereIn('type', ['twisting', 'weaving'])
         ->name('tension-records.by-type');

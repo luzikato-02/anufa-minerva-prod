@@ -50,14 +50,27 @@ Route::prefix('mobile')->group(function () {
         ]);
 
         Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
-            ->name('tension-records.download');
+            ->name('api.tension-records.download');
         
         Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
-            ->name('tension-records.statistics');
+            ->name('api.tension-records.statistics');
+
+        // Tension Problems endpoints
+        Route::get('tension-problems', [TensionRecordController::class, 'allProblems'])
+            ->name('api.tension-problems.index');
+        
+        Route::get('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'problems'])
+            ->name('api.tension-records.problems');
+        
+        Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
+            ->name('api.tension-records.problems.store');
+        
+        Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
+            ->name('api.tension-problems.resolve');
 
         Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
             ->whereIn('type', ['twisting', 'weaving'])
-            ->name('tension-records.by-type');
+            ->name('api.tension-records.by-type');
 
         // Stock taking features endpoints
         Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
