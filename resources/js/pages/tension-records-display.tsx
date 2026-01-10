@@ -1,3 +1,4 @@
+import { TensionProblemsDataTable } from '@/components/tension-problems-data-table';
 import { TensionStatsCards } from '@/components/tension-record-cards';
 import { TwistingDataTable } from '@/components/twisting-data-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -63,15 +64,18 @@ export default function TensionRecordsDisplay() {
                                         <TabsTrigger value="weaving">
                                             Weaving Tension
                                         </TabsTrigger>
+                                        <TabsTrigger value="problems">
+                                            Reported Problems
+                                        </TabsTrigger>
                                     </TabsList>
                                     <TabsContent value="twisting">
-                                        {/* <div className="px-4 lg:px-6">
-                                            <ChartAreaInteractive />
-                                        </div> */}
-                                        <TwistingDataTable></TwistingDataTable>
+                                        <TwistingDataTable />
                                     </TabsContent>
                                     <TabsContent value="weaving">
-                                        <WeavingDataTable></WeavingDataTable>
+                                        <WeavingDataTable />
+                                    </TabsContent>
+                                    <TabsContent value="problems">
+                                        <TensionProblemsDataTable />
                                     </TabsContent>
                                 </Tabs>
                             </div>
