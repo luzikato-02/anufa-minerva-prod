@@ -9,14 +9,18 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarGroup,
+    SidebarGroupLabel,
+    SidebarGroupContent,
 } from '@/components/ui/sidebar';
 import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon, Shield, Users, Key, Settings } from 'lucide-react';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
+import { AdminNav } from './admin-nav';
 
 const mainNavItems: NavItem[] = [
     {
@@ -29,6 +33,29 @@ const mainNavItems: NavItem[] = [
         title: 'User Maintenance Table',
         href: userMaintenance(),
         icon: UserCheck,
+    },
+];
+
+const adminNavItems: NavItem[] = [
+    {
+        title: 'Admin Dashboard',
+        href: '/admin',
+        icon: Settings,
+    },
+    {
+        title: 'User Management',
+        href: '/admin/users',
+        icon: Users,
+    },
+    {
+        title: 'Role Management',
+        href: '/admin/roles',
+        icon: Shield,
+    },
+    {
+        title: 'Permission Management',
+        href: '/admin/permissions',
+        icon: Key,
     },
 ];
 
@@ -115,6 +142,7 @@ export function AppSidebar() {
                 <NavMain items={mainNavItems} />
                 <ProcessParams items={processParamsNavItems} />
                 <InventoryNav items={inventoryNavItems} />
+                <AdminNav items={adminNavItems} />
             </SidebarContent>
 
             <SidebarFooter>
