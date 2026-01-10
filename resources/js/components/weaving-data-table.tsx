@@ -7,7 +7,6 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -20,6 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { TensionRecordViewDialog } from '@/components/tension-record-view-dialog';
 import {
     ColumnDef,
     ColumnFiltersState,
@@ -37,7 +37,6 @@ import {
     DownloadIcon,
     EyeIcon,
     MoreHorizontal,
-    PencilIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -71,7 +70,7 @@ interface LaravelPaginatedResponse<T> {
     total: number;
 }
 
-export const columns: ColumnDef<TensionRecord>[] = [
+const createColumns = (onViewRecord: (record: TensionRecord) => void): ColumnDef<TensionRecord>[] => [
     {
         id: 'select',
         header: ({ table }) => (
@@ -101,7 +100,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Record Date',
         accessorFn: (row) => row.created_at,
         cell: ({ getValue }) => {
-            const date = new Date(getValue());
+            const date = new Date(getValue() as string);
             return (
                 <div>
                     {date.toLocaleString('en-ID', {
@@ -201,13 +200,11 @@ export const columns: ColumnDef<TensionRecord>[] = [
         cell: ({ row }) => {
             const record = row.original;
             const handleDownload = () => {
-                 // const blob = new Blob([record.csv_data], { type: 'text/csv' });
                 const baseUrl = window.location.origin;
                 const url = `${baseUrl}/tension-records/${record.id}/download`;
 
                 const a = document.createElement('a');
                 a.href = url;
-                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
                 a.click();
                 URL.revokeObjectURL(url);
             };
@@ -220,15 +217,12 @@ export const columns: ColumnDef<TensionRecord>[] = [
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={handleDownload}>
-                            <DownloadIcon></DownloadIcon>Download
+                        <DropdownMenuItem onClick={() => onViewRecord(record)}>
+                            <EyeIcon className="mr-2 h-4 w-4" />View Details
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                            <EyeIcon></EyeIcon>View
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                            <PencilIcon></PencilIcon>Update
+                        <DropdownMenuItem onClick={handleDownload}>
+                            <DownloadIcon className="mr-2 h-4 w-4" />Download CSV
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -249,6 +243,17 @@ export function WeavingDataTable() {
     const [pageCount, setPageCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
+
+    // View dialog state
+    const [selectedRecord, setSelectedRecord] = useState<TensionRecord | null>(null);
+    const [viewDialogOpen, setViewDialogOpen] = useState(false);
+
+    const handleViewRecord = (record: TensionRecord) => {
+        setSelectedRecord(record);
+        setViewDialogOpen(true);
+    };
+
+    const columns = React.useMemo(() => createColumns(handleViewRecord), []);
 
     const [pagination, setPagination] = useState({
         pageIndex: 0, // TanStack starts from 0
@@ -461,6 +466,15 @@ export function WeavingDataTable() {
                     </Button>
                 </div>
             </div>
+
+            {/* View Dialog */}
+            {selectedRecord && (
+                <TensionRecordViewDialog
+                    record={selectedRecord}
+                    open={viewDialogOpen}
+                    onOpenChange={setViewDialogOpen}
+                />
+            )}
         </div>
     );
 }
