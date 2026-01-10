@@ -50,14 +50,54 @@ Route::prefix('mobile')->group(function () {
         ]);
 
         Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
-            ->name('tension-records.download');
+            ->name('api.tension-records.download');
         
         Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
-            ->name('tension-records.statistics');
+            ->name('api.tension-records.statistics');
+
+        // Tension Problems endpoints
+        Route::get('tension-problems', [TensionRecordController::class, 'allProblems'])
+            ->name('api.tension-problems.index');
+        
+        Route::get('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'problems'])
+            ->name('api.tension-records.problems');
+        
+        Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
+            ->name('api.tension-records.problems.store');
+        
+        Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
+            ->name('api.tension-problems.resolve');
+
+        // Tension Measurements endpoints
+        Route::get('tension-records/{tensionRecord}/measurements', [TensionRecordController::class, 'measurements'])
+            ->name('api.tension-records.measurements');
+        
+        Route::get('tension-records/{tensionRecord}/measurements/grouped', [TensionRecordController::class, 'measurementsGrouped'])
+            ->name('api.tension-records.measurements.grouped');
+        
+        Route::get('tension-records/{tensionRecord}/measurements/out-of-spec', [TensionRecordController::class, 'outOfSpecMeasurements'])
+            ->name('api.tension-records.measurements.out-of-spec');
+
+        // Twisting measurement update
+        Route::patch('tension-records/{tensionRecord}/twisting-measurements/{spindleNumber}', [TensionRecordController::class, 'updateTwistingMeasurement'])
+            ->name('api.tension-records.twisting-measurements.update')
+            ->where('spindleNumber', '[0-9]+');
+
+        // Weaving measurement update
+        Route::patch('tension-records/{tensionRecord}/weaving-measurements/{side}/{row}/{column}', [TensionRecordController::class, 'updateWeavingMeasurement'])
+            ->name('api.tension-records.weaving-measurements.update')
+            ->where('column', '[0-9]+');
+
+        // Weaving statistics endpoints
+        Route::get('tension-records/{tensionRecord}/weaving-stats/by-side', [TensionRecordController::class, 'weavingStatsBySide'])
+            ->name('api.tension-records.weaving-stats.by-side');
+        
+        Route::get('tension-records/{tensionRecord}/weaving-stats/by-row', [TensionRecordController::class, 'weavingStatsByRow'])
+            ->name('api.tension-records.weaving-stats.by-row');
 
         Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
             ->whereIn('type', ['twisting', 'weaving'])
-            ->name('tension-records.by-type');
+            ->name('api.tension-records.by-type');
 
         // Stock taking features endpoints
         Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
