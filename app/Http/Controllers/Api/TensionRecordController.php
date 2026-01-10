@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\TensionProblem;
 use App\Models\TensionRecord;
+use App\Models\TwistingMeasurement;
+use App\Models\WeavingMeasurement;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -188,6 +190,12 @@ class TensionRecordController extends Controller
 
             // Create the record
             $record = TensionRecord::create($recordData);
+
+            // Create measurement records from the measurement_data array
+            $measurementData = $validated['measurement_data'] ?? [];
+            if (!empty($measurementData)) {
+                $this->createMeasurementsFromArray($record, $measurementData);
+            }
 
             // Create problem records from the problems array
             $problems = $validated['problems'] ?? [];
@@ -465,6 +473,238 @@ class TensionRecordController extends Controller
     }
 
     /**
+     * Get measurements for a specific record
+     */
+    public function measurements(TensionRecord $tensionRecord): JsonResponse
+    {
+        if ($tensionRecord->isTwisting()) {
+            $measurements = $tensionRecord->twistingMeasurements()
+                ->orderBy('spindle_number')
+                ->get();
+        } else {
+            $measurements = $tensionRecord->weavingMeasurements()
+                ->orderByPosition()
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $measurements,
+            'stats' => $tensionRecord->getMeasurementStats(),
+        ]);
+    }
+
+    /**
+     * Get measurements grouped by position for a specific record
+     */
+    public function measurementsGrouped(TensionRecord $tensionRecord): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => $tensionRecord->getMeasurementsGrouped(),
+            'stats' => $tensionRecord->getMeasurementStats(),
+            'tension_stats' => $tensionRecord->getTensionStatistics(),
+        ]);
+    }
+
+    /**
+     * Get out-of-spec measurements for a specific record
+     */
+    public function outOfSpecMeasurements(TensionRecord $tensionRecord): JsonResponse
+    {
+        if ($tensionRecord->isTwisting()) {
+            $measurements = $tensionRecord->twistingMeasurements()
+                ->outOfSpec()
+                ->orderBy('spindle_number')
+                ->get();
+        } else {
+            $measurements = $tensionRecord->weavingMeasurements()
+                ->outOfSpec()
+                ->orderByPosition()
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $measurements,
+            'count' => $measurements->count(),
+        ]);
+    }
+
+    /**
+     * Update a single twisting measurement
+     */
+    public function updateTwistingMeasurement(
+        Request $request,
+        TensionRecord $tensionRecord,
+        int $spindleNumber
+    ): JsonResponse {
+        if (!$tensionRecord->isTwisting()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a twisting record',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'max_value' => 'nullable|numeric|min:0',
+            'min_value' => 'nullable|numeric|min:0',
+        ]);
+
+        $measurement = $tensionRecord->twistingMeasurements()
+            ->firstOrCreate(
+                ['spindle_number' => $spindleNumber],
+                ['tension_record_id' => $tensionRecord->id]
+            );
+
+        // Update values
+        if (array_key_exists('max_value', $validated)) {
+            $measurement->max_value = $validated['max_value'];
+        }
+        if (array_key_exists('min_value', $validated)) {
+            $measurement->min_value = $validated['min_value'];
+        }
+
+        // Update completion status
+        $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
+        $measurement->measured_at = now();
+
+        // Check if out of spec
+        if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
+            $tolerance = $tensionRecord->tension_tolerance ?? 0;
+            $avgValue = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->is_out_of_spec = $avgValue < ($tensionRecord->spec_tension - $tolerance)
+                || $avgValue > ($tensionRecord->spec_tension + $tolerance);
+        }
+
+        $measurement->save();
+
+        // Update record progress
+        $tensionRecord->recalculateProgress();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Measurement updated successfully',
+            'data' => $measurement,
+        ]);
+    }
+
+    /**
+     * Update a single weaving measurement
+     */
+    public function updateWeavingMeasurement(
+        Request $request,
+        TensionRecord $tensionRecord,
+        string $side,
+        string $row,
+        int $column
+    ): JsonResponse {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'max_value' => 'nullable|numeric|min:0',
+            'min_value' => 'nullable|numeric|min:0',
+        ]);
+
+        // Validate position
+        if (!in_array($side, array_keys(WeavingMeasurement::getCreelSides()))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid creel side',
+            ], 400);
+        }
+
+        if (!in_array($row, array_keys(WeavingMeasurement::getRows()))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid row number',
+            ], 400);
+        }
+
+        $measurement = $tensionRecord->weavingMeasurements()
+            ->firstOrCreate(
+                [
+                    'creel_side' => $side,
+                    'row_number' => $row,
+                    'column_number' => $column,
+                ],
+                ['tension_record_id' => $tensionRecord->id]
+            );
+
+        // Update values
+        if (array_key_exists('max_value', $validated)) {
+            $measurement->max_value = $validated['max_value'];
+        }
+        if (array_key_exists('min_value', $validated)) {
+            $measurement->min_value = $validated['min_value'];
+        }
+
+        // Update completion status
+        $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
+        $measurement->measured_at = now();
+
+        // Check if out of spec
+        if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
+            $tolerance = $tensionRecord->tension_tolerance ?? 0;
+            $avgValue = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->is_out_of_spec = $avgValue < ($tensionRecord->spec_tension - $tolerance)
+                || $avgValue > ($tensionRecord->spec_tension + $tolerance);
+        }
+
+        $measurement->save();
+
+        // Update record progress
+        $tensionRecord->recalculateProgress();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Measurement updated successfully',
+            'data' => $measurement,
+        ]);
+    }
+
+    /**
+     * Get weaving measurements statistics by side
+     */
+    public function weavingStatsBySide(TensionRecord $tensionRecord): JsonResponse
+    {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => WeavingMeasurement::getStatsBySide($tensionRecord->id),
+        ]);
+    }
+
+    /**
+     * Get weaving measurements statistics by row
+     */
+    public function weavingStatsByRow(TensionRecord $tensionRecord): JsonResponse
+    {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => WeavingMeasurement::getStatsByRow($tensionRecord->id),
+        ]);
+    }
+
+    /**
      * Create problems from legacy array format
      */
     private function createProblemsFromArray(TensionRecord $record, array $problems): void
@@ -484,6 +724,141 @@ class TensionRecordController extends Controller
                     ? \Carbon\Carbon::parse($problem['timestamp'])
                     : now(),
             ]);
+        }
+    }
+
+    /**
+     * Create measurements from legacy array format
+     */
+    private function createMeasurementsFromArray(TensionRecord $record, array $measurementData): void
+    {
+        $specTension = $record->spec_tension;
+        $tolerance = $record->tension_tolerance ?? 0;
+
+        if ($record->isTwisting()) {
+            $this->createTwistingMeasurements($record, $measurementData, $specTension, $tolerance);
+        } else {
+            $this->createWeavingMeasurements($record, $measurementData, $specTension, $tolerance);
+        }
+    }
+
+    /**
+     * Create twisting measurements from array
+     */
+    private function createTwistingMeasurements(
+        TensionRecord $record,
+        array $measurementData,
+        ?float $specTension,
+        float $tolerance
+    ): void {
+        $measurements = [];
+        $now = now();
+
+        foreach ($measurementData as $spindleNumber => $data) {
+            if (!is_numeric($spindleNumber) || !is_array($data)) {
+                continue;
+            }
+
+            $maxValue = $data['max'] ?? null;
+            $minValue = $data['min'] ?? null;
+            $isComplete = $maxValue !== null && $minValue !== null;
+
+            // Check if out of spec
+            $isOutOfSpec = false;
+            if ($isComplete && $specTension !== null) {
+                $avgValue = ($maxValue + $minValue) / 2;
+                $isOutOfSpec = $avgValue < ($specTension - $tolerance)
+                    || $avgValue > ($specTension + $tolerance);
+            }
+
+            $measurements[] = [
+                'tension_record_id' => $record->id,
+                'spindle_number' => (int) $spindleNumber,
+                'max_value' => $maxValue,
+                'min_value' => $minValue,
+                'is_complete' => $isComplete,
+                'is_out_of_spec' => $isOutOfSpec,
+                'measured_at' => $isComplete ? $now : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if (!empty($measurements)) {
+            TwistingMeasurement::insert($measurements);
+        }
+    }
+
+    /**
+     * Create weaving measurements from array
+     */
+    private function createWeavingMeasurements(
+        TensionRecord $record,
+        array $measurementData,
+        ?float $specTension,
+        float $tolerance
+    ): void {
+        $measurements = [];
+        $now = now();
+        $validSides = array_keys(WeavingMeasurement::getCreelSides());
+
+        foreach ($measurementData as $side => $rows) {
+            if (!in_array($side, $validSides) || !is_array($rows)) {
+                continue;
+            }
+
+            foreach ($rows as $row => $columns) {
+                if (!is_array($columns)) {
+                    continue;
+                }
+
+                // Normalize row format
+                $rowNumber = $row;
+                if (!preg_match('/^R[1-5]$/', $rowNumber)) {
+                    if (is_numeric($row) && $row >= 1 && $row <= 5) {
+                        $rowNumber = 'R' . $row;
+                    } else {
+                        continue;
+                    }
+                }
+
+                foreach ($columns as $column => $data) {
+                    if (!is_numeric($column) || !is_array($data)) {
+                        continue;
+                    }
+
+                    $maxValue = $data['max'] ?? null;
+                    $minValue = $data['min'] ?? null;
+                    $isComplete = $maxValue !== null && $minValue !== null;
+
+                    // Check if out of spec
+                    $isOutOfSpec = false;
+                    if ($isComplete && $specTension !== null) {
+                        $avgValue = ($maxValue + $minValue) / 2;
+                        $isOutOfSpec = $avgValue < ($specTension - $tolerance)
+                            || $avgValue > ($specTension + $tolerance);
+                    }
+
+                    $measurements[] = [
+                        'tension_record_id' => $record->id,
+                        'creel_side' => $side,
+                        'row_number' => $rowNumber,
+                        'column_number' => (int) $column,
+                        'max_value' => $maxValue,
+                        'min_value' => $minValue,
+                        'is_complete' => $isComplete,
+                        'is_out_of_spec' => $isOutOfSpec,
+                        'measured_at' => $isComplete ? $now : null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+            }
+        }
+
+        // Insert in chunks to avoid memory issues
+        foreach (array_chunk($measurements, 500) as $chunk) {
+            WeavingMeasurement::insert($chunk);
         }
     }
 

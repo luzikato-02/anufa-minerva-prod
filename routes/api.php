@@ -68,6 +68,33 @@ Route::prefix('mobile')->group(function () {
         Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
             ->name('api.tension-problems.resolve');
 
+        // Tension Measurements endpoints
+        Route::get('tension-records/{tensionRecord}/measurements', [TensionRecordController::class, 'measurements'])
+            ->name('api.tension-records.measurements');
+        
+        Route::get('tension-records/{tensionRecord}/measurements/grouped', [TensionRecordController::class, 'measurementsGrouped'])
+            ->name('api.tension-records.measurements.grouped');
+        
+        Route::get('tension-records/{tensionRecord}/measurements/out-of-spec', [TensionRecordController::class, 'outOfSpecMeasurements'])
+            ->name('api.tension-records.measurements.out-of-spec');
+
+        // Twisting measurement update
+        Route::patch('tension-records/{tensionRecord}/twisting-measurements/{spindleNumber}', [TensionRecordController::class, 'updateTwistingMeasurement'])
+            ->name('api.tension-records.twisting-measurements.update')
+            ->where('spindleNumber', '[0-9]+');
+
+        // Weaving measurement update
+        Route::patch('tension-records/{tensionRecord}/weaving-measurements/{side}/{row}/{column}', [TensionRecordController::class, 'updateWeavingMeasurement'])
+            ->name('api.tension-records.weaving-measurements.update')
+            ->where('column', '[0-9]+');
+
+        // Weaving statistics endpoints
+        Route::get('tension-records/{tensionRecord}/weaving-stats/by-side', [TensionRecordController::class, 'weavingStatsBySide'])
+            ->name('api.tension-records.weaving-stats.by-side');
+        
+        Route::get('tension-records/{tensionRecord}/weaving-stats/by-row', [TensionRecordController::class, 'weavingStatsByRow'])
+            ->name('api.tension-records.weaving-stats.by-row');
+
         Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
             ->whereIn('type', ['twisting', 'weaving'])
             ->name('api.tension-records.by-type');

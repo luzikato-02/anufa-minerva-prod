@@ -161,6 +161,53 @@ class TensionRecord extends Model
         return $this->tensionProblems()->critical();
     }
 
+    /**
+     * Get twisting measurements for this record.
+     * Only applicable for twisting records.
+     */
+    public function twistingMeasurements(): HasMany
+    {
+        return $this->hasMany(TwistingMeasurement::class);
+    }
+
+    /**
+     * Get weaving measurements for this record.
+     * Only applicable for weaving records.
+     */
+    public function weavingMeasurements(): HasMany
+    {
+        return $this->hasMany(WeavingMeasurement::class);
+    }
+
+    /**
+     * Get measurements for this record (polymorphic based on type).
+     * Returns the appropriate relationship based on record_type.
+     */
+    public function measurements(): HasMany
+    {
+        if ($this->isTwisting()) {
+            return $this->twistingMeasurements();
+        }
+
+        return $this->weavingMeasurements();
+    }
+
+    /**
+     * Get completed measurements for this record.
+     */
+    public function completedMeasurements(): HasMany
+    {
+        return $this->measurements()->complete();
+    }
+
+    /**
+     * Get out-of-spec measurements for this record.
+     */
+    public function outOfSpecMeasurements(): HasMany
+    {
+        return $this->measurements()->outOfSpec();
+    }
+
     // =========================================================================
     // SCOPES
     // =========================================================================
@@ -437,6 +484,161 @@ class TensionRecord extends Model
             'problems_count' => $this->problems_count,
             'unresolved_problems' => $this->unresolved_problems_count,
             'created_at' => $this->created_at->toIso8601String(),
+        ];
+    }
+
+    // =========================================================================
+    // MEASUREMENT HELPER METHODS
+    // =========================================================================
+
+    /**
+     * Initialize measurement records for this tension record.
+     * Creates empty measurement slots based on record type.
+     */
+    public function initializeMeasurements(): void
+    {
+        if ($this->isTwisting()) {
+            TwistingMeasurement::initializeForRecord($this->id);
+        } else {
+            WeavingMeasurement::initializeForRecord($this->id);
+        }
+    }
+
+    /**
+     * Get measurement statistics for this record.
+     */
+    public function getMeasurementStats(): array
+    {
+        $measurements = $this->measurements();
+
+        return [
+            'total' => $measurements->count(),
+            'completed' => $measurements->complete()->count(),
+            'incomplete' => $measurements->incomplete()->count(),
+            'in_spec' => $measurements->inSpec()->complete()->count(),
+            'out_of_spec' => $measurements->outOfSpec()->count(),
+        ];
+    }
+
+    /**
+     * Recalculate and update progress based on actual measurements.
+     */
+    public function recalculateProgress(): self
+    {
+        $stats = $this->getMeasurementStats();
+
+        return $this->updateProgress($stats['completed'], $stats['total']);
+    }
+
+    /**
+     * Update out-of-spec status for all measurements based on current spec.
+     */
+    public function updateMeasurementSpecStatus(): void
+    {
+        if ($this->spec_tension === null) {
+            return;
+        }
+
+        $tolerance = $this->tension_tolerance ?? 0;
+        $minSpec = $this->spec_tension - $tolerance;
+        $maxSpec = $this->spec_tension + $tolerance;
+
+        // Update twisting measurements
+        if ($this->isTwisting()) {
+            $this->twistingMeasurements()
+                ->where('is_complete', true)
+                ->update([
+                    'is_out_of_spec' => \DB::raw(
+                        "CASE WHEN (max_value + min_value) / 2 < {$minSpec} OR (max_value + min_value) / 2 > {$maxSpec} THEN 1 ELSE 0 END"
+                    ),
+                ]);
+        } else {
+            $this->weavingMeasurements()
+                ->where('is_complete', true)
+                ->update([
+                    'is_out_of_spec' => \DB::raw(
+                        "CASE WHEN (max_value + min_value) / 2 < {$minSpec} OR (max_value + min_value) / 2 > {$maxSpec} THEN 1 ELSE 0 END"
+                    ),
+                ]);
+        }
+    }
+
+    /**
+     * Get measurements grouped by position for display.
+     * For twisting: grouped by spindle ranges
+     * For weaving: grouped by side and row
+     */
+    public function getMeasurementsGrouped(): array
+    {
+        if ($this->isTwisting()) {
+            return $this->getTwistingMeasurementsGrouped();
+        }
+
+        return $this->getWeavingMeasurementsGrouped();
+    }
+
+    /**
+     * Get twisting measurements grouped by spindle ranges.
+     */
+    private function getTwistingMeasurementsGrouped(): array
+    {
+        $measurements = $this->twistingMeasurements()
+            ->orderBy('spindle_number')
+            ->get();
+
+        return [
+            'spindles_1_21' => $measurements->whereBetween('spindle_number', [1, 21])->values(),
+            'spindles_22_42' => $measurements->whereBetween('spindle_number', [22, 42])->values(),
+            'spindles_43_63' => $measurements->whereBetween('spindle_number', [43, 63])->values(),
+            'spindles_64_84' => $measurements->whereBetween('spindle_number', [64, 84])->values(),
+        ];
+    }
+
+    /**
+     * Get weaving measurements grouped by side and row.
+     */
+    private function getWeavingMeasurementsGrouped(): array
+    {
+        $measurements = $this->weavingMeasurements()
+            ->orderByPosition()
+            ->get();
+
+        $grouped = [];
+        foreach (WeavingMeasurement::getCreelSides() as $sideCode => $sideName) {
+            $grouped[$sideCode] = [];
+            foreach (WeavingMeasurement::getRows() as $rowCode => $rowName) {
+                $grouped[$sideCode][$rowCode] = $measurements
+                    ->where('creel_side', $sideCode)
+                    ->where('row_number', $rowCode)
+                    ->values();
+            }
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Get average tension value across all completed measurements.
+     */
+    public function getAverageTension(): ?float
+    {
+        return $this->measurements()
+            ->complete()
+            ->avg('avg_value');
+    }
+
+    /**
+     * Get tension statistics (min, max, avg, std dev).
+     */
+    public function getTensionStatistics(): array
+    {
+        $query = $this->measurements()->complete();
+
+        return [
+            'min' => $query->min('avg_value'),
+            'max' => $query->max('avg_value'),
+            'avg' => $query->avg('avg_value'),
+            'count' => $query->count(),
         ];
     }
 }
