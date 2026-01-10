@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\CheckAdminRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,11 +29,18 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // API middleware stack
         $middleware->api(append: [
-        'throttle:api',
-        SubstituteBindings::class,
-        EnsureFrontendRequestsAreStateful::class,
-        
-]);
+            'throttle:api',
+            SubstituteBindings::class,
+            EnsureFrontendRequestsAreStateful::class,
+        ]);
+
+        // Middleware aliases
+        $middleware->alias([
+            'admin' => CheckAdminRole::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        ]);
     })
     
     ->withExceptions(function (Exceptions $exceptions) {
