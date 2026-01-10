@@ -28,12 +28,6 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: HomeIcon,
     },
-
-    {
-        title: 'User Maintenance Table',
-        href: userMaintenance(),
-        icon: UserCheck,
-    },
 ];
 
 const adminNavItems: NavItem[] = [

@@ -66,11 +66,15 @@ interface UsersManagementProps {
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Admin',
-        href: '/admin',
+        title: 'Dasboard',
+        href: '/dasboard',
     },
     {
-        title: 'Users',
+        title: 'User Maintenance Table',
+        href: '/dasboard',
+    },
+    {
+        title: 'Users Management',
         href: '/admin/users',
     },
 ];

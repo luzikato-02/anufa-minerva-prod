@@ -58,10 +58,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('weaving-tension-main');
     })->name('weaving-tension-main');
 
-    Route::get('user-maintenance', function () {
-        return Inertia::render('user-maintenance-main');
-    })->name('user-maintenance');
-
     Route::get('finish-earlier-display', function () {
         return Inertia::render('finish-earlier-records-display');
     })->name('finish-earlier-display');
