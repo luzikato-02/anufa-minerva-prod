@@ -57,11 +57,15 @@ interface RolesManagementProps {
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Admin',
-        href: '/admin',
+        title: 'Dasboard',
+        href: '/dasboard',
     },
     {
-        title: 'Roles',
+        title: 'User Maintenance Table',
+        href: '/dasboard',
+    },
+    {
+        title: 'Roles Management',
         href: '/admin/roles',
     },
 ];

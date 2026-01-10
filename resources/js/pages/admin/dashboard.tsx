@@ -6,11 +6,11 @@ import { Users, Shield, Key, Settings } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Admin',
-        href: '/admin',
+        title: 'Dashboard',
+        href: '/dasboard',
     },
     {
-        title: 'Dashboard',
+        title: 'User Maintenance Table',
         href: '/admin',
     },
 ];

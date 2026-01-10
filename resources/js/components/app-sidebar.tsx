@@ -13,10 +13,10 @@ import {
     SidebarGroupLabel,
     SidebarGroupContent,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
+import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon, Shield, Users, Key, Settings } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, Shield, Users, Key, Settings } from 'lucide-react';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
@@ -27,12 +27,6 @@ const mainNavItems: NavItem[] = [
         title: 'Home',
         href: dashboard(),
         icon: HomeIcon,
-    },
-
-    {
-        title: 'User Maintenance Table',
-        href: userMaintenance(),
-        icon: UserCheck,
     },
 ];
 

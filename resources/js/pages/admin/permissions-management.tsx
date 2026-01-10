@@ -55,11 +55,15 @@ interface PermissionsManagementProps {
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Admin',
+        title: 'Dashboard',
+        href: '/dashboard',
+    },
+    {
+        title: 'User Maintenance Table',
         href: '/admin',
     },
     {
-        title: 'Permissions',
+        title: 'Role Permissions Management',
         href: '/admin/permissions',
     },
 ];

@@ -58,10 +58,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('weaving-tension-main');
     })->name('weaving-tension-main');
 
-    Route::get('user-maintenance', function () {
-        return Inertia::render('user-maintenance-main');
-    })->name('user-maintenance');
-
     Route::get('finish-earlier-display', function () {
         return Inertia::render('finish-earlier-records-display');
     })->name('finish-earlier-display');
@@ -80,7 +76,47 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
         ->name('tension-records.statistics');
 
-     // ✅ Filtered endpoints (now conflict-free)
+    // Tension Problems endpoints
+    Route::get('tension-problems', [TensionRecordController::class, 'allProblems'])
+        ->name('tension-problems.index');
+    
+    Route::get('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'problems'])
+        ->name('tension-records.problems');
+    
+    Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
+        ->name('tension-records.problems.store');
+    
+    Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
+        ->name('tension-problems.resolve');
+
+    // Tension Measurements endpoints
+    Route::get('tension-records/{tensionRecord}/measurements', [TensionRecordController::class, 'measurements'])
+        ->name('tension-records.measurements');
+    
+    Route::get('tension-records/{tensionRecord}/measurements/grouped', [TensionRecordController::class, 'measurementsGrouped'])
+        ->name('tension-records.measurements.grouped');
+    
+    Route::get('tension-records/{tensionRecord}/measurements/out-of-spec', [TensionRecordController::class, 'outOfSpecMeasurements'])
+        ->name('tension-records.measurements.out-of-spec');
+
+    // Twisting measurement update
+    Route::patch('tension-records/{tensionRecord}/twisting-measurements/{spindleNumber}', [TensionRecordController::class, 'updateTwistingMeasurement'])
+        ->name('tension-records.twisting-measurements.update')
+        ->where('spindleNumber', '[0-9]+');
+
+    // Weaving measurement update
+    Route::patch('tension-records/{tensionRecord}/weaving-measurements/{side}/{row}/{column}', [TensionRecordController::class, 'updateWeavingMeasurement'])
+        ->name('tension-records.weaving-measurements.update')
+        ->where('column', '[0-9]+');
+
+    // Weaving statistics endpoints
+    Route::get('tension-records/{tensionRecord}/weaving-stats/by-side', [TensionRecordController::class, 'weavingStatsBySide'])
+        ->name('tension-records.weaving-stats.by-side');
+    
+    Route::get('tension-records/{tensionRecord}/weaving-stats/by-row', [TensionRecordController::class, 'weavingStatsByRow'])
+        ->name('tension-records.weaving-stats.by-row');
+
+    // Filtered endpoints by type
     Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
         ->whereIn('type', ['twisting', 'weaving'])
         ->name('tension-records.by-type');
