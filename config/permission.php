@@ -38,6 +38,7 @@ return [
     'cache' => [
         'expiration_time' => \DateInterval::createFromDateString('24 hours'),
         'key' => 'spatie.permission.cache',
-        'store' => 'default',
+        // Use file cache to avoid database dependency during seeding
+        'store' => env('PERMISSION_CACHE_STORE', 'file'),
     ],
 ];
