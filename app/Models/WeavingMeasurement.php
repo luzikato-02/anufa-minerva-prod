@@ -364,12 +364,40 @@ class WeavingMeasurement extends Model
             $this->min_value = $value;
         }
 
-        // Update completion status
-        $this->is_complete = $this->max_value !== null && $this->min_value !== null;
+        // Update completion status and calculated fields
+        $this->updateCalculatedFields();
         $this->measured_at = now();
         $this->save();
 
         return $this;
+    }
+
+    /**
+     * Update calculated fields (avg_value, range_value, is_complete)
+     */
+    public function updateCalculatedFields(): self
+    {
+        $this->is_complete = $this->max_value !== null && $this->min_value !== null;
+
+        if ($this->is_complete) {
+            $this->avg_value = ($this->max_value + $this->min_value) / 2;
+            $this->range_value = $this->max_value - $this->min_value;
+        } else {
+            $this->avg_value = null;
+            $this->range_value = null;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Boot method to automatically update calculated fields on save
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (WeavingMeasurement $measurement) {
+            $measurement->updateCalculatedFields();
+        });
     }
 
     /**
@@ -433,16 +461,23 @@ class WeavingMeasurement extends Model
      */
     public static function getStatsBySide(int $tensionRecordId): array
     {
-        return self::where('tension_record_id', $tensionRecordId)
-            ->selectRaw('creel_side')
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw('SUM(is_complete) as completed')
-            ->selectRaw('SUM(is_out_of_spec) as out_of_spec')
-            ->selectRaw('AVG(CASE WHEN is_complete THEN avg_value ELSE NULL END) as avg_tension')
-            ->groupBy('creel_side')
-            ->get()
-            ->keyBy('creel_side')
-            ->toArray();
+        $measurements = self::where('tension_record_id', $tensionRecordId)->get();
+
+        $stats = [];
+        foreach (self::getCreelSides() as $side => $name) {
+            $sideMeasurements = $measurements->where('creel_side', $side);
+            $completedMeasurements = $sideMeasurements->where('is_complete', true);
+
+            $stats[$side] = [
+                'creel_side' => $side,
+                'total' => $sideMeasurements->count(),
+                'completed' => $completedMeasurements->count(),
+                'out_of_spec' => $sideMeasurements->where('is_out_of_spec', true)->count(),
+                'avg_tension' => $completedMeasurements->avg('avg_value'),
+            ];
+        }
+
+        return $stats;
     }
 
     /**
@@ -450,15 +485,22 @@ class WeavingMeasurement extends Model
      */
     public static function getStatsByRow(int $tensionRecordId): array
     {
-        return self::where('tension_record_id', $tensionRecordId)
-            ->selectRaw('row_number')
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw('SUM(is_complete) as completed')
-            ->selectRaw('SUM(is_out_of_spec) as out_of_spec')
-            ->selectRaw('AVG(CASE WHEN is_complete THEN avg_value ELSE NULL END) as avg_tension')
-            ->groupBy('row_number')
-            ->get()
-            ->keyBy('row_number')
-            ->toArray();
+        $measurements = self::where('tension_record_id', $tensionRecordId)->get();
+
+        $stats = [];
+        foreach (self::getRows() as $row => $name) {
+            $rowMeasurements = $measurements->where('row_number', $row);
+            $completedMeasurements = $rowMeasurements->where('is_complete', true);
+
+            $stats[$row] = [
+                'row_number' => $row,
+                'total' => $rowMeasurements->count(),
+                'completed' => $completedMeasurements->count(),
+                'out_of_spec' => $rowMeasurements->where('is_out_of_spec', true)->count(),
+                'avg_tension' => $completedMeasurements->avg('avg_value'),
+            ];
+        }
+
+        return $stats;
     }
 }

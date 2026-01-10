@@ -565,16 +565,24 @@ class TensionRecordController extends Controller
             $measurement->min_value = $validated['min_value'];
         }
 
-        // Update completion status
+        // Update completion status and calculated fields
         $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
         $measurement->measured_at = now();
+
+        // Calculate avg and range
+        if ($measurement->is_complete) {
+            $measurement->avg_value = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->range_value = $measurement->max_value - $measurement->min_value;
+        } else {
+            $measurement->avg_value = null;
+            $measurement->range_value = null;
+        }
 
         // Check if out of spec
         if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
             $tolerance = $tensionRecord->tension_tolerance ?? 0;
-            $avgValue = ($measurement->max_value + $measurement->min_value) / 2;
-            $measurement->is_out_of_spec = $avgValue < ($tensionRecord->spec_tension - $tolerance)
-                || $avgValue > ($tensionRecord->spec_tension + $tolerance);
+            $measurement->is_out_of_spec = $measurement->avg_value < ($tensionRecord->spec_tension - $tolerance)
+                || $measurement->avg_value > ($tensionRecord->spec_tension + $tolerance);
         }
 
         $measurement->save();
@@ -644,16 +652,24 @@ class TensionRecordController extends Controller
             $measurement->min_value = $validated['min_value'];
         }
 
-        // Update completion status
+        // Update completion status and calculated fields
         $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
         $measurement->measured_at = now();
+
+        // Calculate avg and range
+        if ($measurement->is_complete) {
+            $measurement->avg_value = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->range_value = $measurement->max_value - $measurement->min_value;
+        } else {
+            $measurement->avg_value = null;
+            $measurement->range_value = null;
+        }
 
         // Check if out of spec
         if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
             $tolerance = $tensionRecord->tension_tolerance ?? 0;
-            $avgValue = ($measurement->max_value + $measurement->min_value) / 2;
-            $measurement->is_out_of_spec = $avgValue < ($tensionRecord->spec_tension - $tolerance)
-                || $avgValue > ($tensionRecord->spec_tension + $tolerance);
+            $measurement->is_out_of_spec = $measurement->avg_value < ($tensionRecord->spec_tension - $tolerance)
+                || $measurement->avg_value > ($tensionRecord->spec_tension + $tolerance);
         }
 
         $measurement->save();
@@ -763,10 +779,17 @@ class TensionRecordController extends Controller
             $minValue = $data['min'] ?? null;
             $isComplete = $maxValue !== null && $minValue !== null;
 
+            // Calculate avg and range
+            $avgValue = null;
+            $rangeValue = null;
+            if ($isComplete) {
+                $avgValue = ($maxValue + $minValue) / 2;
+                $rangeValue = $maxValue - $minValue;
+            }
+
             // Check if out of spec
             $isOutOfSpec = false;
             if ($isComplete && $specTension !== null) {
-                $avgValue = ($maxValue + $minValue) / 2;
                 $isOutOfSpec = $avgValue < ($specTension - $tolerance)
                     || $avgValue > ($specTension + $tolerance);
             }
@@ -776,6 +799,8 @@ class TensionRecordController extends Controller
                 'spindle_number' => (int) $spindleNumber,
                 'max_value' => $maxValue,
                 'min_value' => $minValue,
+                'avg_value' => $avgValue,
+                'range_value' => $rangeValue,
                 'is_complete' => $isComplete,
                 'is_out_of_spec' => $isOutOfSpec,
                 'measured_at' => $isComplete ? $now : null,
@@ -831,10 +856,17 @@ class TensionRecordController extends Controller
                     $minValue = $data['min'] ?? null;
                     $isComplete = $maxValue !== null && $minValue !== null;
 
+                    // Calculate avg and range
+                    $avgValue = null;
+                    $rangeValue = null;
+                    if ($isComplete) {
+                        $avgValue = ($maxValue + $minValue) / 2;
+                        $rangeValue = $maxValue - $minValue;
+                    }
+
                     // Check if out of spec
                     $isOutOfSpec = false;
                     if ($isComplete && $specTension !== null) {
-                        $avgValue = ($maxValue + $minValue) / 2;
                         $isOutOfSpec = $avgValue < ($specTension - $tolerance)
                             || $avgValue > ($specTension + $tolerance);
                     }
@@ -846,6 +878,8 @@ class TensionRecordController extends Controller
                         'column_number' => (int) $column,
                         'max_value' => $maxValue,
                         'min_value' => $minValue,
+                        'avg_value' => $avgValue,
+                        'range_value' => $rangeValue,
                         'is_complete' => $isComplete,
                         'is_out_of_spec' => $isOutOfSpec,
                         'measured_at' => $isComplete ? $now : null,

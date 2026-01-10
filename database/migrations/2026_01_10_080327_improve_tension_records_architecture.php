@@ -19,96 +19,130 @@ return new class extends Migration
     public function up(): void
     {
         // Step 1: Add normalized columns to tension_records table
-        Schema::table('tension_records', function (Blueprint $table) {
+        // Check each column before adding to handle partial migrations
+        $columns = Schema::getColumnListing('tension_records');
+
+        Schema::table('tension_records', function (Blueprint $table) use ($columns) {
             // Common fields for both twisting and weaving
-            $table->string('operator', 100)->nullable()->after('record_type');
-            $table->string('machine_number', 50)->nullable()->after('operator');
-            $table->string('item_number', 100)->nullable()->after('machine_number');
-            $table->string('item_description', 255)->nullable()->after('item_number');
-            $table->decimal('meters_check', 10, 2)->nullable()->after('item_description');
+            if (!in_array('operator', $columns)) {
+                $table->string('operator', 100)->nullable();
+            }
+            if (!in_array('machine_number', $columns)) {
+                $table->string('machine_number', 50)->nullable();
+            }
+            if (!in_array('item_number', $columns)) {
+                $table->string('item_number', 100)->nullable();
+            }
+            if (!in_array('item_description', $columns)) {
+                $table->string('item_description', 255)->nullable();
+            }
+            if (!in_array('meters_check', $columns)) {
+                $table->decimal('meters_check', 10, 2)->nullable();
+            }
 
             // Tension specification fields
-            $table->decimal('spec_tension', 8, 2)->nullable()->after('meters_check');
-            $table->decimal('tension_tolerance', 8, 2)->nullable()->after('spec_tension');
+            if (!in_array('spec_tension', $columns)) {
+                $table->decimal('spec_tension', 8, 2)->nullable();
+            }
+            if (!in_array('tension_tolerance', $columns)) {
+                $table->decimal('tension_tolerance', 8, 2)->nullable();
+            }
 
             // Twisting-specific fields
-            $table->string('dtex_number', 50)->nullable()->after('tension_tolerance');
-            $table->integer('tpm')->unsigned()->nullable()->after('dtex_number');
-            $table->integer('rpm')->unsigned()->nullable()->after('tpm');
-            $table->string('yarn_code', 100)->nullable()->after('rpm');
+            if (!in_array('dtex_number', $columns)) {
+                $table->string('dtex_number', 50)->nullable();
+            }
+            if (!in_array('tpm', $columns)) {
+                $table->unsignedInteger('tpm')->nullable();
+            }
+            if (!in_array('rpm', $columns)) {
+                $table->unsignedInteger('rpm')->nullable();
+            }
+            if (!in_array('yarn_code', $columns)) {
+                $table->string('yarn_code', 100)->nullable();
+            }
 
             // Weaving-specific fields
-            $table->string('production_order', 100)->nullable()->after('yarn_code');
-            $table->string('bale_number', 100)->nullable()->after('production_order');
-            $table->string('color_code', 50)->nullable()->after('bale_number');
+            if (!in_array('production_order', $columns)) {
+                $table->string('production_order', 100)->nullable();
+            }
+            if (!in_array('bale_number', $columns)) {
+                $table->string('bale_number', 100)->nullable();
+            }
+            if (!in_array('color_code', $columns)) {
+                $table->string('color_code', 50)->nullable();
+            }
 
             // Progress tracking fields
-            $table->integer('total_measurements')->unsigned()->default(0)->after('color_code');
-            $table->integer('completed_measurements')->unsigned()->default(0)->after('total_measurements');
-            $table->tinyInteger('progress_percentage')->unsigned()->default(0)->after('completed_measurements');
+            if (!in_array('total_measurements', $columns)) {
+                $table->unsignedInteger('total_measurements')->default(0);
+            }
+            if (!in_array('completed_measurements', $columns)) {
+                $table->unsignedInteger('completed_measurements')->default(0);
+            }
+            if (!in_array('progress_percentage', $columns)) {
+                $table->unsignedTinyInteger('progress_percentage')->default(0);
+            }
 
             // Recording session info
-            $table->timestamp('recording_started_at')->nullable()->after('progress_percentage');
-            $table->timestamp('recording_completed_at')->nullable()->after('recording_started_at');
+            if (!in_array('recording_started_at', $columns)) {
+                $table->timestamp('recording_started_at')->nullable();
+            }
+            if (!in_array('recording_completed_at', $columns)) {
+                $table->timestamp('recording_completed_at')->nullable();
+            }
 
-            // Add status field for record lifecycle
-            $table->enum('status', ['draft', 'in_progress', 'completed', 'archived'])->default('completed')->after('recording_completed_at');
-
-            // Improve existing indexes
-            $table->index(['record_type', 'created_at'], 'idx_type_created');
-            $table->index(['operator', 'created_at'], 'idx_operator_created');
-            $table->index(['machine_number', 'record_type'], 'idx_machine_type');
-            $table->index(['item_number'], 'idx_item_number');
-            $table->index(['status', 'created_at'], 'idx_status_created');
+            // Add status field for record lifecycle (using string for SQLite compatibility)
+            if (!in_array('status', $columns)) {
+                $table->string('status', 20)->default('completed');
+            }
         });
+
+        // Add indexes separately to handle if they already exist
+        $this->addIndexesSafely();
 
         // Step 2: Create tension_problems table for normalized problem storage
-        Schema::create('tension_problems', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tension_record_id')
-                ->constrained('tension_records')
-                ->onDelete('cascade');
+        if (!Schema::hasTable('tension_problems')) {
+            Schema::create('tension_problems', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tension_record_id')
+                    ->constrained('tension_records')
+                    ->onDelete('cascade');
 
-            // Problem identification
-            $table->string('position_identifier', 100)->comment('Spindle number for twisting, position code for weaving');
-            $table->enum('problem_type', [
-                'tension_high',
-                'tension_low',
-                'equipment_malfunction',
-                'yarn_break',
-                'quality_issue',
-                'other'
-            ])->default('other');
+                // Problem identification
+                $table->string('position_identifier', 100);
+                $table->string('problem_type', 30)->default('other');
 
-            // Problem details
-            $table->text('description');
-            $table->decimal('measured_value', 8, 2)->nullable();
-            $table->decimal('expected_min', 8, 2)->nullable();
-            $table->decimal('expected_max', 8, 2)->nullable();
+                // Problem details
+                $table->text('description');
+                $table->decimal('measured_value', 8, 2)->nullable();
+                $table->decimal('expected_min', 8, 2)->nullable();
+                $table->decimal('expected_max', 8, 2)->nullable();
 
-            // Problem status tracking
-            $table->enum('severity', ['low', 'medium', 'high', 'critical'])->default('medium');
-            $table->enum('resolution_status', ['open', 'acknowledged', 'in_progress', 'resolved', 'ignored'])->default('open');
-            $table->text('resolution_notes')->nullable();
-            $table->timestamp('resolved_at')->nullable();
-            $table->unsignedBigInteger('resolved_by')->nullable();
+                // Problem status tracking
+                $table->string('severity', 20)->default('medium');
+                $table->string('resolution_status', 20)->default('open');
+                $table->text('resolution_notes')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->unsignedBigInteger('resolved_by')->nullable();
 
-            // Timestamps
-            $table->timestamp('reported_at')->useCurrent();
-            $table->timestamps();
+                // Timestamps
+                $table->timestamp('reported_at')->useCurrent();
+                $table->timestamps();
 
-            // Indexes for efficient querying
-            $table->index(['tension_record_id', 'problem_type'], 'idx_record_type');
-            $table->index(['resolution_status', 'severity'], 'idx_status_severity');
-            $table->index(['reported_at'], 'idx_reported');
-            $table->index(['position_identifier'], 'idx_position');
+                // Indexes for efficient querying
+                $table->index(['tension_record_id', 'problem_type'], 'idx_record_problem_type');
+                $table->index(['resolution_status', 'severity'], 'idx_status_severity');
+                $table->index(['reported_at'], 'idx_reported');
+                $table->index(['position_identifier'], 'idx_position');
 
-            // Foreign key for resolver
-            $table->foreign('resolved_by')
-                ->references('id')
-                ->on('users')
-                ->nullOnDelete();
-        });
+                // Foreign key for resolver
+                $table->foreign('resolved_by')
+                    ->references('id')
+                    ->on('users')
+                    ->nullOnDelete();
+            });
+        }
 
         // Step 3: Migrate existing problems data from JSON to the new table
         $this->migrateProblemsData();
@@ -116,8 +150,32 @@ return new class extends Migration
         // Step 4: Migrate metadata to new columns
         $this->migrateMetadataToColumns();
 
-        // Step 5: Drop the old generated columns (they're now proper columns)
+        // Step 5: Drop the old generated columns if they exist (MySQL only)
         $this->dropGeneratedColumns();
+    }
+
+    /**
+     * Add indexes safely, skipping if they already exist
+     */
+    private function addIndexesSafely(): void
+    {
+        $indexes = [
+            'idx_type_created' => ['record_type', 'created_at'],
+            'idx_operator_created' => ['operator', 'created_at'],
+            'idx_machine_type' => ['machine_number', 'record_type'],
+            'idx_item_number' => ['item_number'],
+            'idx_status_created' => ['status', 'created_at'],
+        ];
+
+        foreach ($indexes as $indexName => $columns) {
+            try {
+                Schema::table('tension_records', function (Blueprint $table) use ($indexName, $columns) {
+                    $table->index($columns, $indexName);
+                });
+            } catch (\Exception $e) {
+                // Index already exists, skip
+            }
+        }
     }
 
     /**
@@ -125,15 +183,18 @@ return new class extends Migration
      */
     private function migrateProblemsData(): void
     {
+        // Get all records with problems - use PHP to filter instead of JSON_LENGTH
         $records = DB::table('tension_records')
             ->whereNotNull('problems')
-            ->whereRaw("JSON_LENGTH(problems) > 0")
+            ->where('problems', '!=', '[]')
+            ->where('problems', '!=', 'null')
+            ->where('problems', '!=', '')
             ->get(['id', 'record_type', 'problems']);
 
         foreach ($records as $record) {
             $problems = json_decode($record->problems, true);
 
-            if (!is_array($problems)) {
+            if (!is_array($problems) || empty($problems)) {
                 continue;
             }
 
@@ -160,70 +221,71 @@ return new class extends Migration
     }
 
     /**
-     * Migrate metadata JSON to proper columns
+     * Migrate metadata JSON to proper columns using PHP (database-agnostic)
      */
     private function migrateMetadataToColumns(): void
     {
-        // Migrate twisting records
-        DB::statement("
-            UPDATE tension_records
-            SET
-                operator = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator')),
-                machine_number = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number')),
-                item_number = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number')),
-                yarn_code = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.yarn_code')),
-                total_measurements = COALESCE(JSON_EXTRACT(metadata, '$.total_measurements'), 0),
-                completed_measurements = COALESCE(JSON_EXTRACT(metadata, '$.completed_measurements'), 0),
-                progress_percentage = COALESCE(JSON_EXTRACT(metadata, '$.progress_percentage'), 0)
-            WHERE record_type = 'twisting'
-        ");
+        // Process all records
+        $records = DB::table('tension_records')->get(['id', 'record_type', 'metadata', 'form_data']);
 
-        // Migrate form_data for twisting
-        DB::statement("
-            UPDATE tension_records
-            SET
-                meters_check = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.metersCheck')), ''),
-                dtex_number = JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.dtexNumber')),
-                tpm = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.tpm')), ''),
-                rpm = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.rpm')), ''),
-                spec_tension = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.specTens')), ''),
-                tension_tolerance = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.tensPlus')), '')
-            WHERE record_type = 'twisting'
-        ");
+        foreach ($records as $record) {
+            $metadata = json_decode($record->metadata, true) ?? [];
+            $formData = json_decode($record->form_data, true) ?? [];
 
-        // Migrate weaving records
-        DB::statement("
-            UPDATE tension_records
-            SET
-                operator = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator')),
-                machine_number = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number')),
-                item_number = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number')),
-                item_description = JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_description')),
-                total_measurements = COALESCE(JSON_EXTRACT(metadata, '$.total_measurements'), 0),
-                completed_measurements = COALESCE(JSON_EXTRACT(metadata, '$.completed_measurements'), 0),
-                progress_percentage = COALESCE(JSON_EXTRACT(metadata, '$.progress_percentage'), 0)
-            WHERE record_type = 'weaving'
-        ");
+            $updateData = [
+                // Common fields from metadata
+                'operator' => $metadata['operator'] ?? null,
+                'machine_number' => $metadata['machine_number'] ?? null,
+                'item_number' => $metadata['item_number'] ?? null,
+                'total_measurements' => $metadata['total_measurements'] ?? 0,
+                'completed_measurements' => $metadata['completed_measurements'] ?? 0,
+                'progress_percentage' => $metadata['progress_percentage'] ?? 0,
+            ];
 
-        // Migrate form_data for weaving
-        DB::statement("
-            UPDATE tension_records
-            SET
-                meters_check = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.metersCheck')), ''),
-                production_order = JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.productionOrder')),
-                bale_number = JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.baleNumber')),
-                color_code = JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.colorCode')),
-                spec_tension = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.specTens')), ''),
-                tension_tolerance = NULLIF(JSON_UNQUOTE(JSON_EXTRACT(form_data, '$.tensPlus')), '')
-            WHERE record_type = 'weaving'
-        ");
+            // Extract from form_data
+            $metersCheck = $formData['metersCheck'] ?? null;
+            $specTens = $formData['specTens'] ?? null;
+            $tensPlus = $formData['tensPlus'] ?? null;
+
+            $updateData['meters_check'] = is_numeric($metersCheck) ? (float) $metersCheck : null;
+            $updateData['spec_tension'] = is_numeric($specTens) ? (float) $specTens : null;
+            $updateData['tension_tolerance'] = is_numeric($tensPlus) ? (float) $tensPlus : null;
+
+            if ($record->record_type === 'twisting') {
+                // Twisting-specific fields
+                $updateData['yarn_code'] = $metadata['yarn_code'] ?? null;
+                $updateData['dtex_number'] = $formData['dtexNumber'] ?? null;
+
+                $tpm = $formData['tpm'] ?? null;
+                $rpm = $formData['rpm'] ?? null;
+                $updateData['tpm'] = is_numeric($tpm) ? (int) $tpm : null;
+                $updateData['rpm'] = is_numeric($rpm) ? (int) $rpm : null;
+            } else {
+                // Weaving-specific fields
+                $updateData['item_description'] = $metadata['item_description'] ?? null;
+                $updateData['production_order'] = $formData['productionOrder'] ?? null;
+                $updateData['bale_number'] = $formData['baleNumber'] ?? null;
+                $updateData['color_code'] = $formData['colorCode'] ?? null;
+            }
+
+            DB::table('tension_records')
+                ->where('id', $record->id)
+                ->update($updateData);
+        }
     }
 
     /**
-     * Drop the old generated columns
+     * Drop the old generated columns (MySQL only, skip for SQLite)
      */
     private function dropGeneratedColumns(): void
     {
+        $driver = DB::connection()->getDriverName();
+
+        // Only attempt to drop generated columns on MySQL
+        if ($driver !== 'mysql') {
+            return;
+        }
+
         // Drop old generated columns and their indexes
         try {
             DB::statement("DROP INDEX idx_operator ON tension_records");
@@ -284,26 +346,29 @@ return new class extends Migration
             ]);
         });
 
-        // Recreate the generated columns
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN operator_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_operator ON tension_records (operator_generated)");
+        // Only recreate generated columns on MySQL
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'mysql') {
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN operator_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_operator ON tension_records (operator_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN machine_number_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_machine ON tension_records (machine_number_generated)");
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN machine_number_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_machine ON tension_records (machine_number_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN item_number_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_item ON tension_records (item_number_generated)");
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN item_number_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_item ON tension_records (item_number_generated)");
+        }
     }
 };

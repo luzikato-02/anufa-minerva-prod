@@ -543,23 +543,19 @@ class TensionRecord extends Model
         $minSpec = $this->spec_tension - $tolerance;
         $maxSpec = $this->spec_tension + $tolerance;
 
-        // Update twisting measurements
-        if ($this->isTwisting()) {
-            $this->twistingMeasurements()
-                ->where('is_complete', true)
-                ->update([
-                    'is_out_of_spec' => \DB::raw(
-                        "CASE WHEN (max_value + min_value) / 2 < {$minSpec} OR (max_value + min_value) / 2 > {$maxSpec} THEN 1 ELSE 0 END"
-                    ),
-                ]);
-        } else {
-            $this->weavingMeasurements()
-                ->where('is_complete', true)
-                ->update([
-                    'is_out_of_spec' => \DB::raw(
-                        "CASE WHEN (max_value + min_value) / 2 < {$minSpec} OR (max_value + min_value) / 2 > {$maxSpec} THEN 1 ELSE 0 END"
-                    ),
-                ]);
+        // Get the appropriate measurements relationship
+        $measurements = $this->isTwisting()
+            ? $this->twistingMeasurements()->where('is_complete', true)->get()
+            : $this->weavingMeasurements()->where('is_complete', true)->get();
+
+        // Update each measurement
+        foreach ($measurements as $measurement) {
+            $avgValue = $measurement->avg_value ?? (($measurement->max_value + $measurement->min_value) / 2);
+            $isOutOfSpec = $avgValue < $minSpec || $avgValue > $maxSpec;
+
+            if ($measurement->is_out_of_spec !== $isOutOfSpec) {
+                $measurement->update(['is_out_of_spec' => $isOutOfSpec]);
+            }
         }
     }
 

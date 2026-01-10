@@ -220,12 +220,40 @@ class TwistingMeasurement extends Model
             $this->min_value = $value;
         }
 
-        // Update completion status
-        $this->is_complete = $this->max_value !== null && $this->min_value !== null;
+        // Update completion status and calculated fields
+        $this->updateCalculatedFields();
         $this->measured_at = now();
         $this->save();
 
         return $this;
+    }
+
+    /**
+     * Update calculated fields (avg_value, range_value, is_complete)
+     */
+    public function updateCalculatedFields(): self
+    {
+        $this->is_complete = $this->max_value !== null && $this->min_value !== null;
+
+        if ($this->is_complete) {
+            $this->avg_value = ($this->max_value + $this->min_value) / 2;
+            $this->range_value = $this->max_value - $this->min_value;
+        } else {
+            $this->avg_value = null;
+            $this->range_value = null;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Boot method to automatically update calculated fields on save
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (TwistingMeasurement $measurement) {
+            $measurement->updateCalculatedFields();
+        });
     }
 
     /**

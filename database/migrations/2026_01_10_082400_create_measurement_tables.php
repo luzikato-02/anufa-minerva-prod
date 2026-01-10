@@ -21,90 +21,82 @@ return new class extends Migration
         // =====================================================================
         // TWISTING MEASUREMENTS TABLE
         // =====================================================================
-        Schema::create('twisting_measurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tension_record_id')
-                ->constrained('tension_records')
-                ->onDelete('cascade');
+        if (!Schema::hasTable('twisting_measurements')) {
+            Schema::create('twisting_measurements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tension_record_id')
+                    ->constrained('tension_records')
+                    ->onDelete('cascade');
 
-            // Spindle identification
-            $table->unsignedTinyInteger('spindle_number')->comment('Spindle position (1-84)');
+                // Spindle identification
+                $table->unsignedTinyInteger('spindle_number');
 
-            // Measurement values
-            $table->decimal('max_value', 8, 2)->nullable()->comment('Maximum tension reading');
-            $table->decimal('min_value', 8, 2)->nullable()->comment('Minimum tension reading');
+                // Measurement values
+                $table->decimal('max_value', 8, 2)->nullable();
+                $table->decimal('min_value', 8, 2)->nullable();
 
-            // Calculated fields
-            $table->decimal('avg_value', 8, 2)
-                ->nullable()
-                ->storedAs('CASE WHEN max_value IS NOT NULL AND min_value IS NOT NULL THEN (max_value + min_value) / 2 ELSE NULL END')
-                ->comment('Average of max and min');
-            $table->decimal('range_value', 8, 2)
-                ->nullable()
-                ->storedAs('CASE WHEN max_value IS NOT NULL AND min_value IS NOT NULL THEN max_value - min_value ELSE NULL END')
-                ->comment('Difference between max and min');
+                // Calculated fields (computed in application layer for SQLite compatibility)
+                $table->decimal('avg_value', 8, 2)->nullable();
+                $table->decimal('range_value', 8, 2)->nullable();
 
-            // Status flags
-            $table->boolean('is_complete')->default(false)->comment('Both max and min recorded');
-            $table->boolean('is_out_of_spec')->default(false)->comment('Values outside tolerance');
+                // Status flags
+                $table->boolean('is_complete')->default(false);
+                $table->boolean('is_out_of_spec')->default(false);
 
-            // Timestamps
-            $table->timestamp('measured_at')->nullable()->comment('When measurement was taken');
-            $table->timestamps();
+                // Timestamps
+                $table->timestamp('measured_at')->nullable();
+                $table->timestamps();
 
-            // Indexes for efficient querying
-            $table->unique(['tension_record_id', 'spindle_number'], 'idx_record_spindle');
-            $table->index(['tension_record_id', 'is_complete'], 'idx_record_complete');
-            $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_record_out_of_spec');
-            $table->index(['spindle_number'], 'idx_spindle');
-        });
+                // Indexes for efficient querying
+                $table->unique(['tension_record_id', 'spindle_number'], 'idx_record_spindle');
+                $table->index(['tension_record_id', 'is_complete'], 'idx_twisting_record_complete');
+                $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_twisting_record_out_of_spec');
+                $table->index(['spindle_number'], 'idx_spindle');
+            });
+        }
 
         // =====================================================================
         // WEAVING MEASUREMENTS TABLE
         // =====================================================================
-        Schema::create('weaving_measurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tension_record_id')
-                ->constrained('tension_records')
-                ->onDelete('cascade');
+        if (!Schema::hasTable('weaving_measurements')) {
+            Schema::create('weaving_measurements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tension_record_id')
+                    ->constrained('tension_records')
+                    ->onDelete('cascade');
 
-            // Creel position identification
-            $table->enum('creel_side', ['AI', 'BI', 'AO', 'BO'])->comment('Creel side: A/B Inner/Outer');
-            $table->enum('row_number', ['R1', 'R2', 'R3', 'R4', 'R5'])->comment('Row position (R1-R5)');
-            $table->unsignedSmallInteger('column_number')->comment('Column position (1-120)');
+                // Creel position identification (using string for SQLite compatibility)
+                $table->string('creel_side', 2); // AI, BI, AO, BO
+                $table->string('row_number', 2); // R1-R5
+                $table->unsignedSmallInteger('column_number'); // 1-120
 
-            // Measurement values
-            $table->decimal('max_value', 8, 2)->nullable()->comment('Maximum tension reading');
-            $table->decimal('min_value', 8, 2)->nullable()->comment('Minimum tension reading');
+                // Measurement values
+                $table->decimal('max_value', 8, 2)->nullable();
+                $table->decimal('min_value', 8, 2)->nullable();
 
-            // Calculated fields
-            $table->decimal('avg_value', 8, 2)
-                ->nullable()
-                ->storedAs('CASE WHEN max_value IS NOT NULL AND min_value IS NOT NULL THEN (max_value + min_value) / 2 ELSE NULL END')
-                ->comment('Average of max and min');
-            $table->decimal('range_value', 8, 2)
-                ->nullable()
-                ->storedAs('CASE WHEN max_value IS NOT NULL AND min_value IS NOT NULL THEN max_value - min_value ELSE NULL END')
-                ->comment('Difference between max and min');
+                // Calculated fields (computed in application layer for SQLite compatibility)
+                $table->decimal('avg_value', 8, 2)->nullable();
+                $table->decimal('range_value', 8, 2)->nullable();
 
-            // Status flags
-            $table->boolean('is_complete')->default(false)->comment('Both max and min recorded');
-            $table->boolean('is_out_of_spec')->default(false)->comment('Values outside tolerance');
+                // Status flags
+                $table->boolean('is_complete')->default(false);
+                $table->boolean('is_out_of_spec')->default(false);
 
-            // Timestamps
-            $table->timestamp('measured_at')->nullable()->comment('When measurement was taken');
-            $table->timestamps();
+                // Timestamps
+                $table->timestamp('measured_at')->nullable();
+                $table->timestamps();
 
-            // Indexes for efficient querying
-            $table->unique(
-                ['tension_record_id', 'creel_side', 'row_number', 'column_number'],
-                'idx_record_position'
-            );
-            $table->index(['tension_record_id', 'creel_side'], 'idx_record_side');
-            $table->index(['tension_record_id', 'is_complete'], 'idx_record_complete');
-            $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_record_out_of_spec');
-            $table->index(['creel_side', 'row_number'], 'idx_side_row');
-        });
+                // Indexes for efficient querying
+                $table->unique(
+                    ['tension_record_id', 'creel_side', 'row_number', 'column_number'],
+                    'idx_record_position'
+                );
+                $table->index(['tension_record_id', 'creel_side'], 'idx_record_side');
+                $table->index(['tension_record_id', 'is_complete'], 'idx_weaving_record_complete');
+                $table->index(['tension_record_id', 'is_out_of_spec'], 'idx_weaving_record_out_of_spec');
+                $table->index(['creel_side', 'row_number'], 'idx_side_row');
+            });
+        }
 
         // =====================================================================
         // MIGRATE EXISTING DATA
@@ -121,12 +113,15 @@ return new class extends Migration
         $records = DB::table('tension_records')
             ->where('record_type', 'twisting')
             ->whereNotNull('measurement_data')
+            ->where('measurement_data', '!=', '{}')
+            ->where('measurement_data', '!=', 'null')
+            ->where('measurement_data', '!=', '')
             ->get(['id', 'measurement_data', 'spec_tension', 'tension_tolerance']);
 
         foreach ($records as $record) {
             $measurementData = json_decode($record->measurement_data, true);
 
-            if (!is_array($measurementData)) {
+            if (!is_array($measurementData) || empty($measurementData)) {
                 continue;
             }
 
@@ -134,7 +129,7 @@ return new class extends Migration
             $tolerance = $record->tension_tolerance ?? 0;
 
             foreach ($measurementData as $spindleNumber => $data) {
-                if (!is_numeric($spindleNumber)) {
+                if (!is_numeric($spindleNumber) || !is_array($data)) {
                     continue;
                 }
 
@@ -142,12 +137,19 @@ return new class extends Migration
                 $minValue = $data['min'] ?? null;
                 $isComplete = $maxValue !== null && $minValue !== null;
 
+                // Calculate avg and range
+                $avgValue = null;
+                $rangeValue = null;
+                if ($isComplete) {
+                    $avgValue = ($maxValue + $minValue) / 2;
+                    $rangeValue = $maxValue - $minValue;
+                }
+
                 // Check if out of spec
                 $isOutOfSpec = false;
                 if ($isComplete && $specTension !== null) {
                     $minSpec = $specTension - $tolerance;
                     $maxSpec = $specTension + $tolerance;
-                    $avgValue = ($maxValue + $minValue) / 2;
                     $isOutOfSpec = $avgValue < $minSpec || $avgValue > $maxSpec;
                 }
 
@@ -156,6 +158,8 @@ return new class extends Migration
                     'spindle_number' => (int) $spindleNumber,
                     'max_value' => $maxValue,
                     'min_value' => $minValue,
+                    'avg_value' => $avgValue,
+                    'range_value' => $rangeValue,
                     'is_complete' => $isComplete,
                     'is_out_of_spec' => $isOutOfSpec,
                     'created_at' => now(),
@@ -173,20 +177,25 @@ return new class extends Migration
         $records = DB::table('tension_records')
             ->where('record_type', 'weaving')
             ->whereNotNull('measurement_data')
+            ->where('measurement_data', '!=', '{}')
+            ->where('measurement_data', '!=', 'null')
+            ->where('measurement_data', '!=', '')
             ->get(['id', 'measurement_data', 'spec_tension', 'tension_tolerance']);
 
         foreach ($records as $record) {
             $measurementData = json_decode($record->measurement_data, true);
 
-            if (!is_array($measurementData)) {
+            if (!is_array($measurementData) || empty($measurementData)) {
                 continue;
             }
 
             $specTension = $record->spec_tension;
             $tolerance = $record->tension_tolerance ?? 0;
+            $validSides = ['AI', 'BI', 'AO', 'BO'];
+            $measurements = [];
 
             foreach ($measurementData as $side => $rows) {
-                if (!in_array($side, ['AI', 'BI', 'AO', 'BO']) || !is_array($rows)) {
+                if (!in_array($side, $validSides) || !is_array($rows)) {
                     continue;
                 }
 
@@ -215,29 +224,43 @@ return new class extends Migration
                         $minValue = $data['min'] ?? null;
                         $isComplete = $maxValue !== null && $minValue !== null;
 
+                        // Calculate avg and range
+                        $avgValue = null;
+                        $rangeValue = null;
+                        if ($isComplete) {
+                            $avgValue = ($maxValue + $minValue) / 2;
+                            $rangeValue = $maxValue - $minValue;
+                        }
+
                         // Check if out of spec
                         $isOutOfSpec = false;
                         if ($isComplete && $specTension !== null) {
                             $minSpec = $specTension - $tolerance;
                             $maxSpec = $specTension + $tolerance;
-                            $avgValue = ($maxValue + $minValue) / 2;
                             $isOutOfSpec = $avgValue < $minSpec || $avgValue > $maxSpec;
                         }
 
-                        DB::table('weaving_measurements')->insert([
+                        $measurements[] = [
                             'tension_record_id' => $record->id,
                             'creel_side' => $side,
                             'row_number' => $rowNumber,
                             'column_number' => (int) $column,
                             'max_value' => $maxValue,
                             'min_value' => $minValue,
+                            'avg_value' => $avgValue,
+                            'range_value' => $rangeValue,
                             'is_complete' => $isComplete,
                             'is_out_of_spec' => $isOutOfSpec,
                             'created_at' => now(),
                             'updated_at' => now(),
-                        ]);
+                        ];
                     }
                 }
+            }
+
+            // Insert in chunks to avoid memory issues
+            foreach (array_chunk($measurements, 500) as $chunk) {
+                DB::table('weaving_measurements')->insert($chunk);
             }
         }
     }
