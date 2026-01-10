@@ -215,7 +215,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Badge variant="outline" className="capitalize">
@@ -251,7 +251,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                         Loading measurements...
                                     </div>
                                 ) : chartData.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={350}>
+                                    <ResponsiveContainer width="100%" height={480}>
                                         <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis
@@ -260,11 +260,12 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                                 textAnchor="end"
                                                 height={60}
                                                 interval={Math.floor(chartData.length / 15)}
-                                                fontSize={10}
+                                                fontSize={12}
                                             />
                                             <YAxis
                                                 label={{ value: 'Tension (cN)', angle: -90, position: 'insideLeft' }}
                                                 domain={['auto', 'auto']}
+                                                fontSize={12}
                                             />
                                             <Tooltip
                                                 formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : 'N/A', '']}
