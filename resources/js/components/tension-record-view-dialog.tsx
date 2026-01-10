@@ -92,8 +92,14 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
     const [measurements, setMeasurements] = useState<TwistingMeasurement[] | WeavingMeasurement[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const specTension = record.spec_tension ?? record.form_data?.specTens ?? 0;
-    const tolerance = record.tension_tolerance ?? record.form_data?.tensPlus ?? 0;
+    const specTension = Number(
+        record.spec_tension ?? record.form_data?.specTens ?? 0
+    );
+
+    const tolerance = Number(
+        record.tension_tolerance ?? record.form_data?.tensPlus ?? 0
+    );
+
     const minSpec = Number(specTension) - Number(tolerance);
     const maxSpec = Number(specTension) + Number(tolerance);
 
@@ -181,7 +187,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                 'Dtex Number': record.form_data?.dtexNumber ?? 'N/A',
                 'TPM': record.form_data?.tpm ?? 'N/A',
                 'RPM': record.form_data?.rpm ?? 'N/A',
-                'Spec. Tension (cN)': specTension || 'N/A',
+                'Spec. Tension (cN)': specTension || 0,
                 'Tolerance (±cN)': tolerance || 'N/A',
                 'Meters Check': record.form_data?.metersCheck ?? 'N/A',
             };
@@ -194,7 +200,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                 'Production Order': record.form_data?.productionOrder ?? 'N/A',
                 'Bale Number': record.form_data?.baleNumber ?? 'N/A',
                 'Color Code': record.form_data?.colorCode ?? 'N/A',
-                'Spec. Tension (cN)': specTension || 'N/A',
+                'Spec. Tension (cN)': specTension || 0,
                 'Tolerance (±cN)': tolerance || 'N/A',
                 'Meters Check': record.form_data?.metersCheck ?? 'N/A',
             };
@@ -248,68 +254,68 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                     <ResponsiveContainer width="100%" height={350}>
                                         <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis 
-                                                dataKey="name" 
-                                                angle={-45} 
-                                                textAnchor="end" 
+                                            <XAxis
+                                                dataKey="name"
+                                                angle={-45}
+                                                textAnchor="end"
                                                 height={60}
                                                 interval={Math.floor(chartData.length / 15)}
                                                 fontSize={10}
                                             />
-                                            <YAxis 
+                                            <YAxis
                                                 label={{ value: 'Tension (cN)', angle: -90, position: 'insideLeft' }}
                                                 domain={['auto', 'auto']}
                                             />
-                                            <Tooltip 
+                                            <Tooltip
                                                 formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : 'N/A', '']}
                                                 labelFormatter={(label) => `Position: ${label}`}
                                             />
                                             <Legend verticalAlign="top" height={36} />
-                                            
+
                                             {/* Reference lines for spec limits */}
                                             {specTension > 0 && (
                                                 <>
-                                                    <ReferenceLine 
-                                                        y={maxSpec} 
-                                                        stroke="#ef4444" 
+                                                    <ReferenceLine
+                                                        y={maxSpec}
+                                                        stroke="#ef4444"
                                                         strokeDasharray="5 5"
                                                         label={{ value: `Max: ${maxSpec}`, position: 'right', fill: '#ef4444', fontSize: 10 }}
                                                     />
-                                                    <ReferenceLine 
-                                                        y={Number(specTension)} 
-                                                        stroke="#22c55e" 
+                                                    <ReferenceLine
+                                                        y={Number(specTension)}
+                                                        stroke="#22c55e"
                                                         strokeDasharray="3 3"
                                                         label={{ value: `Spec: ${specTension}`, position: 'right', fill: '#22c55e', fontSize: 10 }}
                                                     />
-                                                    <ReferenceLine 
-                                                        y={minSpec} 
-                                                        stroke="#ef4444" 
+                                                    <ReferenceLine
+                                                        y={minSpec}
+                                                        stroke="#ef4444"
                                                         strokeDasharray="5 5"
                                                         label={{ value: `Min: ${minSpec}`, position: 'right', fill: '#ef4444', fontSize: 10 }}
                                                     />
                                                 </>
                                             )}
-                                            
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="max" 
-                                                stroke="#3b82f6" 
+
+                                            <Line
+                                                type="monotone"
+                                                dataKey="max"
+                                                stroke="#3b82f6"
                                                 strokeWidth={2}
                                                 dot={{ r: 2 }}
                                                 name="Max Tension"
                                             />
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="min" 
-                                                stroke="#f97316" 
+                                            <Line
+                                                type="monotone"
+                                                dataKey="min"
+                                                stroke="#f97316"
                                                 strokeWidth={2}
                                                 dot={{ r: 2 }}
                                                 name="Min Tension"
                                             />
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="avg" 
-                                                stroke="#8b5cf6" 
+                                            <Line
+                                                type="monotone"
+                                                dataKey="avg"
+                                                stroke="#8b5cf6"
                                                 strokeWidth={2}
                                                 dot={{ r: 2 }}
                                                 name="Avg Tension"
@@ -325,7 +331,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                 <div className="mt-4 flex justify-center gap-4 text-sm">
                                     <div className="flex items-center gap-2">
                                         <div className="h-3 w-3 rounded-full bg-green-500" />
-                                        <span>Spec: {specTension || 'N/A'} cN</span>
+                                        <span>Spec: {specTension || 0} cN</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <div className="h-3 w-3 rounded-full bg-red-500" />
@@ -360,8 +366,8 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                     <h4 className="text-sm font-medium">Progress</h4>
                                     <div className="flex items-center gap-4">
                                         <div className="flex-1 bg-muted rounded-full h-2">
-                                            <div 
-                                                className="bg-primary h-2 rounded-full transition-all" 
+                                            <div
+                                                className="bg-primary h-2 rounded-full transition-all"
                                                 style={{ width: `${progressPercentage}%` }}
                                             />
                                         </div>
@@ -387,20 +393,20 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                 {record.problems && record.problems.length > 0 ? (
                                     <div className="space-y-3">
                                         {record.problems.map((problem: TensionProblem, index: number) => (
-                                            <div 
-                                                key={problem.id ?? index} 
+                                            <div
+                                                key={problem.id ?? index}
                                                 className="flex items-start gap-3 rounded-lg border p-3"
                                             >
                                                 <Badge variant="outline" className="mt-0.5">
-                                                    {record.record_type === 'twisting' 
-                                                        ? `#${problem.spindleNumber ?? problem.spindle_number ?? 'N/A'}` 
+                                                    {record.record_type === 'twisting'
+                                                        ? `#${problem.spindleNumber ?? problem.spindle_number ?? 'N/A'}`
                                                         : problem.position ?? 'N/A'}
                                                 </Badge>
                                                 <div className="flex-1">
                                                     <p className="text-sm">{problem.description}</p>
                                                     <p className="text-xs text-muted-foreground mt-1">
-                                                        {problem.timestamp 
-                                                            ? new Date(problem.timestamp).toLocaleString() 
+                                                        {problem.timestamp
+                                                            ? new Date(problem.timestamp).toLocaleString()
                                                             : 'N/A'}
                                                     </p>
                                                 </div>
