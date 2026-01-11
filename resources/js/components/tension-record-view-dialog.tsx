@@ -1,5 +1,11 @@
 'use client';
 
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,8 +16,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
     CartesianGrid,
@@ -91,6 +100,14 @@ interface Props {
 export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
     const [measurements, setMeasurements] = useState<TwistingMeasurement[] | WeavingMeasurement[]>([]);
     const [loading, setLoading] = useState(false);
+    
+    // Axis range controls
+    const [yAxisMin, setYAxisMin] = useState<string>('');
+    const [yAxisMax, setYAxisMax] = useState<string>('');
+    const [xAxisMin, setXAxisMin] = useState<string>('');
+    const [xAxisMax, setXAxisMax] = useState<string>('');
+    const [useCustomYAxis, setUseCustomYAxis] = useState(false);
+    const [useCustomXAxis, setUseCustomXAxis] = useState(false);
 
     const specTension = Number(
         record.spec_tension ?? record.form_data?.specTens ?? 0
@@ -195,6 +212,86 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
 
     const chartData = getChartData();
 
+    // Calculate smart Y-axis domain excluding zero values
+    const getYAxisDomain = () => {
+        if (useCustomYAxis && yAxisMin !== '' && yAxisMax !== '') {
+            return [parseFloat(yAxisMin), parseFloat(yAxisMax)];
+        }
+
+        if (useCustomYAxis && yAxisMin !== '' && yAxisMax === '') {
+            // Only min is set
+            if (chartData.length === 0) {
+                return [parseFloat(yAxisMin), 'auto'];
+            }
+            const allValues = chartData.flatMap(d => [d.max, d.min, d.avg])
+                .filter((v): v is number => v !== null && v !== undefined && v !== 0);
+            
+            if (allValues.length === 0) {
+                return [parseFloat(yAxisMin), 'auto'];
+            }
+            
+            const maxValue = Math.max(...allValues);
+            const padding = maxValue * 0.1;
+            return [parseFloat(yAxisMin), maxValue + padding];
+        }
+
+        if (useCustomYAxis && yAxisMin === '' && yAxisMax !== '') {
+            // Only max is set
+            if (chartData.length === 0) {
+                return ['auto', parseFloat(yAxisMax)];
+            }
+            const allValues = chartData.flatMap(d => [d.max, d.min, d.avg])
+                .filter((v): v is number => v !== null && v !== undefined && v !== 0);
+            
+            if (allValues.length === 0) {
+                return ['auto', parseFloat(yAxisMax)];
+            }
+            
+            const minValue = Math.min(...allValues);
+            const padding = minValue * 0.1;
+            return [Math.max(0, minValue - padding), parseFloat(yAxisMax)];
+        }
+
+        if (chartData.length === 0) {
+            return ['auto', 'auto'];
+        }
+
+        // Get all non-zero values
+        const allValues = chartData.flatMap(d => [d.max, d.min, d.avg])
+            .filter((v): v is number => v !== null && v !== undefined && v !== 0);
+
+        if (allValues.length === 0) {
+            return ['auto', 'auto'];
+        }
+
+        const minValue = Math.min(...allValues);
+        const maxValue = Math.max(...allValues);
+        
+        // Add 10% padding
+        const padding = (maxValue - minValue) * 0.1;
+        return [
+            Math.max(0, minValue - padding),
+            maxValue + padding
+        ];
+    };
+
+    // Get X-axis domain (for filtering data points)
+    const getFilteredChartData = () => {
+        if (!useCustomXAxis || xAxisMin === '' || xAxisMax === '') {
+            return chartData;
+        }
+
+        const minPos = parseInt(xAxisMin);
+        const maxPos = parseInt(xAxisMax);
+
+        return chartData.filter((d, index) => {
+            const position = d.position ?? index + 1;
+            return position >= minPos && position <= maxPos;
+        });
+    };
+
+    const filteredChartData = getFilteredChartData();
+
     const getRecordDetails = () => {
         const operator = record.operator ?? record.metadata?.operator ?? 'N/A';
         const machineNumber = record.machine_number ?? record.metadata?.machine_number ?? record.form_data?.machineNumber ?? 'N/A';
@@ -235,10 +332,19 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
     const completedMeasurements = record.completed_measurements ?? record.metadata?.completed_measurements ?? 0;
     const progressPercentage = record.progress_percentage ?? record.metadata?.progress_percentage ?? 0;
 
+    const resetAxisRanges = () => {
+        setYAxisMin('');
+        setYAxisMax('');
+        setXAxisMin('');
+        setXAxisMax('');
+        setUseCustomYAxis(false);
+        setUseCustomXAxis(false);
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
-                <DialogHeader>
+            <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl max-h-[90vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <Badge variant="outline" className="capitalize">
                             {record.record_type}
@@ -250,6 +356,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                     </DialogDescription>
                 </DialogHeader>
 
+                <div className="flex-1 overflow-y-auto pr-2">
                 <Tabs defaultValue="chart" className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="chart">Tension Chart</TabsTrigger>
@@ -259,7 +366,119 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="chart" className="mt-4">
+                    <TabsContent value="chart" className="mt-4 space-y-4">
+                        {/* Axis Range Controls - Now as Accordion */}
+                        <Accordion type="single" collapsible className="w-full mb-6">
+                            <AccordionItem value="chart-controls" className="border rounded-lg px-4">
+                                <AccordionTrigger className="hover:no-underline py-4">
+                                    <div className="flex items-center justify-between w-full pr-4">
+                                        <div>
+                                            <h3 className="text-base font-semibold">Chart Controls</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                Adjust the axis ranges to focus on specific data ranges
+                                            </p>
+                                        </div>
+                                        {(useCustomYAxis || useCustomXAxis) && (
+                                            <Badge variant="secondary" className="ml-2">
+                                                Custom Range Active
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-4 pb-6">
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Y-Axis Controls */}
+                                            <div className="space-y-3">
+                                                <Label className="text-sm font-medium">Y-Axis Range (Tension in cN)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1">
+                                                        <Label htmlFor="y-min" className="text-xs text-muted-foreground">Min</Label>
+                                                        <Input
+                                                            id="y-min"
+                                                            type="number"
+                                                            placeholder="Auto"
+                                                            value={yAxisMin}
+                                                            onChange={(e) => {
+                                                                setYAxisMin(e.target.value);
+                                                                setUseCustomYAxis(e.target.value !== '' || yAxisMax !== '');
+                                                            }}
+                                                            className="mt-1"
+                                                        />
+                                                    </div>
+                                                    <span className="text-muted-foreground mt-6">to</span>
+                                                    <div className="flex-1">
+                                                        <Label htmlFor="y-max" className="text-xs text-muted-foreground">Max</Label>
+                                                        <Input
+                                                            id="y-max"
+                                                            type="number"
+                                                            placeholder="Auto"
+                                                            value={yAxisMax}
+                                                            onChange={(e) => {
+                                                                setYAxisMax(e.target.value);
+                                                                setUseCustomYAxis(yAxisMin !== '' || e.target.value !== '');
+                                                            }}
+                                                            className="mt-1"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* X-Axis Controls */}
+                                            <div className="space-y-3">
+                                                <Label className="text-sm font-medium">
+                                                    X-Axis Range ({record.record_type === 'twisting' ? 'Spindle' : 'Position'} #)
+                                                </Label>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1">
+                                                        <Label htmlFor="x-min" className="text-xs text-muted-foreground">Min</Label>
+                                                        <Input
+                                                            id="x-min"
+                                                            type="number"
+                                                            placeholder="Start"
+                                                            value={xAxisMin}
+                                                            onChange={(e) => {
+                                                                setXAxisMin(e.target.value);
+                                                                setUseCustomXAxis(e.target.value !== '' || xAxisMax !== '');
+                                                            }}
+                                                            className="mt-1"
+                                                        />
+                                                    </div>
+                                                    <span className="text-muted-foreground mt-6">to</span>
+                                                    <div className="flex-1">
+                                                        <Label htmlFor="x-max" className="text-xs text-muted-foreground">Max</Label>
+                                                        <Input
+                                                            id="x-max"
+                                                            type="number"
+                                                            placeholder="End"
+                                                            value={xAxisMax}
+                                                            onChange={(e) => {
+                                                                setXAxisMax(e.target.value);
+                                                                setUseCustomXAxis(xAxisMin !== '' || e.target.value !== '');
+                                                            }}
+                                                            className="mt-1"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-end">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={resetAxisRanges}
+                                                disabled={!useCustomYAxis && !useCustomXAxis}
+                                            >
+                                                Reset to Auto
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+
+                        {/* Chart Card */}
                         <Card>
                             <CardHeader>
                                 <CardTitle>Tension Measurements</CardTitle>
@@ -270,23 +489,26 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                             <CardContent>
                                 {loading ? (
                                     <div className="flex h-[300px] items-center justify-center">
-                                        Loading measurements...
+                                        <div className="flex flex-col items-center gap-3">
+                                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                            <p className="text-sm text-muted-foreground">Loading measurements...</p>
+                                        </div>
                                     </div>
-                                ) : chartData.length > 0 ? (
+                                ) : filteredChartData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height={480}>
-                                        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                                        <LineChart data={filteredChartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis
                                                 dataKey="name"
                                                 angle={-45}
                                                 textAnchor="end"
                                                 height={60}
-                                                interval={Math.floor(chartData.length / 15)}
+                                                interval={Math.floor(filteredChartData.length / 15)}
                                                 fontSize={12}
                                             />
                                             <YAxis
                                                 label={{ value: 'Tension (cN)', angle: -90, position: 'insideLeft' }}
-                                                domain={['auto', 'auto']}
+                                                domain={getYAxisDomain() as any}
                                                 fontSize={12}
                                             />
                                             <Tooltip
@@ -361,7 +583,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                                     </div>
                                 )}
 
-                                <div className="mt-4 flex justify-center gap-4 text-sm">
+                                <div className="mt-2 flex justify-center gap-4 text-sm">
                                     <div className="flex items-center gap-2">
                                         <div className="h-3 w-3 rounded-full bg-green-500" />
                                         <span>Spec: {specTension || 0} cN</span>
@@ -455,8 +677,9 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                         </Card>
                     </TabsContent>
                 </Tabs>
+                </div>
 
-                <div className="flex justify-end gap-2 mt-4">
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t flex-shrink-0">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Close
                     </Button>
