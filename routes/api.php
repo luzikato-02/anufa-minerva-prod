@@ -51,6 +51,9 @@ Route::prefix('mobile')->group(function () {
 
         Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
             ->name('api.tension-records.download');
+
+        Route::get('tension-records/{tensionRecord}/pdf', [TensionRecordController::class, 'exportPdf'])
+            ->name('api.tension-records.pdf');
         
         Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
             ->name('api.tension-records.statistics');

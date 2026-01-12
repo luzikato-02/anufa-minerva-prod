@@ -72,6 +72,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
         ->name('tension-records.download');
+
+    Route::get('tension-records/{tensionRecord}/pdf', [TensionRecordController::class, 'exportPdf'])
+        ->name('tension-records.pdf');
     
     Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
         ->name('tension-records.statistics');
