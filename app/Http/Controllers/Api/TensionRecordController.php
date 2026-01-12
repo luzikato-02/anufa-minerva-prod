@@ -7,6 +7,7 @@ use App\Models\TensionProblem;
 use App\Models\TensionRecord;
 use App\Models\TwistingMeasurement;
 use App\Models\WeavingMeasurement;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -308,6 +309,94 @@ class TensionRecordController extends Controller
         return response($tensionRecord->csv_data)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="' . $tensionRecord->getCsvFilename() . '"');
+    }
+
+    /**
+     * Export tension record to PDF
+     */
+    public function exportPdf(TensionRecord $tensionRecord)
+    {
+        $tensionRecord->load(['user:id,name', 'tensionProblems']);
+
+        if ($tensionRecord->isTwisting()) {
+            return $this->exportTwistingPdf($tensionRecord);
+        }
+
+        return $this->exportWeavingPdf($tensionRecord);
+    }
+
+    /**
+     * Export twisting tension record to PDF
+     */
+    private function exportTwistingPdf(TensionRecord $tensionRecord)
+    {
+        $measurements = $tensionRecord->twistingMeasurements()
+            ->orderBy('spindle_number')
+            ->get();
+
+        $stats = $tensionRecord->getMeasurementStats();
+        $tensionStats = $tensionRecord->getTensionStatistics();
+        $problems = $tensionRecord->tensionProblems;
+
+        $pdf = Pdf::loadView('pdf.twisting_tension_report', [
+            'record' => $tensionRecord,
+            'measurements' => $measurements,
+            'stats' => $stats,
+            'tensionStats' => $tensionStats,
+            'problems' => $problems,
+        ])->setPaper('A4', 'portrait');
+
+        $filename = sprintf(
+            'TwistingTension_%s_%s_%s.pdf',
+            $tensionRecord->machine_number ?? 'unknown',
+            $tensionRecord->item_number ?? 'unknown',
+            $tensionRecord->created_at->format('Y-m-d')
+        );
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Export weaving tension record to PDF
+     */
+    private function exportWeavingPdf(TensionRecord $tensionRecord)
+    {
+        $stats = $tensionRecord->getMeasurementStats();
+        $tensionStats = $tensionRecord->getTensionStatistics();
+        $problems = $tensionRecord->tensionProblems;
+
+        // Get statistics by side and row
+        $sideStats = WeavingMeasurement::getStatsBySide($tensionRecord->id);
+        $rowStats = WeavingMeasurement::getStatsByRow($tensionRecord->id);
+
+        // Get out-of-spec measurements
+        $outOfSpecMeasurements = $tensionRecord->weavingMeasurements()
+            ->outOfSpec()
+            ->orderByPosition()
+            ->get();
+
+        // Get creel sides labels
+        $creelSides = WeavingMeasurement::getCreelSides();
+
+        $pdf = Pdf::loadView('pdf.weaving_tension_report', [
+            'record' => $tensionRecord,
+            'stats' => $stats,
+            'tensionStats' => $tensionStats,
+            'problems' => $problems,
+            'sideStats' => $sideStats,
+            'rowStats' => $rowStats,
+            'outOfSpecMeasurements' => $outOfSpecMeasurements,
+            'creelSides' => $creelSides,
+        ])->setPaper('A4', 'portrait');
+
+        $filename = sprintf(
+            'WeavingTension_%s_%s_%s.pdf',
+            $tensionRecord->machine_number ?? 'unknown',
+            $tensionRecord->production_order ?? $tensionRecord->item_number ?? 'unknown',
+            $tensionRecord->created_at->format('Y-m-d')
+        );
+
+        return $pdf->download($filename);
     }
 
     /**
