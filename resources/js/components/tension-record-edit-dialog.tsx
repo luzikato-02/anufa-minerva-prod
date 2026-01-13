@@ -344,7 +344,7 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                                     <Label className="text-xs text-muted-foreground">Max</Label>
                                                                     <Input
                                                                         type="number"
-                                                                        placeholder={measurement.max_value?.toString() ?? 'N/A'}
+                                                                        placeholder={measurement.max_value != null ? String(measurement.max_value) : 'N/A'}
                                                                         value={edited?.max ?? ''}
                                                                         onChange={(e) => handleMeasurementChange(key, 'max', e.target.value)}
                                                                         className="h-8"
@@ -354,7 +354,7 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                                     <Label className="text-xs text-muted-foreground">Min</Label>
                                                                     <Input
                                                                         type="number"
-                                                                        placeholder={measurement.min_value?.toString() ?? 'N/A'}
+                                                                        placeholder={measurement.min_value != null ? String(measurement.min_value) : 'N/A'}
                                                                         value={edited?.min ?? ''}
                                                                         onChange={(e) => handleMeasurementChange(key, 'min', e.target.value)}
                                                                         className="h-8"
@@ -362,7 +362,7 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                                 </div>
                                                             </div>
                                                             <div className="text-xs text-muted-foreground w-20 text-center">
-                                                                Avg: {measurement.avg_value?.toFixed(1) ?? 'N/A'}
+                                                                Avg: {measurement.avg_value != null ? Number(measurement.avg_value).toFixed(1) : 'N/A'}
                                                             </div>
                                                             {measurement.is_out_of_spec && (
                                                                 <Badge variant="destructive" className="text-xs">
