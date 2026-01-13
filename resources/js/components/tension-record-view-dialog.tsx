@@ -20,8 +20,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import html2canvas from 'html2canvas';
+import { Download, ImageIcon, Loader2, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     CartesianGrid,
     Legend,
@@ -100,6 +101,8 @@ interface Props {
 export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
     const [measurements, setMeasurements] = useState<TwistingMeasurement[] | WeavingMeasurement[]>([]);
     const [loading, setLoading] = useState(false);
+    const [downloadingChart, setDownloadingChart] = useState(false);
+    const chartRef = useRef<HTMLDivElement>(null);
     
     // Axis range controls
     const [yAxisMin, setYAxisMin] = useState<string>('');
@@ -108,6 +111,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
     const [xAxisMax, setXAxisMax] = useState<string>('');
     const [useCustomYAxis, setUseCustomYAxis] = useState(false);
     const [useCustomXAxis, setUseCustomXAxis] = useState(false);
+    const [excludeOutliers, setExcludeOutliers] = useState(true);
 
     const specTension = Number(
         record.spec_tension ?? record.form_data?.specTens ?? 0
@@ -212,44 +216,30 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
 
     const chartData = getChartData();
 
-    // Calculate smart Y-axis domain excluding zero values
+    // Helper function to calculate IQR-based bounds (for outlier detection)
+    const calculateIQRBounds = (values: number[]) => {
+        if (values.length < 4) {
+            return { lowerBound: Math.min(...values), upperBound: Math.max(...values) };
+        }
+        
+        const sorted = [...values].sort((a, b) => a - b);
+        const q1Index = Math.floor(sorted.length * 0.25);
+        const q3Index = Math.floor(sorted.length * 0.75);
+        const q1 = sorted[q1Index];
+        const q3 = sorted[q3Index];
+        const iqr = q3 - q1;
+        
+        // Use 1.5 * IQR for outlier detection
+        const lowerBound = q1 - 1.5 * iqr;
+        const upperBound = q3 + 1.5 * iqr;
+        
+        return { q1, q3, iqr, lowerBound, upperBound };
+    };
+
+    // Calculate smart Y-axis domain excluding zero values and optionally outliers
     const getYAxisDomain = () => {
         if (useCustomYAxis && yAxisMin !== '' && yAxisMax !== '') {
             return [parseFloat(yAxisMin), parseFloat(yAxisMax)];
-        }
-
-        if (useCustomYAxis && yAxisMin !== '' && yAxisMax === '') {
-            // Only min is set
-            if (chartData.length === 0) {
-                return [parseFloat(yAxisMin), 'auto'];
-            }
-            const allValues = chartData.flatMap(d => [d.max, d.min, d.avg])
-                .filter((v): v is number => v !== null && v !== undefined && v !== 0);
-            
-            if (allValues.length === 0) {
-                return [parseFloat(yAxisMin), 'auto'];
-            }
-            
-            const maxValue = Math.max(...allValues);
-            const padding = maxValue * 0.1;
-            return [parseFloat(yAxisMin), maxValue + padding];
-        }
-
-        if (useCustomYAxis && yAxisMin === '' && yAxisMax !== '') {
-            // Only max is set
-            if (chartData.length === 0) {
-                return ['auto', parseFloat(yAxisMax)];
-            }
-            const allValues = chartData.flatMap(d => [d.max, d.min, d.avg])
-                .filter((v): v is number => v !== null && v !== undefined && v !== 0);
-            
-            if (allValues.length === 0) {
-                return ['auto', parseFloat(yAxisMax)];
-            }
-            
-            const minValue = Math.min(...allValues);
-            const padding = minValue * 0.1;
-            return [Math.max(0, minValue - padding), parseFloat(yAxisMax)];
         }
 
         if (chartData.length === 0) {
@@ -264,11 +254,41 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
             return ['auto', 'auto'];
         }
 
-        const minValue = Math.min(...allValues);
-        const maxValue = Math.max(...allValues);
+        let valuesToUse = allValues;
+
+        // Apply outlier detection if enabled
+        if (excludeOutliers && allValues.length >= 4) {
+            const { lowerBound, upperBound } = calculateIQRBounds(allValues);
+            
+            // Filter values within IQR bounds
+            const nonOutlierValues = allValues.filter(v => v >= lowerBound && v <= upperBound);
+            
+            // Only use filtered values if we still have enough data points
+            if (nonOutlierValues.length >= allValues.length * 0.5) {
+                valuesToUse = nonOutlierValues;
+            }
+        }
+
+        // Handle custom axis min/max with auto-calculated counterpart
+        if (useCustomYAxis && yAxisMin !== '' && yAxisMax === '') {
+            const maxValue = Math.max(...valuesToUse);
+            const padding = (maxValue - parseFloat(yAxisMin)) * 0.1;
+            return [parseFloat(yAxisMin), maxValue + padding];
+        }
+
+        if (useCustomYAxis && yAxisMin === '' && yAxisMax !== '') {
+            const minValue = Math.min(...valuesToUse);
+            const padding = (parseFloat(yAxisMax) - minValue) * 0.1;
+            return [Math.max(0, minValue - padding), parseFloat(yAxisMax)];
+        }
+
+        const minValue = Math.min(...valuesToUse);
+        const maxValue = Math.max(...valuesToUse);
         
         // Add 10% padding
-        const padding = (maxValue - minValue) * 0.1;
+        const range = maxValue - minValue;
+        const padding = range * 0.1;
+        
         return [
             Math.max(0, minValue - padding),
             maxValue + padding
@@ -339,6 +359,31 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
         setXAxisMax('');
         setUseCustomYAxis(false);
         setUseCustomXAxis(false);
+        setExcludeOutliers(true);
+    };
+
+    // Download chart as image
+    const downloadChartImage = async () => {
+        if (!chartRef.current) return;
+        
+        setDownloadingChart(true);
+        try {
+            const canvas = await html2canvas(chartRef.current, {
+                backgroundColor: '#ffffff',
+                scale: 2, // Higher resolution
+                logging: false,
+            });
+            
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            link.download = `tension-chart-${record.id}-${timestamp}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (error) {
+            console.error('Failed to download chart:', error);
+        } finally {
+            setDownloadingChart(false);
+        }
     };
 
     return (
@@ -367,111 +412,103 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                     </TabsList>
 
                     <TabsContent value="chart" className="mt-4 space-y-4">
-                        {/* Axis Range Controls - Now as Accordion */}
-                        <Accordion type="single" collapsible className="w-full mb-6">
-                            <AccordionItem value="chart-controls" className="border rounded-lg px-4">
-                                <AccordionTrigger className="hover:no-underline py-4">
-                                    <div className="flex items-center justify-between w-full pr-4">
-                                        <div>
-                                            <h3 className="text-base font-semibold">Chart Controls</h3>
-                                            <p className="text-sm text-muted-foreground">
-                                                Adjust the axis ranges to focus on specific data ranges
-                                            </p>
-                                        </div>
-                                        {(useCustomYAxis || useCustomXAxis) && (
-                                            <Badge variant="secondary" className="ml-2">
-                                                Custom Range Active
+                        {/* Chart Controls - Compact Accordion */}
+                        <Accordion type="single" collapsible className="w-full">
+                            <AccordionItem value="chart-controls" className="border rounded-lg">
+                                <AccordionTrigger className="hover:no-underline px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-medium text-sm">Chart Controls</span>
+                                        {(useCustomYAxis || useCustomXAxis || !excludeOutliers) && (
+                                            <Badge variant="secondary" className="text-xs">
+                                                Modified
                                             </Badge>
                                         )}
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="pt-4 pb-6">
-                                    <div className="space-y-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {/* Y-Axis Controls */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm font-medium">Y-Axis Range (Tension in cN)</Label>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex-1">
-                                                        <Label htmlFor="y-min" className="text-xs text-muted-foreground">Min</Label>
-                                                        <Input
-                                                            id="y-min"
-                                                            type="number"
-                                                            placeholder="Auto"
-                                                            value={yAxisMin}
-                                                            onChange={(e) => {
-                                                                setYAxisMin(e.target.value);
-                                                                setUseCustomYAxis(e.target.value !== '' || yAxisMax !== '');
-                                                            }}
-                                                            className="mt-1"
-                                                        />
-                                                    </div>
-                                                    <span className="text-muted-foreground mt-6">to</span>
-                                                    <div className="flex-1">
-                                                        <Label htmlFor="y-max" className="text-xs text-muted-foreground">Max</Label>
-                                                        <Input
-                                                            id="y-max"
-                                                            type="number"
-                                                            placeholder="Auto"
-                                                            value={yAxisMax}
-                                                            onChange={(e) => {
-                                                                setYAxisMax(e.target.value);
-                                                                setUseCustomYAxis(yAxisMin !== '' || e.target.value !== '');
-                                                            }}
-                                                            className="mt-1"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* X-Axis Controls */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm font-medium">
-                                                    X-Axis Range ({record.record_type === 'twisting' ? 'Spindle' : 'Position'} #)
-                                                </Label>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex-1">
-                                                        <Label htmlFor="x-min" className="text-xs text-muted-foreground">Min</Label>
-                                                        <Input
-                                                            id="x-min"
-                                                            type="number"
-                                                            placeholder="Start"
-                                                            value={xAxisMin}
-                                                            onChange={(e) => {
-                                                                setXAxisMin(e.target.value);
-                                                                setUseCustomXAxis(e.target.value !== '' || xAxisMax !== '');
-                                                            }}
-                                                            className="mt-1"
-                                                        />
-                                                    </div>
-                                                    <span className="text-muted-foreground mt-6">to</span>
-                                                    <div className="flex-1">
-                                                        <Label htmlFor="x-max" className="text-xs text-muted-foreground">Max</Label>
-                                                        <Input
-                                                            id="x-max"
-                                                            type="number"
-                                                            placeholder="End"
-                                                            value={xAxisMax}
-                                                            onChange={(e) => {
-                                                                setXAxisMax(e.target.value);
-                                                                setUseCustomXAxis(xAxisMin !== '' || e.target.value !== '');
-                                                            }}
-                                                            className="mt-1"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex justify-end">
+                                <AccordionContent className="px-4 pb-4">
+                                    <div className="space-y-4">
+                                        {/* Outlier Toggle and Reset */}
+                                        <div className="flex items-center justify-between">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={excludeOutliers}
+                                                    onChange={(e) => setExcludeOutliers(e.target.checked)}
+                                                    className="rounded border-gray-300"
+                                                />
+                                                <span className="text-sm">Auto-adjust for outliers</span>
+                                            </label>
                                             <Button
-                                                variant="outline"
+                                                variant="ghost"
                                                 size="sm"
                                                 onClick={resetAxisRanges}
-                                                disabled={!useCustomYAxis && !useCustomXAxis}
+                                                disabled={!useCustomYAxis && !useCustomXAxis && excludeOutliers}
+                                                className="h-8 text-xs"
                                             >
-                                                Reset to Auto
+                                                <RotateCcw className="h-3 w-3 mr-1" />
+                                                Reset
                                             </Button>
+                                        </div>
+
+                                        {/* Axis Controls - Compact Grid */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Y-Axis */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium text-muted-foreground">Y-Axis (cN)</Label>
+                                                <div className="flex items-center gap-1">
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Min"
+                                                        value={yAxisMin}
+                                                        onChange={(e) => {
+                                                            setYAxisMin(e.target.value);
+                                                            setUseCustomYAxis(e.target.value !== '' || yAxisMax !== '');
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                    <span className="text-muted-foreground text-xs">–</span>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Max"
+                                                        value={yAxisMax}
+                                                        onChange={(e) => {
+                                                            setYAxisMax(e.target.value);
+                                                            setUseCustomYAxis(yAxisMin !== '' || e.target.value !== '');
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* X-Axis */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium text-muted-foreground">
+                                                    X-Axis ({record.record_type === 'twisting' ? 'Spindle' : 'Position'})
+                                                </Label>
+                                                <div className="flex items-center gap-1">
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Start"
+                                                        value={xAxisMin}
+                                                        onChange={(e) => {
+                                                            setXAxisMin(e.target.value);
+                                                            setUseCustomXAxis(e.target.value !== '' || xAxisMax !== '');
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                    <span className="text-muted-foreground text-xs">–</span>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="End"
+                                                        value={xAxisMax}
+                                                        onChange={(e) => {
+                                                            setXAxisMax(e.target.value);
+                                                            setUseCustomXAxis(xAxisMin !== '' || e.target.value !== '');
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </AccordionContent>
@@ -480,13 +517,31 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
 
                         {/* Chart Card */}
                         <Card>
-                            <CardHeader>
-                                <CardTitle>Tension Measurements</CardTitle>
-                                <CardDescription>
-                                    {completedMeasurements} of {totalMeasurements} measurements ({progressPercentage}% complete)
-                                </CardDescription>
+                            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                                <div className="space-y-1">
+                                    <CardTitle>Tension Measurements</CardTitle>
+                                    <CardDescription>
+                                        {completedMeasurements} of {totalMeasurements} measurements ({progressPercentage}% complete)
+                                    </CardDescription>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={downloadChartImage}
+                                    disabled={downloadingChart || loading || filteredChartData.length === 0}
+                                    className="h-8"
+                                >
+                                    {downloadingChart ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <ImageIcon className="h-4 w-4 mr-1" />
+                                            Save Image
+                                        </>
+                                    )}
+                                </Button>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent ref={chartRef}>
                                 {loading ? (
                                     <div className="flex h-[300px] items-center justify-center">
                                         <div className="flex flex-col items-center gap-3">
@@ -689,6 +744,7 @@ export function TensionRecordViewDialog({ record, open, onOpenChange }: Props) {
                             window.location.href = `${baseUrl}/tension-records/${record.id}/download`;
                         }}
                     >
+                        <Download className="h-4 w-4 mr-1" />
                         Download CSV
                     </Button>
                 </div>
