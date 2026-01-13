@@ -513,6 +513,28 @@ class TensionRecordController extends Controller
     }
 
     /**
+     * Update a problem
+     */
+    public function updateProblem(Request $request, TensionProblem $tensionProblem): JsonResponse
+    {
+        $validated = $request->validate([
+            'position_identifier' => 'sometimes|string|max:100',
+            'problem_type' => ['sometimes', Rule::in(array_keys(TensionProblem::getTypes()))],
+            'description' => 'sometimes|string',
+            'severity' => ['sometimes', Rule::in(array_keys(TensionProblem::getSeverityLevels()))],
+        ]);
+
+        $tensionProblem->update($validated);
+        $tensionProblem->load(['tensionRecord:id,record_type', 'resolver:id,name']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Problem updated successfully',
+            'data' => $tensionProblem,
+        ]);
+    }
+
+    /**
      * Resolve a problem
      */
     public function resolveProblem(Request $request, TensionProblem $tensionProblem): JsonResponse

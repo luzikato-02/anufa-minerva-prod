@@ -89,6 +89,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
         ->name('tension-records.problems.store');
     
+    Route::patch('tension-problems/{tensionProblem}', [TensionRecordController::class, 'updateProblem'])
+        ->name('tension-problems.update');
+    
     Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
         ->name('tension-problems.resolve');
 
