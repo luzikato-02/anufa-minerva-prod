@@ -45,6 +45,19 @@ interface TensionProblem {
     problem_type?: string;
     severity?: string;
     resolution_status?: string;
+    original_max_value?: number | null;
+    original_min_value?: number | null;
+    repaired_max_value?: number | null;
+    repaired_min_value?: number | null;
+}
+
+interface ResolveDialogData {
+    problemId: number;
+    position: string;
+    description: string;
+    repairedMaxValue: string;
+    repairedMinValue: string;
+    resolutionNotes: string;
 }
 
 interface TensionRecord {
@@ -120,6 +133,8 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
     const [newProblem, setNewProblem] = useState({ position: '', description: '' });
     const [editingProblem, setEditingProblem] = useState<EditingProblem | null>(null);
     const [savingProblemId, setSavingProblemId] = useState<number | null>(null);
+    const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+    const [resolveData, setResolveData] = useState<ResolveDialogData | null>(null);
 
     const specTension = Number(
         record.spec_tension ?? record.form_data?.specTens ?? 0
@@ -345,14 +360,43 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
         }
     };
 
-    const resolveProblem = async (problemId: number) => {
-        setSavingProblemId(problemId);
+    const openResolveDialog = (problem: TensionProblem) => {
+        if (!problem.id) return;
+        setResolveData({
+            problemId: problem.id,
+            position: problem.position_identifier ?? 
+                (record.record_type === 'twisting'
+                    ? String(problem.spindleNumber ?? problem.spindle_number ?? '')
+                    : problem.position ?? ''),
+            description: problem.description,
+            repairedMaxValue: '',
+            repairedMinValue: '',
+            resolutionNotes: '',
+        });
+        setResolveDialogOpen(true);
+    };
+
+    const submitResolve = async () => {
+        if (!resolveData) return;
+
+        setSavingProblemId(resolveData.problemId);
         try {
             const baseUrl = window.location.origin;
             const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
             const { csrfToken } = await csrfResponse.json();
 
-            const response = await fetch(`${baseUrl}/tension-problems/${problemId}/resolve`, {
+            const body: Record<string, string | number> = {};
+            if (resolveData.resolutionNotes) {
+                body.resolution_notes = resolveData.resolutionNotes;
+            }
+            if (resolveData.repairedMaxValue !== '') {
+                body.repaired_max_value = parseFloat(resolveData.repairedMaxValue);
+            }
+            if (resolveData.repairedMinValue !== '') {
+                body.repaired_min_value = parseFloat(resolveData.repairedMinValue);
+            }
+
+            const response = await fetch(`${baseUrl}/tension-problems/${resolveData.problemId}/resolve`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -360,13 +404,15 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                     'Accept': 'application/json',
                 },
                 credentials: 'include',
-                body: JSON.stringify({ resolution_notes: 'Resolved' }),
+                body: JSON.stringify(body),
             });
 
             if (!response.ok) {
                 throw new Error('Failed to resolve problem');
             }
 
+            setResolveDialogOpen(false);
+            setResolveData(null);
             await fetchProblems();
         } catch (error) {
             console.error('Failed to resolve problem:', error);
@@ -735,7 +781,7 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="ghost"
-                                                                                    onClick={() => resolveProblem(problem.id!)}
+                                                                                    onClick={() => openResolveDialog(problem)}
                                                                                     disabled={isSaving}
                                                                                     className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
                                                                                     title="Mark as resolved"
@@ -779,6 +825,99 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                     </Button>
                 </div>
             </DialogContent>
+
+            {/* Resolve Problem Dialog */}
+            <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Resolve Problem</DialogTitle>
+                        <DialogDescription>
+                            Enter the tension values after repair to mark this problem as resolved.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {resolveData && (
+                        <div className="space-y-4">
+                            <div className="rounded-lg border p-3 bg-muted/50">
+                                <div className="text-sm font-medium">Position: {resolveData.position}</div>
+                                <div className="text-sm text-muted-foreground mt-1">{resolveData.description}</div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="repaired-max">Repaired Max Value (cN)</Label>
+                                    <Input
+                                        id="repaired-max"
+                                        type="number"
+                                        placeholder="Enter max value"
+                                        value={resolveData.repairedMaxValue}
+                                        onChange={(e) => setResolveData({
+                                            ...resolveData,
+                                            repairedMaxValue: e.target.value
+                                        })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="repaired-min">Repaired Min Value (cN)</Label>
+                                    <Input
+                                        id="repaired-min"
+                                        type="number"
+                                        placeholder="Enter min value"
+                                        value={resolveData.repairedMinValue}
+                                        onChange={(e) => setResolveData({
+                                            ...resolveData,
+                                            repairedMinValue: e.target.value
+                                        })}
+                                    />
+                                </div>
+                            </div>
+
+                            {specTension > 0 && (
+                                <div className="text-xs text-muted-foreground text-center">
+                                    Spec Range: {minSpec.toFixed(1)} - {maxSpec.toFixed(1)} cN
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label htmlFor="resolution-notes">Resolution Notes (Optional)</Label>
+                                <Textarea
+                                    id="resolution-notes"
+                                    placeholder="Describe what was done to fix the problem..."
+                                    value={resolveData.resolutionNotes}
+                                    onChange={(e) => setResolveData({
+                                        ...resolveData,
+                                        resolutionNotes: e.target.value
+                                    })}
+                                    rows={2}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setResolveDialogOpen(false);
+                                        setResolveData(null);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={submitResolve}
+                                    disabled={savingProblemId === resolveData.problemId}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    {savingProblemId === resolveData.problemId ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : (
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                    )}
+                                    Mark as Resolved
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Dialog>
     );
 }

@@ -535,15 +535,23 @@ class TensionRecordController extends Controller
     }
 
     /**
-     * Resolve a problem
+     * Resolve a problem with optional repaired tension values
      */
     public function resolveProblem(Request $request, TensionProblem $tensionProblem): JsonResponse
     {
         $validated = $request->validate([
             'resolution_notes' => 'nullable|string',
+            'repaired_max_value' => 'nullable|numeric|min:0',
+            'repaired_min_value' => 'nullable|numeric|min:0',
         ]);
 
-        $tensionProblem->markAsResolved(auth()->id(), $validated['resolution_notes'] ?? null);
+        $tensionProblem->markAsResolved(
+            auth()->id(),
+            $validated['resolution_notes'] ?? null,
+            isset($validated['repaired_max_value']) ? (float) $validated['repaired_max_value'] : null,
+            isset($validated['repaired_min_value']) ? (float) $validated['repaired_min_value'] : null
+        );
+
         $tensionProblem->load(['tensionRecord:id,record_type', 'resolver:id,name']);
 
         return response()->json([
