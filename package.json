@@ -18,6 +18,7 @@
         "electron:build": "npm run build && electron-forge make",
         "electron:package": "npm run build && electron-forge package",
         "electron:make": "electron-forge make",
+        "electron:make:current": "electron-forge make",
         "electron:make:win": "electron-forge make --platform=win32 --arch=x64",
         "electron:make:linux": "electron-forge make --platform=linux --arch=x64",
         "electron:make:mac": "electron-forge make --platform=darwin --arch=x64",

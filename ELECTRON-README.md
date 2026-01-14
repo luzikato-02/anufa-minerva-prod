@@ -39,25 +39,40 @@ npm run electron:dev
 
 ## Building for Production
 
-### Build for All Platforms
+### Build for Current Platform (Recommended for Local)
 
 ```bash
 npm run electron:build
+# or
+npm run electron:make:current
 ```
 
-### Build for Specific Platforms
+> **Important:** You can only build for your current OS locally. Cross-platform builds require the GitHub Actions workflow (see below).
 
-**Windows:**
+### Cross-Platform Building
+
+**You cannot build Windows apps on Linux/macOS without Wine and Mono** (complex setup).
+
+**Recommended approach:** Use GitHub Actions for cross-platform builds:
+
+1. Push your code to GitHub
+2. Create a version tag: `git tag v1.0.0 && git push origin v1.0.0`
+3. GitHub Actions will automatically build for Windows, Linux, and macOS
+4. Download artifacts from the Actions tab or the GitHub Release
+
+### Manual Platform-Specific Builds (on native OS only)
+
+**Windows (on Windows):**
 ```bash
 npm run electron:make:win
 ```
 
-**Linux:**
+**Linux (on Linux):**
 ```bash
 npm run electron:make:linux
 ```
 
-**macOS:**
+**macOS (on macOS):**
 ```bash
 npm run electron:make:mac
 ```
