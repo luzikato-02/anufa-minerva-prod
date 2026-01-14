@@ -2,14 +2,13 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\CheckAdminRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Illuminate\Routing\Middleware\SubstituteBindings;
-
-
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        $middleware->trustProxies(at: '*');
 
         $middleware->web(append: [
             HandleAppearance::class,
@@ -29,10 +29,18 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // API middleware stack
         $middleware->api(append: [
-    'throttle:api',
-    SubstituteBindings::class,
-    EnsureFrontendRequestsAreStateful::class,
-]);
+            'throttle:api',
+            SubstituteBindings::class,
+            EnsureFrontendRequestsAreStateful::class,
+        ]);
+
+        // Middleware aliases
+        $middleware->alias([
+            'admin' => CheckAdminRole::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        ]);
     })
     
     ->withExceptions(function (Exceptions $exceptions) {

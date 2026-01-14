@@ -3,61 +3,94 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\TensionProblem;
 use App\Models\TensionRecord;
+use App\Models\TwistingMeasurement;
+use App\Models\WeavingMeasurement;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class TensionRecordController extends Controller
 {
     /**
-     * Display a listing of tension records
+     * Display a listing of tension records with filtering and pagination
      */
     public function index(Request $request): JsonResponse
     {
-        $query = TensionRecord::query();
+        $query = TensionRecord::query()
+            ->with(['user:id,name', 'tensionProblems'])
+            ->withCount(['tensionProblems', 'unresolvedProblems']);
 
-    // 🔍 Global search (case-insensitive)
-    if ($search = $request->input('search')) {
-        $search = strtolower($search);
-        $query->where(function ($q) use ($search) {
-            $q->whereRaw('LOWER(record_type) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(csv_data) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, "$.operator"))) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, "$.machine_number"))) LIKE ?', ["%{$search}%"]);
-        });
-    }
+        // Global search
+        if ($search = $request->input('search')) {
+            $query->search($search);
+        }
 
         // Filter by record type
-        if ($request->has('type')) {
+        if ($request->has('type') && $request->type) {
             $query->byType($request->type);
         }
 
         // Filter by operator
-        if ($request->has('operator')) {
+        if ($request->has('operator') && $request->operator) {
             $query->byOperator($request->operator);
         }
 
-        // Filter by machine
-        if ($request->has('machine')) {
+        // Filter by machine number
+        if ($request->has('machine') && $request->machine) {
             $query->byMachine($request->machine);
         }
 
-        // Search in item numbers
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->whereJsonContains('metadata->item_number', $search)
-                  ->orWhereJsonContains('metadata->operator', $search)
-                  ->orWhereJsonContains('metadata->machine_number', $search);
-            });
+        // Filter by item number
+        if ($request->has('item') && $request->item) {
+            $query->byItem($request->item);
         }
 
-        // Order by latest first
-        $query->orderBy('created_at', 'desc');
+        // Filter by status
+        if ($request->has('status') && $request->status) {
+            $query->byStatus($request->status);
+        }
+
+        // Filter by date range
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $query->createdBetween($request->start_date, $request->end_date);
+        }
+
+        // Filter records with problems only
+        if ($request->boolean('with_problems')) {
+            $query->withProblems();
+        }
+
+        // Filter records with unresolved problems
+        if ($request->boolean('with_unresolved_problems')) {
+            $query->withUnresolvedProblems();
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_direction', 'desc');
+        $allowedSortFields = [
+            'created_at',
+            'updated_at',
+            'operator',
+            'machine_number',
+            'item_number',
+            'progress_percentage',
+            'record_type',
+        ];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection);
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
 
         // Paginate results
-        $perPage = $request->get('per_page', 10);
+        $perPage = min($request->get('per_page', 10), 100);
         $records = $query->paginate($perPage);
 
         return response()->json($records);
@@ -69,12 +102,45 @@ class TensionRecordController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'record_type' => ['required', Rule::in(['twisting', 'weaving'])],
+            // Record type
+            'record_type' => ['required', Rule::in(array_keys(TensionRecord::getTypes()))],
+
+            // Legacy JSON fields (still supported for backward compatibility)
             'csv_data' => 'required|string',
             'form_data' => 'required|array',
             'measurement_data' => 'required|array',
             'problems' => 'array',
             'metadata' => 'required|array',
+
+            // Normalized common fields
+            'operator' => 'nullable|string|max:100',
+            'machine_number' => 'nullable|string|max:50',
+            'item_number' => 'nullable|string|max:100',
+            'item_description' => 'nullable|string|max:255',
+            'meters_check' => 'nullable|numeric|min:0',
+            'spec_tension' => 'nullable|numeric|min:0',
+            'tension_tolerance' => 'nullable|numeric|min:0',
+
+            // Twisting-specific fields
+            'dtex_number' => 'nullable|string|max:50',
+            'tpm' => 'nullable|integer|min:0',
+            'rpm' => 'nullable|integer|min:0',
+            'yarn_code' => 'nullable|string|max:100',
+
+            // Weaving-specific fields
+            'production_order' => 'nullable|string|max:100',
+            'bale_number' => 'nullable|string|max:100',
+            'color_code' => 'nullable|string|max:50',
+
+            // Progress tracking
+            'total_measurements' => 'nullable|integer|min:0',
+            'completed_measurements' => 'nullable|integer|min:0',
+            'progress_percentage' => 'nullable|integer|min:0|max:100',
+
+            // Status
+            'status' => ['nullable', Rule::in(array_keys(TensionRecord::getStatuses()))],
+
+            // Metadata validation (legacy support)
             'metadata.total_measurements' => 'required|integer|min:0',
             'metadata.completed_measurements' => 'required|integer|min:0',
             'metadata.progress_percentage' => 'required|integer|min:0|max:100',
@@ -85,18 +151,81 @@ class TensionRecordController extends Controller
             'metadata.yarn_code' => 'nullable|string',
         ]);
 
-        // Add user_id if authenticated
-        if (auth()->check()) {
-            $validated['user_id'] = auth()->id();
-        }
+        return DB::transaction(function () use ($validated, $request) {
+            // Extract normalized fields from metadata if not provided directly
+            $metadata = $validated['metadata'] ?? [];
+            $formData = $validated['form_data'] ?? [];
 
-        $record = TensionRecord::create($validated);
+            // Map fields from legacy format to normalized columns
+            $recordData = array_merge($validated, [
+                // Common fields from metadata
+                'operator' => $validated['operator'] ?? $metadata['operator'] ?? null,
+                'machine_number' => $validated['machine_number'] ?? $metadata['machine_number'] ?? null,
+                'item_number' => $validated['item_number'] ?? $metadata['item_number'] ?? null,
+                'item_description' => $validated['item_description'] ?? $metadata['item_description'] ?? null,
+                'yarn_code' => $validated['yarn_code'] ?? $metadata['yarn_code'] ?? null,
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Tension record saved successfully',
-            'data' => $record
-        ], 201);
+                // Progress from metadata
+                'total_measurements' => $validated['total_measurements'] ?? $metadata['total_measurements'] ?? 0,
+                'completed_measurements' => $validated['completed_measurements'] ?? $metadata['completed_measurements'] ?? 0,
+                'progress_percentage' => $validated['progress_percentage'] ?? $metadata['progress_percentage'] ?? 0,
+
+                // Extract from form_data for twisting
+                'meters_check' => $validated['meters_check'] ?? $this->numericOrNull($formData['metersCheck'] ?? null),
+                'spec_tension' => $validated['spec_tension'] ?? $this->numericOrNull($formData['specTens'] ?? null),
+                'tension_tolerance' => $validated['tension_tolerance'] ?? $this->numericOrNull($formData['tensPlus'] ?? null),
+                'dtex_number' => $validated['dtex_number'] ?? ($formData['dtexNumber'] ?? null),
+                'tpm' => $validated['tpm'] ?? $this->numericOrNull($formData['tpm'] ?? null),
+                'rpm' => $validated['rpm'] ?? $this->numericOrNull($formData['rpm'] ?? null),
+
+                // Extract from form_data for weaving
+                'production_order' => $validated['production_order'] ?? ($formData['productionOrder'] ?? null),
+                'bale_number' => $validated['bale_number'] ?? ($formData['baleNumber'] ?? null),
+                'color_code' => $validated['color_code'] ?? ($formData['colorCode'] ?? null),
+
+                // Set status
+                'status' => $validated['status'] ?? TensionRecord::STATUS_COMPLETED,
+
+                // Set user
+                'user_id' => auth()->id(),
+            ]);
+
+            // Create the record
+            $record = TensionRecord::create($recordData);
+
+            // Log measurement data for debugging
+            Log::info('Creating measurements for record', [
+                'record_id' => $record->id,
+                'record_type' => $record->record_type,
+                'measurement_data_structure' => json_encode($validated['measurement_data'] ?? []),
+            ]);
+
+            // Create measurement records from the measurement_data array
+            $measurementData = $validated['measurement_data'] ?? [];
+            if (!empty($measurementData)) {
+                $measurementCount = $this->createMeasurementsFromArray($record, $measurementData);
+                Log::info('Measurements created', [
+                    'record_id' => $record->id,
+                    'count' => $measurementCount,
+                ]);
+            }
+
+            // Create problem records from the problems array
+            $problems = $validated['problems'] ?? [];
+            if (!empty($problems)) {
+                $this->createProblemsFromArray($record, $problems);
+            }
+
+            // Load relationships for response
+            $record->load(['tensionProblems', 'user:id,name']);
+            $record->loadCount(['tensionProblems', 'unresolvedProblems']);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Tension record saved successfully',
+                'data' => $record,
+            ], 201);
+        });
     }
 
     /**
@@ -104,9 +233,12 @@ class TensionRecordController extends Controller
      */
     public function show(TensionRecord $tensionRecord): JsonResponse
     {
+        $tensionRecord->load(['tensionProblems', 'user:id,name']);
+        $tensionRecord->loadCount(['tensionProblems', 'unresolvedProblems']);
+
         return response()->json([
             'status' => 'success',
-            'data' => $tensionRecord
+            'data' => $tensionRecord,
         ]);
     }
 
@@ -116,20 +248,43 @@ class TensionRecordController extends Controller
     public function update(Request $request, TensionRecord $tensionRecord): JsonResponse
     {
         $validated = $request->validate([
-            'record_type' => [Rule::in(['twisting', 'weaving'])],
+            'record_type' => [Rule::in(array_keys(TensionRecord::getTypes()))],
             'csv_data' => 'string',
             'form_data' => 'array',
             'measurement_data' => 'array',
             'problems' => 'array',
             'metadata' => 'array',
+
+            // Normalized fields
+            'operator' => 'nullable|string|max:100',
+            'machine_number' => 'nullable|string|max:50',
+            'item_number' => 'nullable|string|max:100',
+            'item_description' => 'nullable|string|max:255',
+            'meters_check' => 'nullable|numeric|min:0',
+            'spec_tension' => 'nullable|numeric|min:0',
+            'tension_tolerance' => 'nullable|numeric|min:0',
+            'dtex_number' => 'nullable|string|max:50',
+            'tpm' => 'nullable|integer|min:0',
+            'rpm' => 'nullable|integer|min:0',
+            'yarn_code' => 'nullable|string|max:100',
+            'production_order' => 'nullable|string|max:100',
+            'bale_number' => 'nullable|string|max:100',
+            'color_code' => 'nullable|string|max:50',
+            'total_measurements' => 'nullable|integer|min:0',
+            'completed_measurements' => 'nullable|integer|min:0',
+            'progress_percentage' => 'nullable|integer|min:0|max:100',
+            'status' => [Rule::in(array_keys(TensionRecord::getStatuses()))],
         ]);
 
         $tensionRecord->update($validated);
 
+        $tensionRecord->load(['tensionProblems', 'user:id,name']);
+        $tensionRecord->loadCount(['tensionProblems', 'unresolvedProblems']);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Tension record updated successfully',
-            'data' => $tensionRecord
+            'data' => $tensionRecord,
         ]);
     }
 
@@ -142,26 +297,251 @@ class TensionRecordController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Tension record deleted successfully'
+            'message' => 'Tension record deleted successfully',
         ]);
     }
 
     /**
      * Download CSV data for a specific record
+     * Format: Session details at top, then Position, Max Value, Min Value, Problems, Max After Repair, Min After Repair
      */
     public function downloadCsv(TensionRecord $tensionRecord)
     {
-        $filename = sprintf(
-            '%s-%s-%s-%s-%s.csv',
-            $tensionRecord->record_type,
-            $tensionRecord->item_number ?? 'unknown',
-            $tensionRecord->machine_number ?? 'unknown',
-            $tensionRecord->created_at->format('Y-m-d'),
-            $tensionRecord->operator ?? 'unknown'
-        );
-        return response($tensionRecord->csv_data)
+        $tensionRecord->load('tensionProblems');
+        
+        // Build CSV content with new format
+        $csvLines = [];
+        
+        // Add session details section
+        $csvLines[] = 'SESSION DETAILS';
+        $csvLines[] = 'Field,Value';
+        $csvLines[] = sprintf('Record Type,%s', ucfirst($tensionRecord->record_type));
+        $csvLines[] = sprintf('Operator,"%s"', str_replace('"', '""', $tensionRecord->operator ?? ''));
+        $csvLines[] = sprintf('Machine Number,"%s"', str_replace('"', '""', $tensionRecord->machine_number ?? ''));
+        $csvLines[] = sprintf('Item Number,"%s"', str_replace('"', '""', $tensionRecord->item_number ?? ''));
+        $csvLines[] = sprintf('Item Description,"%s"', str_replace('"', '""', $tensionRecord->item_description ?? ''));
+        
+        if ($tensionRecord->isTwisting()) {
+            $csvLines[] = sprintf('DTEX Number,"%s"', str_replace('"', '""', $tensionRecord->dtex_number ?? ''));
+            $csvLines[] = sprintf('Yarn Code,"%s"', str_replace('"', '""', $tensionRecord->yarn_code ?? ''));
+            $csvLines[] = sprintf('TPM,%s', $tensionRecord->tpm ?? '');
+            $csvLines[] = sprintf('RPM,%s', $tensionRecord->rpm ?? '');
+        } else {
+            $csvLines[] = sprintf('Production Order,"%s"', str_replace('"', '""', $tensionRecord->production_order ?? ''));
+            $csvLines[] = sprintf('Bale Number,"%s"', str_replace('"', '""', $tensionRecord->bale_number ?? ''));
+            $csvLines[] = sprintf('Color Code,"%s"', str_replace('"', '""', $tensionRecord->color_code ?? ''));
+        }
+        
+        $csvLines[] = sprintf('Spec Tension (cN),%s', $tensionRecord->spec_tension ?? '');
+        $csvLines[] = sprintf('Tolerance (±cN),%s', $tensionRecord->tension_tolerance ?? '');
+        $csvLines[] = sprintf('Meters Check,%s', $tensionRecord->meters_check ?? '');
+        $csvLines[] = sprintf('Record Date,%s', $tensionRecord->created_at ? $tensionRecord->created_at->format('Y-m-d H:i:s') : '');
+        $csvLines[] = sprintf('Status,%s', ucfirst($tensionRecord->status ?? ''));
+        $csvLines[] = sprintf('Progress,%s%%', $tensionRecord->progress_percentage ?? 0);
+        
+        // Add blank line separator
+        $csvLines[] = '';
+        $csvLines[] = 'MEASUREMENTS';
+        
+        if ($tensionRecord->isTwisting()) {
+            // Header for twisting
+            $csvLines[] = 'Spindle Number,Max Value,Min Value,Problems,Max After Repair,Min After Repair';
+            
+            // Get measurements
+            $measurements = $tensionRecord->twistingMeasurements()
+                ->orderBy('spindle_number')
+                ->get()
+                ->keyBy('spindle_number');
+            
+            // Get problems indexed by position
+            $problemsByPosition = $tensionRecord->tensionProblems
+                ->groupBy('position_identifier');
+            
+            // Get max spindle count (default 84)
+            $maxSpindle = max(84, $measurements->keys()->max() ?? 84);
+            
+            for ($i = 1; $i <= $maxSpindle; $i++) {
+                $measurement = $measurements->get($i);
+                $positionProblems = $problemsByPosition->get((string)$i, collect());
+                
+                // Format problems as semicolon-separated descriptions
+                $problemDescriptions = $positionProblems
+                    ->pluck('description')
+                    ->implode('; ');
+                
+                // Get repaired values from resolved problems
+                $repairedMax = '';
+                $repairedMin = '';
+                $resolvedProblem = $positionProblems->firstWhere('resolution_status', 'resolved');
+                if ($resolvedProblem) {
+                    $repairedMax = $resolvedProblem->repaired_max_value ?? '';
+                    $repairedMin = $resolvedProblem->repaired_min_value ?? '';
+                }
+                
+                $csvLines[] = sprintf(
+                    '%d,%s,%s,"%s",%s,%s',
+                    $i,
+                    $measurement && $measurement->max_value !== null ? number_format($measurement->max_value, 1, '.', '') : '',
+                    $measurement && $measurement->min_value !== null ? number_format($measurement->min_value, 1, '.', '') : '',
+                    str_replace('"', '""', $problemDescriptions),
+                    $repairedMax !== '' ? number_format($repairedMax, 1, '.', '') : '',
+                    $repairedMin !== '' ? number_format($repairedMin, 1, '.', '') : ''
+                );
+            }
+        } else {
+            // Header for weaving
+            $csvLines[] = 'Position,Max Value,Min Value,Problems,Max After Repair,Min After Repair';
+            
+            // Get measurements
+            $measurements = $tensionRecord->weavingMeasurements()
+                ->orderByPosition()
+                ->get();
+            
+            // Get problems indexed by position
+            $problemsByPosition = $tensionRecord->tensionProblems
+                ->groupBy('position_identifier');
+            
+            foreach ($measurements as $measurement) {
+                $positionCode = $measurement->position_code;
+                $positionProblems = $problemsByPosition->get($positionCode, collect());
+                
+                // Format problems as semicolon-separated descriptions
+                $problemDescriptions = $positionProblems
+                    ->pluck('description')
+                    ->implode('; ');
+                
+                // Get repaired values from resolved problems
+                $repairedMax = '';
+                $repairedMin = '';
+                $resolvedProblem = $positionProblems->firstWhere('resolution_status', 'resolved');
+                if ($resolvedProblem) {
+                    $repairedMax = $resolvedProblem->repaired_max_value ?? '';
+                    $repairedMin = $resolvedProblem->repaired_min_value ?? '';
+                }
+                
+                $csvLines[] = sprintf(
+                    '%s,%s,%s,"%s",%s,%s',
+                    $positionCode,
+                    $measurement->max_value !== null ? number_format($measurement->max_value, 1, '.', '') : '',
+                    $measurement->min_value !== null ? number_format($measurement->min_value, 1, '.', '') : '',
+                    str_replace('"', '""', $problemDescriptions),
+                    $repairedMax !== '' ? number_format($repairedMax, 1, '.', '') : '',
+                    $repairedMin !== '' ? number_format($repairedMin, 1, '.', '') : ''
+                );
+            }
+        }
+        
+        $csvContent = implode("\n", $csvLines);
+        
+        return response($csvContent)
             ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            ->header('Content-Disposition', 'attachment; filename="' . $tensionRecord->getCsvFilename() . '"');
+    }
+
+    /**
+     * Export tension record to PDF
+     */
+    public function exportPdf(TensionRecord $tensionRecord)
+    {
+        $tensionRecord->load(['user:id,name', 'tensionProblems']);
+
+        if ($tensionRecord->isTwisting()) {
+            return $this->exportTwistingPdf($tensionRecord);
+        }
+
+        return $this->exportWeavingPdf($tensionRecord);
+    }
+
+    /**
+     * Export twisting tension record to PDF
+     */
+    private function exportTwistingPdf(TensionRecord $tensionRecord)
+    {
+        $measurements = $tensionRecord->twistingMeasurements()
+            ->orderBy('spindle_number')
+            ->get();
+
+        $stats = $tensionRecord->getMeasurementStats();
+        $tensionStats = $tensionRecord->getTensionStatistics();
+        $problems = $tensionRecord->tensionProblems;
+        
+        // Index problems by position for quick lookup
+        $problemsByPosition = $problems->groupBy('position_identifier');
+        
+        // Get max spindle number
+        $maxSpindle = max(84, $measurements->max('spindle_number') ?? 84);
+
+        $pdf = Pdf::loadView('pdf.twisting_tension_report', [
+            'record' => $tensionRecord,
+            'measurements' => $measurements,
+            'stats' => $stats,
+            'tensionStats' => $tensionStats,
+            'problems' => $problems,
+            'problemsByPosition' => $problemsByPosition,
+            'maxSpindle' => $maxSpindle,
+        ])->setPaper('A4', 'portrait');
+
+        $filename = sprintf(
+            'TwistingTension_%s_%s_%s.pdf',
+            $tensionRecord->machine_number ?? 'unknown',
+            $tensionRecord->item_number ?? 'unknown',
+            $tensionRecord->created_at->format('Y-m-d')
+        );
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Export weaving tension record to PDF
+     */
+    private function exportWeavingPdf(TensionRecord $tensionRecord)
+    {
+        $stats = $tensionRecord->getMeasurementStats();
+        $tensionStats = $tensionRecord->getTensionStatistics();
+        $problems = $tensionRecord->tensionProblems;
+
+        // Get statistics by side and row
+        $sideStats = WeavingMeasurement::getStatsBySide($tensionRecord->id);
+        $rowStats = WeavingMeasurement::getStatsByRow($tensionRecord->id);
+
+        // Get ALL measurements (not just out-of-spec)
+        $allMeasurements = $tensionRecord->weavingMeasurements()
+            ->orderByPosition()
+            ->get();
+
+        // Get out-of-spec measurements (no limit)
+        $outOfSpecMeasurements = $tensionRecord->weavingMeasurements()
+            ->outOfSpec()
+            ->orderByPosition()
+            ->get();
+
+        // Get creel sides labels
+        $creelSides = WeavingMeasurement::getCreelSides();
+        
+        // Index problems by position for quick lookup
+        $problemsByPosition = $problems->groupBy('position_identifier');
+
+        $pdf = Pdf::loadView('pdf.weaving_tension_report', [
+            'record' => $tensionRecord,
+            'stats' => $stats,
+            'tensionStats' => $tensionStats,
+            'problems' => $problems,
+            'sideStats' => $sideStats,
+            'rowStats' => $rowStats,
+            'allMeasurements' => $allMeasurements,
+            'outOfSpecMeasurements' => $outOfSpecMeasurements,
+            'creelSides' => $creelSides,
+            'problemsByPosition' => $problemsByPosition,
+        ])->setPaper('A4', 'portrait');
+
+        $filename = sprintf(
+            'WeavingTension_%s_%s_%s.pdf',
+            $tensionRecord->machine_number ?? 'unknown',
+            $tensionRecord->production_order ?? $tensionRecord->item_number ?? 'unknown',
+            $tensionRecord->created_at->format('Y-m-d')
+        );
+
+        return $pdf->download($filename);
     }
 
     /**
@@ -170,31 +550,730 @@ class TensionRecordController extends Controller
     public function statistics(): JsonResponse
     {
         $stats = [
+            // Record counts by type
             'total_records' => TensionRecord::count(),
-            'twisting_records' => TensionRecord::byType('twisting')->count(),
-            'weaving_records' => TensionRecord::byType('weaving')->count(),
-            'recent_records' => TensionRecord::orderBy('created_at', 'desc')->take(5)->get(),
-            'operators' => TensionRecord::selectRaw("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator')) as operator")
-                ->whereNotNull('metadata->operator')
-                ->groupBy('operator')
-                ->pluck('operator'),
-            'machines' => TensionRecord::selectRaw("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number')) as machine")
-                ->whereNotNull('metadata->machine_number')
-                ->groupBy('machine')
-                ->pluck('machine'),
-            // ✅ Count records where problems array is not empty
-            'twisting_problems' => TensionRecord::byType('twisting')
-                ->whereRaw('JSON_LENGTH(problems) > 0')
-                ->count(),
+            'twisting_records' => TensionRecord::twisting()->count(),
+            'weaving_records' => TensionRecord::weaving()->count(),
 
-            'weaving_problems' => TensionRecord::byType('weaving')
-                ->whereRaw('JSON_LENGTH(problems) > 0')
-                ->count(),
+            // Recent records
+            'recent_records' => TensionRecord::with('user:id,name')
+                ->withCount('tensionProblems')
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get()
+                ->map(fn ($r) => $r->getSummary()),
+
+            // Unique operators
+            'operators' => TensionRecord::whereNotNull('operator')
+                ->distinct()
+                ->pluck('operator'),
+
+            // Unique machines
+            'machines' => TensionRecord::whereNotNull('machine_number')
+                ->distinct()
+                ->pluck('machine_number'),
+
+            // Problem statistics
+            'twisting_problems' => TensionProblem::whereHas('tensionRecord', function ($q) {
+                $q->twisting();
+            })->count(),
+
+            'weaving_problems' => TensionProblem::whereHas('tensionRecord', function ($q) {
+                $q->weaving();
+            })->count(),
+
+            // Unresolved problems
+            'unresolved_problems' => TensionProblem::unresolved()->count(),
+
+            // Critical problems needing attention
+            'critical_problems' => TensionProblem::critical()->unresolved()->count(),
+
+            // Records by status
+            'records_by_status' => [
+                'completed' => TensionRecord::completed()->count(),
+                'in_progress' => TensionRecord::byStatus(TensionRecord::STATUS_IN_PROGRESS)->count(),
+                'draft' => TensionRecord::byStatus(TensionRecord::STATUS_DRAFT)->count(),
+                'archived' => TensionRecord::byStatus(TensionRecord::STATUS_ARCHIVED)->count(),
+            ],
+
+            // Today's records
+            'today_records' => TensionRecord::whereDate('created_at', today())->count(),
+
+            // This week's records
+            'week_records' => TensionRecord::whereBetween('created_at', [
+                now()->startOfWeek(),
+                now()->endOfWeek(),
+            ])->count(),
         ];
 
         return response()->json([
             'status' => 'success',
-            'data' => $stats
+            'data' => $stats,
         ]);
+    }
+
+    /**
+     * Get problems for a specific record
+     */
+    public function problems(TensionRecord $tensionRecord): JsonResponse
+    {
+        $problems = $tensionRecord->tensionProblems()
+            ->with('resolver:id,name')
+            ->orderBy('reported_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $problems,
+        ]);
+    }
+
+    /**
+     * Add a problem to a record
+     */
+    public function addProblem(Request $request, TensionRecord $tensionRecord): JsonResponse
+    {
+        $validated = $request->validate([
+            'position_identifier' => 'required|string|max:100',
+            'problem_type' => ['nullable', Rule::in(array_keys(TensionProblem::getTypes()))],
+            'description' => 'required|string',
+            'measured_value' => 'nullable|numeric',
+            'expected_min' => 'nullable|numeric',
+            'expected_max' => 'nullable|numeric',
+            'severity' => ['nullable', Rule::in(array_keys(TensionProblem::getSeverityLevels()))],
+        ]);
+
+        $validated['problem_type'] = $validated['problem_type'] ?? TensionProblem::TYPE_OTHER;
+        $validated['severity'] = $validated['severity'] ?? TensionProblem::SEVERITY_MEDIUM;
+        $validated['reported_at'] = now();
+
+        $problem = $tensionRecord->addProblem($validated);
+        $problem->load('tensionRecord:id,record_type,machine_number');
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Problem added successfully',
+            'data' => $problem,
+        ], 201);
+    }
+
+    /**
+     * Update a problem
+     */
+    public function updateProblem(Request $request, TensionProblem $tensionProblem): JsonResponse
+    {
+        $validated = $request->validate([
+            'position_identifier' => 'sometimes|string|max:100',
+            'problem_type' => ['sometimes', Rule::in(array_keys(TensionProblem::getTypes()))],
+            'description' => 'sometimes|string',
+            'severity' => ['sometimes', Rule::in(array_keys(TensionProblem::getSeverityLevels()))],
+        ]);
+
+        $tensionProblem->update($validated);
+        $tensionProblem->load(['tensionRecord:id,record_type', 'resolver:id,name']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Problem updated successfully',
+            'data' => $tensionProblem,
+        ]);
+    }
+
+    /**
+     * Resolve a problem with optional repaired tension values
+     */
+    public function resolveProblem(Request $request, TensionProblem $tensionProblem): JsonResponse
+    {
+        $validated = $request->validate([
+            'resolution_notes' => 'nullable|string',
+            'repaired_max_value' => 'nullable|numeric|min:0',
+            'repaired_min_value' => 'nullable|numeric|min:0',
+        ]);
+
+        $tensionProblem->markAsResolved(
+            auth()->id(),
+            $validated['resolution_notes'] ?? null,
+            isset($validated['repaired_max_value']) ? (float) $validated['repaired_max_value'] : null,
+            isset($validated['repaired_min_value']) ? (float) $validated['repaired_min_value'] : null
+        );
+
+        $tensionProblem->load(['tensionRecord:id,record_type', 'resolver:id,name']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Problem marked as resolved',
+            'data' => $tensionProblem,
+        ]);
+    }
+
+    /**
+     * Get all problems across all records with filtering
+     */
+    public function allProblems(Request $request): JsonResponse
+    {
+        $query = TensionProblem::with(['tensionRecord:id,record_type,machine_number,operator', 'resolver:id,name']);
+
+        // Filter by record type
+        if ($request->has('record_type')) {
+            $query->whereHas('tensionRecord', function ($q) use ($request) {
+                $q->byType($request->record_type);
+            });
+        }
+
+        // Filter by severity
+        if ($request->has('severity')) {
+            $query->bySeverity($request->severity);
+        }
+
+        // Filter by status
+        if ($request->has('status')) {
+            $query->byStatus($request->status);
+        }
+
+        // Filter by problem type
+        if ($request->has('problem_type')) {
+            $query->ofType($request->problem_type);
+        }
+
+        // Show only unresolved
+        if ($request->boolean('unresolved_only')) {
+            $query->unresolved();
+        }
+
+        $query->orderBy('reported_at', 'desc');
+
+        $perPage = min($request->get('per_page', 20), 100);
+        $problems = $query->paginate($perPage);
+
+        return response()->json($problems);
+    }
+
+    /**
+     * Get measurements for a specific record
+     */
+    public function measurements(TensionRecord $tensionRecord): JsonResponse
+    {
+        if ($tensionRecord->isTwisting()) {
+            $measurements = $tensionRecord->twistingMeasurements()
+                ->orderBy('spindle_number')
+                ->get();
+        } else {
+            $measurements = $tensionRecord->weavingMeasurements()
+                ->orderByPosition()
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $measurements,
+            'stats' => $tensionRecord->getMeasurementStats(),
+        ]);
+    }
+
+    /**
+     * Get measurements grouped by position for a specific record
+     */
+    public function measurementsGrouped(TensionRecord $tensionRecord): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => $tensionRecord->getMeasurementsGrouped(),
+            'stats' => $tensionRecord->getMeasurementStats(),
+            'tension_stats' => $tensionRecord->getTensionStatistics(),
+        ]);
+    }
+
+    /**
+     * Get out-of-spec measurements for a specific record
+     */
+    public function outOfSpecMeasurements(TensionRecord $tensionRecord): JsonResponse
+    {
+        if ($tensionRecord->isTwisting()) {
+            $measurements = $tensionRecord->twistingMeasurements()
+                ->outOfSpec()
+                ->orderBy('spindle_number')
+                ->get();
+        } else {
+            $measurements = $tensionRecord->weavingMeasurements()
+                ->outOfSpec()
+                ->orderByPosition()
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $measurements,
+            'count' => $measurements->count(),
+        ]);
+    }
+
+    /**
+     * Update a single twisting measurement
+     */
+    public function updateTwistingMeasurement(
+        Request $request,
+        TensionRecord $tensionRecord,
+        int $spindleNumber
+    ): JsonResponse {
+        if (!$tensionRecord->isTwisting()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a twisting record',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'max_value' => 'nullable|numeric|min:0',
+            'min_value' => 'nullable|numeric|min:0',
+        ]);
+
+        $measurement = $tensionRecord->twistingMeasurements()
+            ->firstOrCreate(
+                ['spindle_number' => $spindleNumber],
+                ['tension_record_id' => $tensionRecord->id]
+            );
+
+        // Update values
+        if (array_key_exists('max_value', $validated)) {
+            $measurement->max_value = $validated['max_value'];
+        }
+        if (array_key_exists('min_value', $validated)) {
+            $measurement->min_value = $validated['min_value'];
+        }
+
+        // Update completion status and calculated fields
+        $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
+        $measurement->measured_at = now();
+
+        // Calculate avg and range
+        if ($measurement->is_complete) {
+            $measurement->avg_value = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->range_value = $measurement->max_value - $measurement->min_value;
+        } else {
+            $measurement->avg_value = null;
+            $measurement->range_value = null;
+        }
+
+        // Check if out of spec
+        if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
+            $tolerance = $tensionRecord->tension_tolerance ?? 0;
+            $measurement->is_out_of_spec = $measurement->avg_value < ($tensionRecord->spec_tension - $tolerance)
+                || $measurement->avg_value > ($tensionRecord->spec_tension + $tolerance);
+        }
+
+        $measurement->save();
+
+        // Update record progress
+        $tensionRecord->recalculateProgress();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Measurement updated successfully',
+            'data' => $measurement,
+        ]);
+    }
+
+    /**
+     * Update a single weaving measurement
+     */
+    public function updateWeavingMeasurement(
+        Request $request,
+        TensionRecord $tensionRecord,
+        string $side,
+        string $row,
+        int $column
+    ): JsonResponse {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'max_value' => 'nullable|numeric|min:0',
+            'min_value' => 'nullable|numeric|min:0',
+        ]);
+
+        // Validate position
+        if (!in_array($side, array_keys(WeavingMeasurement::getCreelSides()))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid creel side',
+            ], 400);
+        }
+
+        if (!in_array($row, array_keys(WeavingMeasurement::getRows()))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid row number',
+            ], 400);
+        }
+
+        $measurement = $tensionRecord->weavingMeasurements()
+            ->firstOrCreate(
+                [
+                    'creel_side' => $side,
+                    'row_number' => $row,
+                    'column_number' => $column,
+                ],
+                ['tension_record_id' => $tensionRecord->id]
+            );
+
+        // Update values
+        if (array_key_exists('max_value', $validated)) {
+            $measurement->max_value = $validated['max_value'];
+        }
+        if (array_key_exists('min_value', $validated)) {
+            $measurement->min_value = $validated['min_value'];
+        }
+
+        // Update completion status and calculated fields
+        $measurement->is_complete = $measurement->max_value !== null && $measurement->min_value !== null;
+        $measurement->measured_at = now();
+
+        // Calculate avg and range
+        if ($measurement->is_complete) {
+            $measurement->avg_value = ($measurement->max_value + $measurement->min_value) / 2;
+            $measurement->range_value = $measurement->max_value - $measurement->min_value;
+        } else {
+            $measurement->avg_value = null;
+            $measurement->range_value = null;
+        }
+
+        // Check if out of spec
+        if ($measurement->is_complete && $tensionRecord->spec_tension !== null) {
+            $tolerance = $tensionRecord->tension_tolerance ?? 0;
+            $measurement->is_out_of_spec = $measurement->avg_value < ($tensionRecord->spec_tension - $tolerance)
+                || $measurement->avg_value > ($tensionRecord->spec_tension + $tolerance);
+        }
+
+        $measurement->save();
+
+        // Update record progress
+        $tensionRecord->recalculateProgress();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Measurement updated successfully',
+            'data' => $measurement,
+        ]);
+    }
+
+    /**
+     * Get weaving measurements statistics by side
+     */
+    public function weavingStatsBySide(TensionRecord $tensionRecord): JsonResponse
+    {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => WeavingMeasurement::getStatsBySide($tensionRecord->id),
+        ]);
+    }
+
+    /**
+     * Get weaving measurements statistics by row
+     */
+    public function weavingStatsByRow(TensionRecord $tensionRecord): JsonResponse
+    {
+        if (!$tensionRecord->isWeaving()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This record is not a weaving record',
+            ], 400);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => WeavingMeasurement::getStatsByRow($tensionRecord->id),
+        ]);
+    }
+
+    /**
+     * Create problems from legacy array format
+     */
+    private function createProblemsFromArray(TensionRecord $record, array $problems): void
+    {
+        foreach ($problems as $problem) {
+            $positionIdentifier = $record->isTwisting()
+                ? ($problem['spindleNumber'] ?? $problem['spindle_number'] ?? 'unknown')
+                : ($problem['position'] ?? 'unknown');
+
+            $record->tensionProblems()->create([
+                'position_identifier' => $positionIdentifier,
+                'problem_type' => TensionProblem::TYPE_OTHER,
+                'description' => $problem['description'] ?? '',
+                'severity' => TensionProblem::SEVERITY_MEDIUM,
+                'resolution_status' => TensionProblem::STATUS_OPEN,
+                'reported_at' => isset($problem['timestamp'])
+                    ? \Carbon\Carbon::parse($problem['timestamp'])
+                    : now(),
+            ]);
+        }
+    }
+
+    /**
+     * Create measurements from legacy array format
+     * Returns the count of measurements created
+     */
+    private function createMeasurementsFromArray(TensionRecord $record, array $measurementData): int
+    {
+        $specTension = $record->spec_tension;
+        $tolerance = $record->tension_tolerance ?? 0;
+
+        if ($record->isTwisting()) {
+            return $this->createTwistingMeasurements($record, $measurementData, $specTension, $tolerance);
+        } else {
+            return $this->createWeavingMeasurements($record, $measurementData, $specTension, $tolerance);
+        }
+    }
+
+    /**
+     * Create twisting measurements from array
+     */
+    private function createTwistingMeasurements(
+        TensionRecord $record,
+        array $measurementData,
+        ?float $specTension,
+        float $tolerance
+    ): int {
+        $measurements = [];
+        $now = now();
+
+        foreach ($measurementData as $spindleNumber => $data) {
+            if (!is_numeric($spindleNumber) || !is_array($data)) {
+                Log::warning('Skipping invalid twisting measurement', [
+                    'record_id' => $record->id,
+                    'spindle_number' => $spindleNumber,
+                    'data' => $data,
+                ]);
+                continue;
+            }
+
+            $maxValue = $data['max'] ?? null;
+            $minValue = $data['min'] ?? null;
+            $isComplete = $maxValue !== null && $minValue !== null;
+
+            // Calculate avg and range
+            $avgValue = null;
+            $rangeValue = null;
+            if ($isComplete) {
+                $avgValue = ($maxValue + $minValue) / 2;
+                $rangeValue = $maxValue - $minValue;
+            }
+
+            // Check if out of spec
+            $isOutOfSpec = false;
+            if ($isComplete && $specTension !== null) {
+                $isOutOfSpec = $avgValue < ($specTension - $tolerance)
+                    || $avgValue > ($specTension + $tolerance);
+            }
+
+            $measurements[] = [
+                'tension_record_id' => $record->id,
+                'spindle_number' => (int) $spindleNumber,
+                'max_value' => $maxValue,
+                'min_value' => $minValue,
+                'avg_value' => $avgValue,
+                'range_value' => $rangeValue,
+                'is_complete' => $isComplete,
+                'is_out_of_spec' => $isOutOfSpec,
+                'measured_at' => $isComplete ? $now : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if (!empty($measurements)) {
+            TwistingMeasurement::insert($measurements);
+        }
+
+        return count($measurements);
+    }
+
+    /**
+     * Create weaving measurements from array
+     * FIXED VERSION with better error handling and logging
+     */
+    private function createWeavingMeasurements(
+        TensionRecord $record,
+        array $measurementData,
+        ?float $specTension,
+        float $tolerance
+    ): int {
+        $measurements = [];
+        $now = now();
+        $validSides = array_keys(WeavingMeasurement::getCreelSides());
+        $validRows = array_keys(WeavingMeasurement::getRows());
+        
+        Log::info('Processing weaving measurements', [
+            'record_id' => $record->id,
+            'data_keys' => array_keys($measurementData),
+            'valid_sides' => $validSides,
+            'valid_rows' => $validRows,
+        ]);
+
+        foreach ($measurementData as $side => $rows) {
+            // Normalize side format
+            $normalizedSide = strtoupper($side);
+            
+            if (!in_array($normalizedSide, $validSides)) {
+                Log::warning('Invalid creel side', [
+                    'record_id' => $record->id,
+                    'side' => $side,
+                    'normalized' => $normalizedSide,
+                    'valid_sides' => $validSides,
+                ]);
+                continue;
+            }
+
+            if (!is_array($rows)) {
+                Log::warning('Rows is not an array', [
+                    'record_id' => $record->id,
+                    'side' => $normalizedSide,
+                    'rows_type' => gettype($rows),
+                ]);
+                continue;
+            }
+
+            Log::info('Processing side', [
+                'record_id' => $record->id,
+                'side' => $normalizedSide,
+                'row_keys' => array_keys($rows),
+            ]);
+
+            foreach ($rows as $row => $columns) {
+                if (!is_array($columns)) {
+                    Log::warning('Columns is not an array', [
+                        'record_id' => $record->id,
+                        'side' => $normalizedSide,
+                        'row' => $row,
+                        'columns_type' => gettype($columns),
+                    ]);
+                    continue;
+                }
+
+                // Normalize row format - handle A-E or numeric 1-5 formats
+                $rowNumber = strtoupper($row);
+                if (!in_array($rowNumber, $validRows)) {
+                    // Try to convert numeric row (1-5) to letter format (A-E)
+                    if (is_numeric($row) && $row >= 1 && $row <= 5) {
+                        $rowNumber = chr(64 + (int)$row); // 1=>A, 2=>B, 3=>C, 4=>D, 5=>E
+                    } else {
+                        Log::warning('Invalid row format', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $row,
+                            'valid_rows' => $validRows,
+                        ]);
+                        continue;
+                    }
+                }
+
+                Log::info('Processing row', [
+                    'record_id' => $record->id,
+                    'side' => $normalizedSide,
+                    'row' => $rowNumber,
+                    'column_count' => count($columns),
+                    'column_keys' => array_keys($columns),
+                ]);
+
+                foreach ($columns as $column => $data) {
+                    if (!is_numeric($column)) {
+                        Log::warning('Column is not numeric', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $rowNumber,
+                            'column' => $column,
+                        ]);
+                        continue;
+                    }
+
+                    if (!is_array($data)) {
+                        Log::warning('Measurement data is not an array', [
+                            'record_id' => $record->id,
+                            'side' => $normalizedSide,
+                            'row' => $rowNumber,
+                            'column' => $column,
+                            'data_type' => gettype($data),
+                        ]);
+                        continue;
+                    }
+
+                    $maxValue = $data['max'] ?? null;
+                    $minValue = $data['min'] ?? null;
+                    $isComplete = $maxValue !== null && $minValue !== null;
+
+                    // Calculate avg and range
+                    $avgValue = null;
+                    $rangeValue = null;
+                    if ($isComplete) {
+                        $avgValue = ($maxValue + $minValue) / 2;
+                        $rangeValue = $maxValue - $minValue;
+                    }
+
+                    // Check if out of spec
+                    $isOutOfSpec = false;
+                    if ($isComplete && $specTension !== null) {
+                        $isOutOfSpec = $avgValue < ($specTension - $tolerance)
+                            || $avgValue > ($specTension + $tolerance);
+                    }
+
+                    $measurements[] = [
+                        'tension_record_id' => $record->id,
+                        'creel_side' => $normalizedSide,
+                        'row_number' => $rowNumber,
+                        'column_number' => (int) $column,
+                        'max_value' => $maxValue,
+                        'min_value' => $minValue,
+                        'avg_value' => $avgValue,
+                        'range_value' => $rangeValue,
+                        'is_complete' => $isComplete,
+                        'is_out_of_spec' => $isOutOfSpec,
+                        'measured_at' => $isComplete ? $now : null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+            }
+        }
+
+        Log::info('Weaving measurements prepared', [
+            'record_id' => $record->id,
+            'total_measurements' => count($measurements),
+        ]);
+
+        // Insert in chunks to avoid memory issues
+        $insertedCount = 0;
+        foreach (array_chunk($measurements, 500) as $chunk) {
+            WeavingMeasurement::insert($chunk);
+            $insertedCount += count($chunk);
+        }
+
+        Log::info('Weaving measurements inserted', [
+            'record_id' => $record->id,
+            'inserted_count' => $insertedCount,
+        ]);
+
+        return $insertedCount;
+    }
+
+    /**
+     * Convert string to numeric or null
+     */
+    private function numericOrNull($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (float) $value : null;
     }
 }

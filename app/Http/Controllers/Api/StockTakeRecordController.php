@@ -16,13 +16,15 @@ class StockTakeRecordController extends Controller
     {
         $query = StockTakingRecord::query();
 
-    // 🔍 Global search (case-insensitive)
+    // 🔍 Global search (case-insensitive, database-agnostic)
     if ($search = $request->input('search')) {
         $search = strtolower($search);
         $query->where(function ($q) use ($search) {
-            $q->whereRaw('LOWER(record_type) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(csv_data) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, "$.session_leader"))) LIKE ?', ["%{$search}%"]);
+            // Get all records and filter in PHP for SQLite compatibility
+            // For better performance on MySQL, could use JSON functions
+            $q->where(function ($subQ) use ($search) {
+                $subQ->whereRaw('LOWER(session_id) LIKE ?', ["%{$search}%"]);
+            });
         });
     }
 

@@ -90,6 +90,7 @@ export default function TwistingNumpad({
     formData: TwistingFormData;
     problems: TwistingProblem[];
     onReportProblem?: (spindleNumber: number) => void;
+    onAutoReportProblem?: (spindleNumber: number, description: string) => void;
     onOpenRecorder?: () => void;
     onDataCleared?: () => void;
 }) {
@@ -152,6 +153,15 @@ export default function TwistingNumpad({
             const otherValue =
                 valueType === 'Max' ? currentData.min : currentData.max;
             const bothWillBeFilled = otherValue !== null; // The other value already exists
+
+            // Check if the submitted value is out of spec and auto-report problem
+            const isValueOutOfSpec = numValue < minSpec || numValue > maxSpec;
+            if (isValueOutOfSpec && specTens > 0) {
+                const problemType = numValue > maxSpec ? 'High Tension' : 'Low Tension';
+                const description = `${problemType}: ${valueType} value ${numValue.toFixed(1)} cN is outside spec range (${minSpec.toFixed(1)} - ${maxSpec.toFixed(1)} cN)`;
+                console.log(`Auto-reporting problem for Spindle ${counter}: ${description}`);
+                onAutoReportProblem?.(counter, description);
+            }
 
             // Store the value
             setSpindleData((prev) => {

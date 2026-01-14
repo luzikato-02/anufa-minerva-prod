@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('tension_records', function (Blueprint $table) {
             $table->id();
-            $table->enum('record_type', ['twisting', 'weaving']);
+            $table->string('record_type', 20); // Using string instead of enum for SQLite compatibility
             $table->longText('csv_data'); // Store the complete CSV content
             $table->json('form_data'); // Store form parameters
             $table->json('measurement_data'); // Store raw measurement data
@@ -30,27 +30,32 @@ return new class extends Migration
             $table->index('user_id');
         });
 
-        // Add generated columns + indexes
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN operator_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_operator ON tension_records (operator_generated)");
+        // Add generated columns + indexes only for MySQL
+        // SQLite doesn't support generated columns with JSON functions
+        $driver = DB::connection()->getDriverName();
+        
+        if ($driver === 'mysql') {
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN operator_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_operator ON tension_records (operator_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN machine_number_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_machine ON tension_records (machine_number_generated)");
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN machine_number_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_machine ON tension_records (machine_number_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN item_number_generated VARCHAR(255)
-            AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number'))) STORED
-        ");
-        DB::statement("CREATE INDEX idx_item ON tension_records (item_number_generated)");
+            DB::statement("
+                ALTER TABLE tension_records
+                ADD COLUMN item_number_generated VARCHAR(255)
+                AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.item_number'))) STORED
+            ");
+            DB::statement("CREATE INDEX idx_item ON tension_records (item_number_generated)");
+        }
     }
 
     /**
