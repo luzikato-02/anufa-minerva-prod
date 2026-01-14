@@ -16,7 +16,7 @@ import {
 import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, Shield, Users, Key, Settings } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, Shield, Users, Key, Settings, CloudCog } from 'lucide-react';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
@@ -50,6 +50,11 @@ const adminNavItems: NavItem[] = [
         title: 'Permission Management',
         href: '/admin/permissions',
         icon: Key,
+    },
+    {
+        title: 'Data Sync',
+        href: '/admin/data-sync',
+        icon: CloudCog,
     },
 ];
 

@@ -1,125 +1,52 @@
 <?php
 
+use App\Http\Controllers\Api\DataSyncController;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
-use App\Http\Controllers\Api\StockTakeRecordController;
-use App\Http\Controllers\Api\TensionRecordController;
-use App\Http\Controllers\Api\FinishEarlierRecordController;
+use Illuminate\Support\Facades\Route;
 
-// Mobile routes group
-Route::prefix('mobile')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
 
-    // Public routes (no auth)
-    Route::post('/login', function (Request $request) {
-        $request->validate([
-            'login' => 'required|string', // can be email or username
-            'password' => 'required|string',
-        ]);
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
 
-        $login = $request->login;
-
-        $user = User::where('email', $login)
-                    ->orWhere('username', $login)
-                    ->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $token = $user->createToken('mobile-app-token')->plainTextToken;
-
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user,
-        ]);
-    });
-
-    // Routes that require authentication
-    Route::middleware(['throttle:60,1','auth:sanctum'])->group(function () {
-
-        Route::post('/logout', function (Request $request) {
-            $request->user()->currentAccessToken()->delete();
-            return response()->json(['message' => 'Logged out']);
-        });
-
-        // Tension features endpoints
-        Route::resource('tension-records', TensionRecordController::class)->only([
-            'index', 'store', 'show', 'destroy', 'update'
-        ]);
-
-        Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
-            ->name('api.tension-records.download');
-
-        Route::get('tension-records/{tensionRecord}/pdf', [TensionRecordController::class, 'exportPdf'])
-            ->name('api.tension-records.pdf');
+// Data Sync API routes (for Electron desktop app)
+Route::prefix('sync')->name('sync.')->group(function () {
+    // Device registration (no auth required for initial registration)
+    Route::post('register-device', [DataSyncController::class, 'registerDevice'])
+        ->name('register-device');
+    
+    // Protected sync endpoints
+    Route::middleware('auth:sanctum')->group(function () {
+        // Sync status
+        Route::get('status', [DataSyncController::class, 'getSyncStatus'])
+            ->name('status');
         
-        Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
-            ->name('api.tension-records.statistics');
-
-        // Tension Problems endpoints
-        Route::get('tension-problems', [TensionRecordController::class, 'allProblems'])
-            ->name('api.tension-problems.index');
+        // Upload data from client to server
+        Route::post('upload', [DataSyncController::class, 'upload'])
+            ->name('upload');
         
-        Route::get('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'problems'])
-            ->name('api.tension-records.problems');
+        // Download data from server to client
+        Route::get('download', [DataSyncController::class, 'download'])
+            ->name('download');
         
-        Route::post('tension-records/{tensionRecord}/problems', [TensionRecordController::class, 'addProblem'])
-            ->name('api.tension-records.problems.store');
+        // Conflicts management
+        Route::get('conflicts', [DataSyncController::class, 'getConflicts'])
+            ->name('conflicts');
+        Route::post('conflicts/{id}/resolve', [DataSyncController::class, 'resolveConflict'])
+            ->name('conflicts.resolve');
         
-        Route::patch('tension-problems/{tensionProblem}/resolve', [TensionRecordController::class, 'resolveProblem'])
-            ->name('api.tension-problems.resolve');
-
-        // Tension Measurements endpoints
-        Route::get('tension-records/{tensionRecord}/measurements', [TensionRecordController::class, 'measurements'])
-            ->name('api.tension-records.measurements');
-        
-        Route::get('tension-records/{tensionRecord}/measurements/grouped', [TensionRecordController::class, 'measurementsGrouped'])
-            ->name('api.tension-records.measurements.grouped');
-        
-        Route::get('tension-records/{tensionRecord}/measurements/out-of-spec', [TensionRecordController::class, 'outOfSpecMeasurements'])
-            ->name('api.tension-records.measurements.out-of-spec');
-
-        // Twisting measurement update
-        Route::patch('tension-records/{tensionRecord}/twisting-measurements/{spindleNumber}', [TensionRecordController::class, 'updateTwistingMeasurement'])
-            ->name('api.tension-records.twisting-measurements.update')
-            ->where('spindleNumber', '[0-9]+');
-
-        // Weaving measurement update
-        Route::patch('tension-records/{tensionRecord}/weaving-measurements/{side}/{row}/{column}', [TensionRecordController::class, 'updateWeavingMeasurement'])
-            ->name('api.tension-records.weaving-measurements.update')
-            ->where('column', '[0-9]+');
-
-        // Weaving statistics endpoints
-        Route::get('tension-records/{tensionRecord}/weaving-stats/by-side', [TensionRecordController::class, 'weavingStatsBySide'])
-            ->name('api.tension-records.weaving-stats.by-side');
-        
-        Route::get('tension-records/{tensionRecord}/weaving-stats/by-row', [TensionRecordController::class, 'weavingStatsByRow'])
-            ->name('api.tension-records.weaving-stats.by-row');
-
-        Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
-            ->whereIn('type', ['twisting', 'weaving'])
-            ->name('api.tension-records.by-type');
-
-        // Stock taking features endpoints
-        Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
-        Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
-        Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch']);
-        Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus']);
-        Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
-        Route::resource('stock-take-records', StockTakeRecordController::class)->only([
-            'index', 'store', 'show', 'destroy', 'update'
-        ]);
-
-        // Finish Earlier Record Endpoints
-        Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
-        Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
-        Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
-        Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
-        Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
-        Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
-        Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish']);
-        Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy']);
+        // Sync logs
+        Route::get('logs', [DataSyncController::class, 'getSyncLogs'])
+            ->name('logs');
     });
 });

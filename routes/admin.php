@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\UserManagementController;
+use App\Http\Controllers\Admin\DataSyncManagementController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -34,4 +35,23 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     // Users Management
     Route::resource('users', UserManagementController::class)->except(['create', 'edit', 'show']);
     Route::patch('users/{user}/roles', [UserManagementController::class, 'updateRoles'])->name('users.update-roles');
+
+    // Data Sync Management (for master users)
+    Route::prefix('data-sync')->name('data-sync.')->group(function () {
+        Route::get('/', [DataSyncManagementController::class, 'index'])->name('index');
+        
+        // Conflicts Management
+        Route::get('conflicts', [DataSyncManagementController::class, 'conflicts'])->name('conflicts');
+        Route::get('conflicts/{id}', [DataSyncManagementController::class, 'showConflict'])->name('conflicts.show');
+        Route::post('conflicts/{id}/resolve', [DataSyncManagementController::class, 'resolveConflict'])->name('conflicts.resolve');
+        Route::post('conflicts/bulk-resolve', [DataSyncManagementController::class, 'bulkResolveConflicts'])->name('conflicts.bulk-resolve');
+        
+        // Sync Logs
+        Route::get('logs', [DataSyncManagementController::class, 'syncLogs'])->name('logs');
+        
+        // Devices Management
+        Route::get('devices', [DataSyncManagementController::class, 'devices'])->name('devices');
+        Route::post('devices/{id}/deactivate', [DataSyncManagementController::class, 'deactivateDevice'])->name('devices.deactivate');
+        Route::post('devices/{id}/reactivate', [DataSyncManagementController::class, 'reactivateDevice'])->name('devices.reactivate');
+    });
 });
