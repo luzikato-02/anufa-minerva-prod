@@ -30,3 +30,4 @@ deploy.sh
 .vercel
 id_rsa.pub
 .vercel
+out/
