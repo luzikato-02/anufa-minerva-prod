@@ -5,12 +5,10 @@ on:
     tags:
       - 'v*'
     branches:
-      - main
-      - master
+      - win-build-v1
   pull_request:
     branches:
-      - main
-      - master
+      - win-build-v1
   workflow_dispatch:
     inputs:
       version:
