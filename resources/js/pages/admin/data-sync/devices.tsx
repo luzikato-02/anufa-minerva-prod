@@ -1,11 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { IconArrowLeft, IconDeviceDesktop, IconDeviceMobile, IconPower, IconPowerOff } from '@tabler/icons-react';
+import { IconArrowLeft, IconDeviceDesktop, IconDeviceMobile, IconPower, IconPlugOff } from '@tabler/icons-react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -189,7 +189,7 @@ export default function DevicesManagement({ devices, filters }: Props) {
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="secondary">
-                                                        <IconPowerOff className="h-3 w-3 mr-1" />
+                                                        <IconPlugOff className="h-3 w-3 mr-1" />
                                                         Inactive
                                                     </Badge>
                                                 )}

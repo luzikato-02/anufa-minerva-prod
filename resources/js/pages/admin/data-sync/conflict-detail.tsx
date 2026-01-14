@@ -1,14 +1,30 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { IconArrowLeft, IconCheck, IconX, IconGitMerge, IconTrash } from '@tabler/icons-react';
+import { Head, Link, router } from '@inertiajs/react';
+import {
+    IconArrowLeft,
+    IconCheck,
+    IconGitMerge,
+    IconTrash,
+} from '@tabler/icons-react';
 import { useState } from 'react';
+
 import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from '@/components/ui/tabs';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -19,6 +35,10 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+
+/* =========================
+   Types
+========================= */
 
 interface Conflict {
     id: number;
@@ -49,23 +69,32 @@ interface Props {
     diff: Diff;
 }
 
+/* =========================
+   Component
+========================= */
+
 export default function ConflictDetail({ conflict, diff }: Props) {
     const [showResolveDialog, setShowResolveDialog] = useState(false);
-    const [resolveAction, setResolveAction] = useState<string>('');
+    const [resolveAction, setResolveAction] = useState('');
     const [notes, setNotes] = useState('');
+    const [processing, setProcessing] = useState(false);
+
     const [mergedData, setMergedData] = useState<Record<string, unknown>>(() => {
-        // Initialize merged data with remote data as base, then override with local for conflict fields
         const merged: Record<string, unknown> = { ...conflict.remote_data };
-        conflict.conflict_fields.forEach(field => {
-            merged[field] = conflict.local_data[field]; // Default to local values
+        conflict.conflict_fields.forEach((field) => {
+            merged[field] = conflict.local_data[field];
         });
         return merged;
     });
 
-    const { post, processing } = useForm();
+    const isPending = conflict.resolution_status === 'pending';
 
-    const getTableDisplayName = (tableName: string) => {
-        const names: Record<string, string> = {
+    /* =========================
+       Helpers
+    ========================= */
+
+    const getTableDisplayName = (table: string) => {
+        const map: Record<string, string> = {
             tension_records: 'Tension Records',
             twisting_measurements: 'Twisting Measurements',
             weaving_measurements: 'Weaving Measurements',
@@ -73,7 +102,7 @@ export default function ConflictDetail({ conflict, diff }: Props) {
             stock_taking_records: 'Stock Taking Records',
             finish_earlier_records: 'Finish Earlier Records',
         };
-        return names[tableName] || tableName;
+        return map[table] ?? table;
     };
 
     const formatValue = (value: unknown): string => {
@@ -82,19 +111,21 @@ export default function ConflictDetail({ conflict, diff }: Props) {
         return String(value);
     };
 
-    const formatDate = (dateString: string | null) => {
-        if (!dateString) return '-';
-        return new Date(dateString).toLocaleString();
-    };
+    const formatDate = (date: string | null) =>
+        date ? new Date(date).toLocaleString() : '-';
 
     const getStatusBadge = (status: string) => {
-        const variants: Record<string, 'destructive' | 'default' | 'secondary' | 'outline'> = {
+        const variants: Record<
+            string,
+            'destructive' | 'default' | 'secondary' | 'outline'
+        > = {
             pending: 'destructive',
             local_wins: 'default',
             remote_wins: 'default',
             merged: 'secondary',
             dismissed: 'outline',
         };
+
         const labels: Record<string, string> = {
             pending: 'Pending Resolution',
             local_wins: 'Resolved - Local Wins',
@@ -102,8 +133,38 @@ export default function ConflictDetail({ conflict, diff }: Props) {
             merged: 'Resolved - Merged',
             dismissed: 'Dismissed',
         };
-        return <Badge variant={variants[status] || 'default'}>{labels[status] || status}</Badge>;
+
+        return (
+            <Badge variant={variants[status] ?? 'default'}>
+                {labels[status] ?? status}
+            </Badge>
+        );
     };
+
+    /* =========================
+       Merge handling
+    ========================= */
+
+    const updateMergedField = (field: string, value: string) => {
+        let parsed: unknown = value;
+
+        try {
+            if (value.startsWith('{') || value.startsWith('[')) {
+                parsed = JSON.parse(value);
+            }
+        } catch {
+            parsed = value;
+        }
+
+        setMergedData((prev) => ({
+            ...prev,
+            [field]: parsed,
+        }));
+    };
+
+    /* =========================
+       Resolve
+    ========================= */
 
     const handleResolve = (action: string) => {
         setResolveAction(action);
@@ -111,42 +172,41 @@ export default function ConflictDetail({ conflict, diff }: Props) {
     };
 
     const confirmResolve = () => {
-        const data: Record<string, unknown> = {
+        setProcessing(true);
+
+        const payload: {
+            resolution: string;
+            notes: string;
+            merged_data?: string;
+        } = {
             resolution: resolveAction,
-            notes: notes,
+            notes,
         };
 
         if (resolveAction === 'merged') {
-            data.merged_data = mergedData;
+            payload.merged_data = JSON.stringify(mergedData);
         }
 
-        router.post(`/admin/data-sync/conflicts/${conflict.id}/resolve`, data, {
-            onSuccess: () => {
-                setShowResolveDialog(false);
-            },
-        });
-    };
-
-    const updateMergedField = (field: string, value: string) => {
-        // Try to parse as JSON if it looks like an object/array
-        let parsedValue: unknown = value;
-        try {
-            if (value.startsWith('{') || value.startsWith('[')) {
-                parsedValue = JSON.parse(value);
+        router.post(
+            `/admin/data-sync/conflicts/${conflict.id}/resolve`,
+            payload,
+            {
+                onSuccess: () => setShowResolveDialog(false),
+                onFinish: () => setProcessing(false),
             }
-        } catch {
-            // Keep as string if parsing fails
-        }
-        setMergedData({ ...mergedData, [field]: parsedValue });
+        );
     };
 
-    const isPending = conflict.resolution_status === 'pending';
+    /* =========================
+       Render
+    ========================= */
 
     return (
         <AppLayout>
             <Head title={`Conflict #${conflict.id}`} />
-            
+
             <div className="space-y-6 p-6">
+                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Button asChild variant="ghost" size="sm">
@@ -156,269 +216,154 @@ export default function ConflictDetail({ conflict, diff }: Props) {
                             </Link>
                         </Button>
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight">Conflict #{conflict.id}</h1>
+                            <h1 className="text-3xl font-bold">
+                                Conflict #{conflict.id}
+                            </h1>
                             <p className="text-muted-foreground">
-                                {getTableDisplayName(conflict.table_name)} • Created {formatDate(conflict.created_at)}
+                                {getTableDisplayName(conflict.table_name)} •
+                                Created {formatDate(conflict.created_at)}
                             </p>
                         </div>
                     </div>
                     {getStatusBadge(conflict.resolution_status)}
                 </div>
 
-                {/* Conflict Info */}
-                <div className="grid gap-6 md:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Conflict Information</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <Label className="text-muted-foreground">Table</Label>
-                                    <p className="font-medium">{getTableDisplayName(conflict.table_name)}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Client Identifier</Label>
-                                    <p className="font-mono text-sm">{conflict.client_identifier || '-'}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Local Record ID</Label>
-                                    <p className="font-medium">{conflict.local_record_id}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Remote Record ID</Label>
-                                    <p className="font-medium">{conflict.remote_record_id}</p>
-                                </div>
-                            </div>
-                            <div>
-                                <Label className="text-muted-foreground">Conflicting Fields</Label>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                    {conflict.conflict_fields.map((field) => (
-                                        <Badge key={field} variant="secondary">{field}</Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {!isPending && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Resolution Details</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div>
-                                    <Label className="text-muted-foreground">Resolved By</Label>
-                                    <p className="font-medium">{conflict.resolved_by?.name || 'Unknown'}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Resolved At</Label>
-                                    <p className="font-medium">{formatDate(conflict.resolved_at)}</p>
-                                </div>
-                                {conflict.resolution_notes && (
-                                    <div>
-                                        <Label className="text-muted-foreground">Notes</Label>
-                                        <p className="text-sm">{conflict.resolution_notes}</p>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
-
-                {/* Data Comparison */}
+                {/* Comparison */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Data Comparison</CardTitle>
                         <CardDescription>
-                            Compare local (client) and remote (server) data side by side
+                            Local vs Remote values
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="diff">
                             <TabsList>
-                                <TabsTrigger value="diff">Differences Only</TabsTrigger>
-                                <TabsTrigger value="local">Full Local Data</TabsTrigger>
-                                <TabsTrigger value="remote">Full Remote Data</TabsTrigger>
-                                {isPending && <TabsTrigger value="merge">Merge Editor</TabsTrigger>}
+                                <TabsTrigger value="diff">Diff</TabsTrigger>
+                                <TabsTrigger value="local">Local</TabsTrigger>
+                                <TabsTrigger value="remote">Remote</TabsTrigger>
+                                {isPending && (
+                                    <TabsTrigger value="merge">
+                                        Merge
+                                    </TabsTrigger>
+                                )}
                             </TabsList>
 
                             <TabsContent value="diff" className="mt-4">
-                                <div className="space-y-4">
-                                    {Object.entries(diff).map(([field, values]) => (
-                                        <div key={field} className="border rounded-lg p-4">
-                                            <Label className="font-bold text-lg mb-2 block">{field}</Label>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-blue-50 dark:bg-blue-950 rounded-md p-3">
-                                                    <Label className="text-sm text-blue-600 dark:text-blue-400">Local (Client)</Label>
-                                                    <pre className="text-sm mt-1 whitespace-pre-wrap break-all">
-                                                        {formatValue(values.local)}
-                                                    </pre>
-                                                </div>
-                                                <div className="bg-green-50 dark:bg-green-950 rounded-md p-3">
-                                                    <Label className="text-sm text-green-600 dark:text-green-400">Remote (Server)</Label>
-                                                    <pre className="text-sm mt-1 whitespace-pre-wrap break-all">
-                                                        {formatValue(values.remote)}
-                                                    </pre>
-                                                </div>
-                                            </div>
+                                {Object.entries(diff).map(([field, v]) => (
+                                    <div
+                                        key={field}
+                                        className="border rounded-lg p-4 mb-4"
+                                    >
+                                        <Label className="font-bold">
+                                            {field}
+                                        </Label>
+                                        <div className="grid grid-cols-2 gap-4 mt-2">
+                                            <pre className="bg-blue-50 p-2 rounded text-sm">
+                                                {formatValue(v.local)}
+                                            </pre>
+                                            <pre className="bg-green-50 p-2 rounded text-sm">
+                                                {formatValue(v.remote)}
+                                            </pre>
                                         </div>
-                                    ))}
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="local" className="mt-4">
-                                <div className="bg-muted rounded-lg p-4">
-                                    <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
-                                        {JSON.stringify(conflict.local_data, null, 2)}
-                                    </pre>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="remote" className="mt-4">
-                                <div className="bg-muted rounded-lg p-4">
-                                    <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
-                                        {JSON.stringify(conflict.remote_data, null, 2)}
-                                    </pre>
-                                </div>
+                                    </div>
+                                ))}
                             </TabsContent>
 
                             {isPending && (
                                 <TabsContent value="merge" className="mt-4">
-                                    <div className="space-y-4">
-                                        <p className="text-sm text-muted-foreground">
-                                            Edit the values below to create a merged record. Only conflicting fields are shown.
-                                        </p>
-                                        {conflict.conflict_fields.map((field) => (
-                                            <div key={field} className="space-y-2">
-                                                <Label>{field}</Label>
-                                                <div className="grid grid-cols-3 gap-4 items-start">
-                                                    <div className="space-y-1">
-                                                        <span className="text-xs text-muted-foreground">Local</span>
-                                                        <div className="bg-muted p-2 rounded text-sm">
-                                                            {formatValue(conflict.local_data[field])}
-                                                        </div>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm"
-                                                            onClick={() => updateMergedField(field, formatValue(conflict.local_data[field]))}
-                                                        >
-                                                            Use Local →
-                                                        </Button>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <span className="text-xs text-muted-foreground">Merged Value</span>
-                                                        <Textarea
-                                                            value={formatValue(mergedData[field])}
-                                                            onChange={(e) => updateMergedField(field, e.target.value)}
-                                                            className="font-mono text-sm"
-                                                            rows={3}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <span className="text-xs text-muted-foreground">Remote</span>
-                                                        <div className="bg-muted p-2 rounded text-sm">
-                                                            {formatValue(conflict.remote_data[field])}
-                                                        </div>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm"
-                                                            onClick={() => updateMergedField(field, formatValue(conflict.remote_data[field]))}
-                                                        >
-                                                            ← Use Remote
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    {conflict.conflict_fields.map((field) => (
+                                        <div key={field} className="mb-4">
+                                            <Label>{field}</Label>
+                                            <Textarea
+                                                className="font-mono"
+                                                rows={3}
+                                                value={formatValue(
+                                                    mergedData[field]
+                                                )}
+                                                onChange={(e) =>
+                                                    updateMergedField(
+                                                        field,
+                                                        e.target.value
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                    ))}
                                 </TabsContent>
                             )}
                         </Tabs>
                     </CardContent>
                 </Card>
 
-                {/* Resolution Actions */}
+                {/* Actions */}
                 {isPending && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Resolve Conflict</CardTitle>
-                            <CardDescription>
-                                Choose how to resolve this data conflict
-                            </CardDescription>
+                            <CardTitle>Resolve</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <Button 
-                                    onClick={() => handleResolve('local_wins')}
-                                    variant="outline"
-                                    className="h-auto flex-col py-4"
-                                >
-                                    <IconCheck className="h-6 w-6 mb-2 text-blue-500" />
-                                    <span className="font-medium">Keep Local</span>
-                                    <span className="text-xs text-muted-foreground">Use client data</span>
-                                </Button>
-                                <Button 
-                                    onClick={() => handleResolve('remote_wins')}
-                                    variant="outline"
-                                    className="h-auto flex-col py-4"
-                                >
-                                    <IconCheck className="h-6 w-6 mb-2 text-green-500" />
-                                    <span className="font-medium">Keep Remote</span>
-                                    <span className="text-xs text-muted-foreground">Use server data</span>
-                                </Button>
-                                <Button 
-                                    onClick={() => handleResolve('merged')}
-                                    variant="outline"
-                                    className="h-auto flex-col py-4"
-                                >
-                                    <IconGitMerge className="h-6 w-6 mb-2 text-purple-500" />
-                                    <span className="font-medium">Merge Data</span>
-                                    <span className="text-xs text-muted-foreground">Use edited values</span>
-                                </Button>
-                                <Button 
-                                    onClick={() => handleResolve('dismissed')}
-                                    variant="outline"
-                                    className="h-auto flex-col py-4"
-                                >
-                                    <IconTrash className="h-6 w-6 mb-2 text-gray-500" />
-                                    <span className="font-medium">Dismiss</span>
-                                    <span className="text-xs text-muted-foreground">Ignore conflict</span>
-                                </Button>
-                            </div>
+                        <CardContent className="grid grid-cols-4 gap-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => handleResolve('local_wins')}
+                            >
+                                <IconCheck className="mr-2" />
+                                Local
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={() => handleResolve('remote_wins')}
+                            >
+                                <IconCheck className="mr-2" />
+                                Remote
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={() => handleResolve('merged')}
+                            >
+                                <IconGitMerge className="mr-2" />
+                                Merge
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={() => handleResolve('dismissed')}
+                            >
+                                <IconTrash className="mr-2" />
+                                Dismiss
+                            </Button>
                         </CardContent>
                     </Card>
                 )}
             </div>
 
-            {/* Resolution Confirmation Dialog */}
-            <AlertDialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
-                <AlertDialogContent className="max-w-lg">
+            {/* Confirm Dialog */}
+            <AlertDialog
+                open={showResolveDialog}
+                onOpenChange={setShowResolveDialog}
+            >
+                <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Confirm Resolution</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            Confirm Resolution
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {resolveAction === 'local_wins' && 'The local (client) data will be applied to the server.'}
-                            {resolveAction === 'remote_wins' && 'The remote (server) data will be kept. No changes will be made.'}
-                            {resolveAction === 'merged' && 'The merged data you edited will be applied to the server.'}
-                            {resolveAction === 'dismissed' && 'This conflict will be marked as dismissed without any data changes.'}
+                            Are you sure you want to resolve this conflict?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div>
-                            <Label htmlFor="notes">Resolution Notes (optional)</Label>
-                            <Textarea
-                                id="notes"
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                placeholder="Add any notes about this resolution..."
-                                rows={3}
-                            />
-                        </div>
-                    </div>
+
+                    <Textarea
+                        placeholder="Resolution notes (optional)"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                    />
+
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmResolve} disabled={processing}>
-                            Confirm Resolution
+                        <AlertDialogAction
+                            disabled={processing}
+                            onClick={confirmResolve}
+                        >
+                            Confirm
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
