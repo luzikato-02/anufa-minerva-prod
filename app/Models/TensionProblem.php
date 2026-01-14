@@ -21,6 +21,10 @@ class TensionProblem extends Model
         'problem_type',
         'description',
         'measured_value',
+        'original_max_value',
+        'original_min_value',
+        'repaired_max_value',
+        'repaired_min_value',
         'expected_min',
         'expected_max',
         'severity',
@@ -38,6 +42,10 @@ class TensionProblem extends Model
      */
     protected $casts = [
         'measured_value' => 'decimal:2',
+        'original_max_value' => 'decimal:2',
+        'original_min_value' => 'decimal:2',
+        'repaired_max_value' => 'decimal:2',
+        'repaired_min_value' => 'decimal:2',
         'expected_min' => 'decimal:2',
         'expected_max' => 'decimal:2',
         'reported_at' => 'datetime',
@@ -201,16 +209,30 @@ class TensionProblem extends Model
     }
 
     /**
-     * Mark the problem as resolved
+     * Mark the problem as resolved with optional repaired values
      */
-    public function markAsResolved(?int $userId = null, ?string $notes = null): self
-    {
-        $this->update([
+    public function markAsResolved(
+        ?int $userId = null,
+        ?string $notes = null,
+        ?float $repairedMaxValue = null,
+        ?float $repairedMinValue = null
+    ): self {
+        $updateData = [
             'resolution_status' => self::STATUS_RESOLVED,
             'resolved_at' => now(),
             'resolved_by' => $userId ?? auth()->id(),
             'resolution_notes' => $notes,
-        ]);
+        ];
+
+        // Add repaired values if provided
+        if ($repairedMaxValue !== null) {
+            $updateData['repaired_max_value'] = $repairedMaxValue;
+        }
+        if ($repairedMinValue !== null) {
+            $updateData['repaired_min_value'] = $repairedMinValue;
+        }
+
+        $this->update($updateData);
 
         return $this;
     }

@@ -154,6 +154,18 @@ export default function TwistingTensionPage() {
     )
   }
 
+  // Handle auto-reported problems (when measurement is out of spec)
+  const handleAutoReportProblem = (spindleNumber: number, description: string) => {
+    const newProblem: SubmittedProblem = {
+      id: Date.now(),
+      spindleNumber,
+      description,
+      timestamp: new Date(),
+    }
+    setSubmittedProblems((prev) => [...prev, newProblem])
+    console.log(`Auto-reported problem added for Spindle ${spindleNumber}`)
+  }
+
   return (
     <TwistingNumpad
       display={display}
@@ -170,6 +182,7 @@ export default function TwistingTensionPage() {
         setCurrentSpindleNumber(spindleNumber)
         setCurrentView("problems")
       }}
+      onAutoReportProblem={handleAutoReportProblem}
       onOpenRecorder={() => setCurrentView("recorder")}
       onDataCleared={handleDataCleared}
     />

@@ -179,6 +179,18 @@ export default function WeavingTensionPage() {
     )
   }
 
+  // Handle auto-reported problems (when measurement is out of spec)
+  const handleAutoReportProblem = (position: string, description: string) => {
+    const newProblem: ProblemReport = {
+      id: Date.now(),
+      position,
+      description,
+      timestamp: new Date(),
+    }
+    setSubmittedProblems((prev) => [...prev, newProblem])
+    console.log(`Auto-reported problem added for ${position}`)
+  }
+
   return (
     <WeavingNumpad
       display={display}
@@ -199,6 +211,7 @@ export default function WeavingTensionPage() {
         setCurrentPosition(position)
         setCurrentView("problems")
       }}
+      onAutoReportProblem={handleAutoReportProblem}
       onOpenRecorder={() => setCurrentView("recorder")}
       onDataCleared={handleDataCleared}
     />

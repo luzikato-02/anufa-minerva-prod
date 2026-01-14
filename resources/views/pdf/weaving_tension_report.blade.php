@@ -12,57 +12,57 @@
 
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            font-size: 9px;
-            line-height: 1.3;
+            font-size: 8px;
+            line-height: 1.2;
             color: #333;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
             border-bottom: 2px solid #333;
         }
 
         .header h1 {
-            font-size: 16px;
-            margin-bottom: 3px;
+            font-size: 14px;
+            margin-bottom: 2px;
             text-transform: uppercase;
         }
 
         .header .subtitle {
-            font-size: 10px;
+            font-size: 9px;
             color: #666;
         }
 
         .info-section {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .info-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .info-table td {
-            padding: 3px 6px;
+            padding: 2px 4px;
             border: 1px solid #ddd;
-            font-size: 9px;
+            font-size: 8px;
         }
 
         .info-table .label {
             background-color: #f5f5f5;
             font-weight: bold;
-            width: 20%;
+            width: 18%;
         }
 
         .info-table .value {
-            width: 30%;
+            width: 32%;
         }
 
         .stats-section {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .stats-grid {
@@ -71,10 +71,10 @@
         }
 
         .stats-grid td {
-            padding: 4px 8px;
+            padding: 3px 6px;
             border: 1px solid #ddd;
             text-align: center;
-            font-size: 9px;
+            font-size: 8px;
         }
 
         .stats-grid .stat-label {
@@ -83,7 +83,7 @@
         }
 
         .stats-grid .stat-value {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: bold;
         }
 
@@ -98,133 +98,116 @@
         }
 
         .section-title {
-            font-size: 11px;
-            font-weight: bold;
-            margin: 10px 0 5px 0;
-            padding: 4px 8px;
-            background-color: #333;
-            color: white;
-        }
-
-        .side-section {
-            margin-bottom: 12px;
-            page-break-inside: avoid;
-        }
-
-        .side-title {
             font-size: 10px;
             font-weight: bold;
             margin: 8px 0 4px 0;
             padding: 3px 6px;
+            background-color: #333;
+            color: white;
+        }
+
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+
+        .summary-table th, .summary-table td {
+            padding: 3px 5px;
+            border: 1px solid #ddd;
+            text-align: center;
+            font-size: 7px;
+        }
+
+        .summary-table th {
             background-color: #4a4a4a;
             color: white;
         }
 
-        .side-stats {
+        .summary-table .row-header {
+            background-color: #e9e9e9;
+            font-weight: bold;
+        }
+
+        .measurement-table {
             width: 100%;
             border-collapse: collapse;
+            font-size: 6px;
             margin-bottom: 5px;
         }
 
-        .side-stats td {
-            padding: 3px 6px;
-            border: 1px solid #ddd;
-            text-align: center;
-            font-size: 8px;
-        }
-
-        .side-stats .side-stat-label {
-            background-color: #f0f0f0;
-            font-weight: bold;
-        }
-
-        .row-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 7px;
-            margin-bottom: 3px;
-        }
-
-        .row-table th {
-            background-color: #666;
+        .measurement-table th {
+            background-color: #4a4a4a;
             color: white;
-            padding: 2px 3px;
+            padding: 2px 1px;
             text-align: center;
             font-weight: bold;
             border: 1px solid #333;
+            font-size: 5px;
         }
 
-        .row-table td {
-            padding: 2px 3px;
+        .measurement-table td {
+            padding: 1px;
             text-align: center;
             border: 1px solid #ddd;
+            font-size: 5px;
         }
 
-        .row-table .row-label {
-            background-color: #e9e9e9;
+        .measurement-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .measurement-table .position-cell {
             font-weight: bold;
-            width: 8%;
+            background-color: #e9e9e9;
+            width: 10%;
         }
 
-        .row-table .out-of-spec-value {
-            background-color: #fff3cd;
+        .measurement-table .out-of-spec-row {
+            background-color: #fff3cd !important;
+        }
+
+        .measurement-table .out-of-spec-value {
             color: #dc3545;
             font-weight: bold;
         }
 
-        .row-table .incomplete {
+        .measurement-table .incomplete {
             color: #999;
         }
 
-        .out-of-spec-section {
-            margin-top: 15px;
-            page-break-inside: avoid;
+        .measurement-table .repaired {
+            color: #28a745;
+            font-weight: bold;
         }
 
-        .out-of-spec-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8px;
-        }
-
-        .out-of-spec-table th {
-            background-color: #dc3545;
-            color: white;
-            padding: 4px;
+        .measurement-table .problem-cell {
+            font-size: 5px;
             text-align: left;
-            border: 1px solid #333;
-        }
-
-        .out-of-spec-table td {
-            padding: 3px 4px;
-            border: 1px solid #ddd;
-        }
-
-        .out-of-spec-table tr:nth-child(even) {
-            background-color: #f9f9f9;
+            max-width: 60px;
+            word-wrap: break-word;
         }
 
         .problems-section {
-            margin-top: 15px;
-            page-break-inside: avoid;
+            margin-top: 10px;
         }
 
         .problems-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 8px;
+            font-size: 7px;
         }
 
         .problems-table th {
             background-color: #dc3545;
             color: white;
-            padding: 4px;
+            padding: 3px;
             text-align: left;
             border: 1px solid #333;
         }
 
         .problems-table td {
-            padding: 3px 4px;
+            padding: 2px 3px;
             border: 1px solid #ddd;
         }
 
@@ -250,45 +233,16 @@
         }
 
         .footer {
-            margin-top: 15px;
-            padding-top: 8px;
+            margin-top: 10px;
+            padding-top: 6px;
             border-top: 1px solid #ddd;
-            font-size: 8px;
+            font-size: 7px;
             color: #666;
             text-align: center;
         }
 
-        .clearfix::after {
-            content: "";
-            display: table;
-            clear: both;
-        }
-
         .page-break {
             page-break-before: always;
-        }
-
-        .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-        }
-
-        .summary-table th, .summary-table td {
-            padding: 4px 6px;
-            border: 1px solid #ddd;
-            text-align: center;
-            font-size: 8px;
-        }
-
-        .summary-table th {
-            background-color: #4a4a4a;
-            color: white;
-        }
-
-        .summary-table .row-header {
-            background-color: #e9e9e9;
-            font-weight: bold;
         }
     </style>
 </head>
@@ -326,9 +280,9 @@
             </tr>
             <tr>
                 <td class="label">Spec Tension</td>
-                <td class="value">{{ $record->spec_tension ?? '-' }}</td>
+                <td class="value">{{ $record->spec_tension ?? '-' }} cN</td>
                 <td class="label">Tolerance (±)</td>
-                <td class="value">{{ $record->tension_tolerance ?? '-' }}</td>
+                <td class="value">{{ $record->tension_tolerance ?? '-' }} cN</td>
             </tr>
             <tr>
                 <td class="label">Record Date</td>
@@ -342,7 +296,7 @@
     <div class="stats-section">
         <table class="stats-grid">
             <tr>
-                <td class="stat-label">Total Measurements</td>
+                <td class="stat-label">Total</td>
                 <td class="stat-label">Completed</td>
                 <td class="stat-label">In Spec</td>
                 <td class="stat-label">Out of Spec</td>
@@ -414,45 +368,84 @@
         </tbody>
     </table>
 
-    @if ($outOfSpecMeasurements->count() > 0)
-        <div class="out-of-spec-section">
-            <div class="section-title">Out of Spec Measurements ({{ $outOfSpecMeasurements->count() }})</div>
-            <table class="out-of-spec-table">
-                <thead>
-                    <tr>
-                        <th style="width: 18%;">Position</th>
-                        <th style="width: 12%;">Side</th>
-                        <th style="width: 10%;">Row</th>
-                        <th style="width: 10%;">Col</th>
-                        <th style="width: 12%;">Max</th>
-                        <th style="width: 12%;">Min</th>
-                        <th style="width: 12%;">Avg</th>
-                        <th style="width: 14%;">Range</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($outOfSpecMeasurements->take(50) as $measurement)
-                        <tr>
-                            <td>{{ $measurement->position_code }}</td>
-                            <td>{{ $creelSides[$measurement->creel_side] ?? $measurement->creel_side }}</td>
-                            <td>{{ $measurement->row_number }}</td>
-                            <td>{{ $measurement->column_number }}</td>
-                            <td>{{ number_format($measurement->max_value, 1) }}</td>
-                            <td>{{ number_format($measurement->min_value, 1) }}</td>
-                            <td style="color: #dc3545; font-weight: bold;">{{ number_format($measurement->avg_value, 1) }}</td>
-                            <td>{{ number_format($measurement->range_value, 1) }}</td>
-                        </tr>
-                    @endforeach
-                    @if ($outOfSpecMeasurements->count() > 50)
-                        <tr>
-                            <td colspan="8" style="text-align: center; font-style: italic;">
-                                ... and {{ $outOfSpecMeasurements->count() - 50 }} more out-of-spec measurements
-                            </td>
-                        </tr>
+    <div class="section-title">All Measurements ({{ $allMeasurements->count() }})</div>
+
+    <table class="measurement-table">
+        <thead>
+            <tr>
+                <th>Position</th>
+                <th>Max</th>
+                <th>Min</th>
+                <th>Avg</th>
+                <th>Problems</th>
+                <th>Rep Max</th>
+                <th>Rep Min</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($allMeasurements as $measurement)
+                @php
+                    $positionCode = $measurement->position_code;
+                    $isOutOfSpec = $measurement->is_out_of_spec;
+                    $isComplete = $measurement->is_complete;
+                    $positionProblems = $problemsByPosition->get($positionCode, collect());
+                    $hasProblems = $positionProblems->isNotEmpty();
+                    $resolvedProblem = $positionProblems->firstWhere('resolution_status', 'resolved');
+                    $problemDescriptions = $positionProblems->pluck('description')->implode('; ');
+                @endphp
+                <tr class="{{ $isOutOfSpec || $hasProblems ? 'out-of-spec-row' : '' }}">
+                    <td class="position-cell">{{ $positionCode }}</td>
+                    @if ($isComplete)
+                        <td class="{{ $isOutOfSpec ? 'out-of-spec-value' : '' }}">{{ number_format($measurement->max_value, 1) }}</td>
+                        <td class="{{ $isOutOfSpec ? 'out-of-spec-value' : '' }}">{{ number_format($measurement->min_value, 1) }}</td>
+                        <td class="{{ $isOutOfSpec ? 'out-of-spec-value' : '' }}">{{ number_format($measurement->avg_value, 1) }}</td>
+                    @else
+                        <td class="incomplete">-</td>
+                        <td class="incomplete">-</td>
+                        <td class="incomplete">-</td>
                     @endif
-                </tbody>
-            </table>
-        </div>
+                    <td class="problem-cell">{{ Str::limit($problemDescriptions, 40) }}</td>
+                    <td class="{{ $resolvedProblem ? 'repaired' : '' }}">
+                        {{ $resolvedProblem && $resolvedProblem->repaired_max_value ? number_format($resolvedProblem->repaired_max_value, 1) : '-' }}
+                    </td>
+                    <td class="{{ $resolvedProblem ? 'repaired' : '' }}">
+                        {{ $resolvedProblem && $resolvedProblem->repaired_min_value ? number_format($resolvedProblem->repaired_min_value, 1) : '-' }}
+                    </td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    @if ($outOfSpecMeasurements->count() > 0)
+        <div class="section-title">Out of Spec Measurements ({{ $outOfSpecMeasurements->count() }})</div>
+        <table class="measurement-table">
+            <thead>
+                <tr>
+                    <th>Position</th>
+                    <th>Side</th>
+                    <th>Row</th>
+                    <th>Col</th>
+                    <th>Max</th>
+                    <th>Min</th>
+                    <th>Avg</th>
+                    <th>Range</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($outOfSpecMeasurements as $measurement)
+                    <tr>
+                        <td class="position-cell">{{ $measurement->position_code }}</td>
+                        <td>{{ $creelSides[$measurement->creel_side] ?? $measurement->creel_side }}</td>
+                        <td>{{ $measurement->row_number }}</td>
+                        <td>{{ $measurement->column_number }}</td>
+                        <td class="out-of-spec-value">{{ number_format($measurement->max_value, 1) }}</td>
+                        <td class="out-of-spec-value">{{ number_format($measurement->min_value, 1) }}</td>
+                        <td class="out-of-spec-value">{{ number_format($measurement->avg_value, 1) }}</td>
+                        <td>{{ number_format($measurement->range_value, 1) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
     @endif
 
     @if ($problems->count() > 0)
@@ -461,11 +454,15 @@
             <table class="problems-table">
                 <thead>
                     <tr>
-                        <th style="width: 15%;">Position</th>
-                        <th style="width: 15%;">Type</th>
-                        <th style="width: 40%;">Description</th>
-                        <th style="width: 12%;">Severity</th>
-                        <th style="width: 18%;">Status</th>
+                        <th style="width: 10%;">Position</th>
+                        <th style="width: 10%;">Type</th>
+                        <th style="width: 26%;">Description</th>
+                        <th style="width: 8%;">Severity</th>
+                        <th style="width: 10%;">Status</th>
+                        <th style="width: 9%;">Orig Max</th>
+                        <th style="width: 9%;">Orig Min</th>
+                        <th style="width: 9%;">Rep Max</th>
+                        <th style="width: 9%;">Rep Min</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -476,6 +473,14 @@
                             <td>{{ $problem->description }}</td>
                             <td class="severity-{{ $problem->severity }}">{{ ucfirst($problem->severity) }}</td>
                             <td>{{ ucfirst(str_replace('_', ' ', $problem->resolution_status)) }}</td>
+                            <td>{{ $problem->original_max_value ? number_format($problem->original_max_value, 1) : '-' }}</td>
+                            <td>{{ $problem->original_min_value ? number_format($problem->original_min_value, 1) : '-' }}</td>
+                            <td class="{{ $problem->repaired_max_value ? 'repaired' : '' }}">
+                                {{ $problem->repaired_max_value ? number_format($problem->repaired_max_value, 1) : '-' }}
+                            </td>
+                            <td class="{{ $problem->repaired_min_value ? 'repaired' : '' }}">
+                                {{ $problem->repaired_min_value ? number_format($problem->repaired_min_value, 1) : '-' }}
+                            </td>
                         </tr>
                     @endforeach
                 </tbody>
