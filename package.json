@@ -4,7 +4,7 @@
     "description": "Anufa Minerva - Production Data Management System",
     "private": true,
     "type": "module",
-    "main": "electron/main.js",
+    "main": "electron/main.cjs",
     "scripts": {
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",

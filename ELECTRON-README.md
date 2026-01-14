@@ -129,13 +129,15 @@ The following tables support synchronization:
 
 ```
 /electron
-├── main.js         # Main Electron process
-├── preload.js      # Preload script (IPC bridge)
+├── main.cjs        # Main Electron process (CommonJS)
+├── preload.cjs     # Preload script (IPC bridge, CommonJS)
 └── setup.html      # Server configuration page
 
-/forge.config.js    # Electron Forge configuration
+/forge.config.cjs   # Electron Forge configuration (CommonJS)
 /package.json       # Updated with Electron scripts
 ```
+
+> **Note:** The Electron files use `.cjs` extension because `package.json` has `"type": "module"` for the frontend, but Electron's main process requires CommonJS.
 
 ## Troubleshooting
 
