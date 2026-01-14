@@ -381,11 +381,11 @@ class TensionRecordController extends Controller
                 $csvLines[] = sprintf(
                     '%d,%s,%s,"%s",%s,%s',
                     $i,
-                    $measurement && $measurement->max_value !== null ? number_format($measurement->max_value, 1) : '',
-                    $measurement && $measurement->min_value !== null ? number_format($measurement->min_value, 1) : '',
+                    $measurement && $measurement->max_value !== null ? number_format($measurement->max_value, 1, '.', '') : '',
+                    $measurement && $measurement->min_value !== null ? number_format($measurement->min_value, 1, '.', '') : '',
                     str_replace('"', '""', $problemDescriptions),
-                    $repairedMax !== '' ? number_format($repairedMax, 1) : '',
-                    $repairedMin !== '' ? number_format($repairedMin, 1) : ''
+                    $repairedMax !== '' ? number_format($repairedMax, 1, '.', '') : '',
+                    $repairedMin !== '' ? number_format($repairedMin, 1, '.', '') : ''
                 );
             }
         } else {
@@ -422,11 +422,11 @@ class TensionRecordController extends Controller
                 $csvLines[] = sprintf(
                     '%s,%s,%s,"%s",%s,%s',
                     $positionCode,
-                    $measurement->max_value !== null ? number_format($measurement->max_value, 1) : '',
-                    $measurement->min_value !== null ? number_format($measurement->min_value, 1) : '',
+                    $measurement->max_value !== null ? number_format($measurement->max_value, 1, '.', '') : '',
+                    $measurement->min_value !== null ? number_format($measurement->min_value, 1, '.', '') : '',
                     str_replace('"', '""', $problemDescriptions),
-                    $repairedMax !== '' ? number_format($repairedMax, 1) : '',
-                    $repairedMin !== '' ? number_format($repairedMin, 1) : ''
+                    $repairedMax !== '' ? number_format($repairedMax, 1, '.', '') : '',
+                    $repairedMin !== '' ? number_format($repairedMin, 1, '.', '') : ''
                 );
             }
         }
