@@ -100,7 +100,7 @@ class DataSyncManagementController extends Controller
     {
         $request->validate([
             'resolution' => 'required|in:local_wins,remote_wins,merged,dismissed',
-            'merged_data' => 'required_if:resolution,merged|array',
+            'merged_data' => 'required_if:resolution,merged|string',
             'notes' => 'nullable|string|max:1000',
         ]);
 
@@ -127,7 +127,11 @@ class DataSyncManagementController extends Controller
                     break;
 
                 case 'merged':
-                    $mergedData = $request->input('merged_data');
+                    $mergedDataJson = $request->input('merged_data');
+                    $mergedData = json_decode($mergedDataJson, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new \InvalidArgumentException('Invalid merged data format');
+                    }
                     $conflict->resolveWithMergedData($mergedData, $userId, $notes);
                     $this->applyResolution($conflict, $mergedData);
                     break;

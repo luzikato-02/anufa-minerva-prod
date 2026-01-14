@@ -114,14 +114,14 @@ export default function ConflictDetail({ conflict, diff }: Props) {
         const formData: {
             resolution: string;
             notes: string;
-            merged_data?: Record<string, unknown>;
+            merged_data?: string;
         } = {
             resolution: resolveAction,
             notes: notes,
         };
 
         if (resolveAction === 'merged') {
-            formData.merged_data = mergedData;
+            formData.merged_data = JSON.stringify(mergedData);
         }
 
         router.post(`/admin/data-sync/conflicts/${conflict.id}/resolve`, formData, {
