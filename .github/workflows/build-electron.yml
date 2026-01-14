@@ -44,7 +44,7 @@ jobs:
           
       - name: Install dependencies
         run: |
-          npm ci --legacy-peer-deps
+          npm install
           
       - name: Build frontend assets
         run: npm run build
@@ -81,101 +81,102 @@ jobs:
           path: out/Anufa Minerva-win32-x64/**/*
           retention-days: 30
 
-  build-linux:
-    name: Build Linux App
-    runs-on: ubuntu-latest
+  # build-linux:
+  #   name: Build Linux App
+  #   runs-on: ubuntu-latest
     
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
           
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm
+  #     - name: Install system dependencies
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y rpm
           
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+  #     - name: Install dependencies
+  #       run: npm ci --legacy-peer-deps
         
-      - name: Build frontend assets
-        run: npm run build
+  #     - name: Build frontend assets
+  #       run: npm run build
         
-      - name: Install Electron Forge
-        run: npm install --save-dev @electron-forge/cli @electron-forge/maker-deb @electron-forge/maker-rpm @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
+  #     - name: Install Electron Forge
+  #       run: npm install --save-dev @electron-forge/cli @electron-forge/maker-deb @electron-forge/maker-rpm @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
         
-      - name: Create Linux packages
-        run: npx electron-forge make --platform=linux --arch=x64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Create Linux packages
+  #       run: npx electron-forge make --platform=linux --arch=x64
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Upload Linux DEB
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-deb
-          path: out/make/deb/**/*.deb
-          retention-days: 30
-          if-no-files-found: ignore
+  #     - name: Upload Linux DEB
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: linux-deb
+  #         path: out/make/deb/**/*.deb
+  #         retention-days: 30
+  #         if-no-files-found: ignore
           
-      - name: Upload Linux RPM
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-rpm
-          path: out/make/rpm/**/*.rpm
-          retention-days: 30
-          if-no-files-found: ignore
+  #     - name: Upload Linux RPM
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: linux-rpm
+  #         path: out/make/rpm/**/*.rpm
+  #         retention-days: 30
+  #         if-no-files-found: ignore
           
-      - name: Upload Linux ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-zip
-          path: out/make/zip/**/*.zip
-          retention-days: 30
-          if-no-files-found: ignore
+  #     - name: Upload Linux ZIP
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: linux-zip
+  #         path: out/make/zip/**/*.zip
+  #         retention-days: 30
+  #         if-no-files-found: ignore
 
-  build-macos:
-    name: Build macOS App
-    runs-on: macos-latest
+  # build-macos:
+  #   name: Build macOS App
+  #   runs-on: macos-latest
     
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
           
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+  #     - name: Install dependencies
+  #       run: npm ci --legacy-peer-deps
         
-      - name: Build frontend assets
-        run: npm run build
+  #     - name: Build frontend assets
+  #       run: npm run build
         
-      - name: Install Electron Forge
-        run: npm install --save-dev @electron-forge/cli @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
+  #     - name: Install Electron Forge
+  #       run: npm install --save-dev @electron-forge/cli @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
         
-      - name: Create macOS package
-        run: npx electron-forge make --platform=darwin --arch=x64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Create macOS package
+  #       run: npx electron-forge make --platform=darwin --arch=x64
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Upload macOS ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-zip
-          path: out/make/zip/**/*.zip
-          retention-days: 30
+  #     - name: Upload macOS ZIP
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: macos-zip
+  #         path: out/make/zip/**/*.zip
+  #         retention-days: 30
 
   release:
     name: Create Release
-    needs: [build-windows, build-linux, build-macos]
+    # needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
     
