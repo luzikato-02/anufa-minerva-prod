@@ -47,7 +47,6 @@ module.exports = {
                 setupExe: 'AnufaMinerva-Setup.exe',
                 setupIcon: './public/favicon.ico',
                 iconUrl: 'https://raw.githubusercontent.com/your-repo/main/public/favicon.ico',
-                loadingGif: './electron/installer-loading.gif',
                 noMsi: false,
             },
         },
