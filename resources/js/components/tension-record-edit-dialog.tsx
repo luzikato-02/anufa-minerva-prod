@@ -1,0 +1,1204 @@
+'use client';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Check, CheckCircle, Loader2, PencilIcon, Plus, Save, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+
+interface TensionProblem {
+    id?: number;
+    position_identifier?: string;
+    spindleNumber?: number;
+    spindle_number?: number;
+    position?: string;
+    description: string;
+    timestamp?: string;
+    reported_at?: string;
+    problem_type?: string;
+    severity?: string;
+    resolution_status?: string;
+    original_max_value?: number | null;
+    original_min_value?: number | null;
+    repaired_max_value?: number | null;
+    repaired_min_value?: number | null;
+}
+
+interface ResolveDialogData {
+    problemId: number;
+    position: string;
+    description: string;
+    repairedMaxValue: string;
+    repairedMinValue: string;
+    resolutionNotes: string;
+}
+
+interface TensionRecord {
+    id: string;
+    record_type: 'twisting' | 'weaving';
+    operator?: string;
+    machine_number?: string;
+    item_number?: string;
+    item_description?: string;
+    spec_tension?: number;
+    tension_tolerance?: number;
+    total_measurements?: number;
+    completed_measurements?: number;
+    progress_percentage?: number;
+    form_data: Record<string, string | number | undefined>;
+    measurement_data: Record<string, { max?: number | null; min?: number | null }>;
+    metadata: {
+        total_measurements: number;
+        completed_measurements: number;
+        progress_percentage: number;
+        operator: string;
+        machine_number: string;
+        item_number: string;
+        yarn_code?: string;
+        item_description?: string;
+    };
+    problems?: TensionProblem[];
+    created_at?: string;
+}
+
+interface TwistingMeasurement {
+    id?: number;
+    spindle_number: number;
+    max_value: number | null;
+    min_value: number | null;
+    avg_value: number | null;
+    is_complete: boolean;
+    is_out_of_spec: boolean;
+}
+
+interface WeavingMeasurement {
+    id?: number;
+    creel_side: string;
+    row_number: string;
+    column_number: number;
+    max_value: number | null;
+    min_value: number | null;
+    avg_value: number | null;
+    is_complete: boolean;
+    is_out_of_spec: boolean;
+}
+
+interface Props {
+    record: TensionRecord;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSave?: () => void;
+}
+
+interface EditingProblem {
+    id: number;
+    position: string;
+    description: string;
+    severity: string;
+}
+
+interface EditingMeasurement {
+    key: string;
+    field: 'max' | 'min';
+    value: string;
+}
+
+interface EditingSessionField {
+    field: string;
+    value: string;
+}
+
+export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: Props) {
+    const [measurements, setMeasurements] = useState<TwistingMeasurement[] | WeavingMeasurement[]>([]);
+    const [problems, setProblems] = useState<TensionProblem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [newProblem, setNewProblem] = useState({ position: '', description: '' });
+    const [editingProblem, setEditingProblem] = useState<EditingProblem | null>(null);
+    const [savingProblemId, setSavingProblemId] = useState<number | null>(null);
+    const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+    const [resolveData, setResolveData] = useState<ResolveDialogData | null>(null);
+    
+    // Inline editing states
+    const [editingMeasurement, setEditingMeasurement] = useState<EditingMeasurement | null>(null);
+    const [savingMeasurement, setSavingMeasurement] = useState<string | null>(null);
+    const [editingSessionField, setEditingSessionField] = useState<EditingSessionField | null>(null);
+    const [savingSessionField, setSavingSessionField] = useState<string | null>(null);
+    const [sessionData, setSessionData] = useState<Record<string, string | number | undefined>>({});
+
+    const specTension = Number(
+        record.spec_tension ?? record.form_data?.specTens ?? 0
+    );
+    const tolerance = Number(
+        record.tension_tolerance ?? record.form_data?.tensPlus ?? 0
+    );
+    const minSpec = specTension - tolerance;
+    const maxSpec = specTension + tolerance;
+
+    const fetchMeasurements = useCallback(async () => {
+        if (!record.id) return;
+
+        setLoading(true);
+        try {
+            const baseUrl = window.location.origin;
+            const response = await fetch(
+                `${baseUrl}/tension-records/${record.id}/measurements`,
+                { credentials: 'include' }
+            );
+            const json = await response.json();
+            setMeasurements(json.data || []);
+        } catch (error) {
+            console.error('Failed to fetch measurements:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [record.id]);
+
+    const fetchProblems = useCallback(async () => {
+        if (!record.id) return;
+
+        try {
+            const baseUrl = window.location.origin;
+            const response = await fetch(
+                `${baseUrl}/tension-records/${record.id}/problems`,
+                { credentials: 'include' }
+            );
+            const json = await response.json();
+            setProblems(json.data || record.problems || []);
+        } catch (error) {
+            console.error('Failed to fetch problems:', error);
+            setProblems(record.problems || []);
+        }
+    }, [record.id, record.problems]);
+
+    useEffect(() => {
+        if (open && record.id) {
+            fetchMeasurements();
+            fetchProblems();
+            setEditingMeasurement(null);
+            setEditingProblem(null);
+            setEditingSessionField(null);
+            // Initialize session data from record
+            setSessionData({
+                operator: record.metadata?.operator ?? record.form_data?.operator ?? '',
+                machine_number: record.metadata?.machine_number ?? record.form_data?.machineNumber ?? record.form_data?.machineNo ?? '',
+                item_number: record.metadata?.item_number ?? record.form_data?.itemNumber ?? record.form_data?.itemNo ?? '',
+                item_description: record.metadata?.item_description ?? record.form_data?.itemDesc ?? '',
+                yarn_code: record.metadata?.yarn_code ?? record.form_data?.yarnCode ?? '',
+                spec_tension: record.spec_tension ?? record.form_data?.specTens ?? '',
+                tension_tolerance: record.tension_tolerance ?? record.form_data?.tensPlus ?? '',
+            });
+        }
+    }, [open, record.id, record.metadata, record.form_data, record.spec_tension, record.tension_tolerance, fetchMeasurements, fetchProblems]);
+
+    const getMeasurementKey = (measurement: TwistingMeasurement | WeavingMeasurement): string => {
+        if (record.record_type === 'twisting') {
+            return `spindle-${(measurement as TwistingMeasurement).spindle_number}`;
+        } else {
+            const m = measurement as WeavingMeasurement;
+            return `${m.creel_side}-${m.row_number}-${m.column_number}`;
+        }
+    };
+
+    const getMeasurementLabel = (measurement: TwistingMeasurement | WeavingMeasurement): string => {
+        if (record.record_type === 'twisting') {
+            return `#${(measurement as TwistingMeasurement).spindle_number}`;
+        } else {
+            const m = measurement as WeavingMeasurement;
+            return `${m.creel_side}-${m.row_number}-${m.column_number}`;
+        }
+    };
+
+    const startEditMeasurement = (key: string, field: 'max' | 'min', currentValue: number | null) => {
+        setEditingMeasurement({
+            key,
+            field,
+            value: currentValue != null ? String(currentValue) : '',
+        });
+    };
+
+    const cancelEditMeasurement = () => {
+        setEditingMeasurement(null);
+    };
+
+    const saveMeasurementValue = async (measurement: TwistingMeasurement | WeavingMeasurement) => {
+        if (!editingMeasurement) return;
+
+        const key = getMeasurementKey(measurement);
+        if (editingMeasurement.key !== key) return;
+
+        setSavingMeasurement(`${key}-${editingMeasurement.field}`);
+
+        const baseUrl = window.location.origin;
+        let url: string;
+        
+        if (record.record_type === 'twisting') {
+            const m = measurement as TwistingMeasurement;
+            url = `${baseUrl}/tension-records/${record.id}/twisting-measurements/${m.spindle_number}`;
+        } else {
+            const m = measurement as WeavingMeasurement;
+            url = `${baseUrl}/tension-records/${record.id}/weaving-measurements/${m.creel_side}/${m.row_number}/${m.column_number}`;
+        }
+
+        try {
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            const body: Record<string, number | null> = {};
+            if (editingMeasurement.field === 'max') {
+                body.max_value = editingMeasurement.value !== '' ? parseFloat(editingMeasurement.value) : null;
+            } else {
+                body.min_value = editingMeasurement.value !== '' ? parseFloat(editingMeasurement.value) : null;
+            }
+
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save measurement');
+            }
+
+            setEditingMeasurement(null);
+            await fetchMeasurements();
+        } catch (error) {
+            console.error('Failed to save measurement:', error);
+            alert('Failed to save measurement');
+        } finally {
+            setSavingMeasurement(null);
+        }
+    };
+
+    const startEditSessionField = (field: string, currentValue: string | number | undefined) => {
+        setEditingSessionField({
+            field,
+            value: currentValue != null ? String(currentValue) : '',
+        });
+    };
+
+    const cancelEditSessionField = () => {
+        setEditingSessionField(null);
+    };
+
+    const saveSessionField = async () => {
+        if (!editingSessionField) return;
+
+        setSavingSessionField(editingSessionField.field);
+
+        const baseUrl = window.location.origin;
+
+        try {
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            // Build the update payload
+            const updatePayload: Record<string, string | number> = {};
+            const fieldMapping: Record<string, string> = {
+                operator: 'operator',
+                machine_number: 'machine_number',
+                item_number: 'item_number',
+                item_description: 'item_description',
+                yarn_code: 'yarn_code',
+                spec_tension: 'spec_tension',
+                tension_tolerance: 'tension_tolerance',
+            };
+
+            const apiField = fieldMapping[editingSessionField.field] || editingSessionField.field;
+            
+            // Convert numeric fields
+            if (editingSessionField.field === 'spec_tension' || editingSessionField.field === 'tension_tolerance') {
+                updatePayload[apiField] = editingSessionField.value !== '' ? parseFloat(editingSessionField.value) : 0;
+            } else {
+                updatePayload[apiField] = editingSessionField.value;
+            }
+
+            const response = await fetch(`${baseUrl}/tension-records/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(updatePayload),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save session field');
+            }
+
+            // Update local state
+            setSessionData(prev => ({
+                ...prev,
+                [editingSessionField.field]: editingSessionField.value,
+            }));
+            setEditingSessionField(null);
+        } catch (error) {
+            console.error('Failed to save session field:', error);
+            alert('Failed to save session field');
+        } finally {
+            setSavingSessionField(null);
+        }
+    };
+
+    const addProblem = async () => {
+        if (!newProblem.position || !newProblem.description) {
+            alert('Please fill in both position and description');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const baseUrl = window.location.origin;
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            const response = await fetch(`${baseUrl}/tension-records/${record.id}/problems`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    position_identifier: newProblem.position,
+                    description: newProblem.description,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to add problem');
+            }
+
+            setNewProblem({ position: '', description: '' });
+            await fetchProblems();
+        } catch (error) {
+            console.error('Failed to add problem:', error);
+            alert('Failed to add problem');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const startEditProblem = (problem: TensionProblem) => {
+        if (!problem.id) return;
+        setEditingProblem({
+            id: problem.id,
+            position: problem.position_identifier ?? 
+                (record.record_type === 'twisting'
+                    ? String(problem.spindleNumber ?? problem.spindle_number ?? '')
+                    : problem.position ?? ''),
+            description: problem.description,
+            severity: problem.severity ?? 'medium',
+        });
+    };
+
+    const cancelEditProblem = () => {
+        setEditingProblem(null);
+    };
+
+    const saveProblem = async () => {
+        if (!editingProblem) return;
+
+        setSavingProblemId(editingProblem.id);
+        try {
+            const baseUrl = window.location.origin;
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            const response = await fetch(`${baseUrl}/tension-problems/${editingProblem.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    position_identifier: editingProblem.position,
+                    description: editingProblem.description,
+                    severity: editingProblem.severity,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update problem');
+            }
+
+            setEditingProblem(null);
+            await fetchProblems();
+        } catch (error) {
+            console.error('Failed to update problem:', error);
+            alert('Failed to update problem');
+        } finally {
+            setSavingProblemId(null);
+        }
+    };
+
+    const openResolveDialog = (problem: TensionProblem) => {
+        if (!problem.id) return;
+        setResolveData({
+            problemId: problem.id,
+            position: problem.position_identifier ?? 
+                (record.record_type === 'twisting'
+                    ? String(problem.spindleNumber ?? problem.spindle_number ?? '')
+                    : problem.position ?? ''),
+            description: problem.description,
+            repairedMaxValue: '',
+            repairedMinValue: '',
+            resolutionNotes: '',
+        });
+        setResolveDialogOpen(true);
+    };
+
+    const submitResolve = async () => {
+        if (!resolveData) return;
+
+        setSavingProblemId(resolveData.problemId);
+        try {
+            const baseUrl = window.location.origin;
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            const body: Record<string, string | number> = {};
+            if (resolveData.resolutionNotes) {
+                body.resolution_notes = resolveData.resolutionNotes;
+            }
+            if (resolveData.repairedMaxValue !== '') {
+                body.repaired_max_value = parseFloat(resolveData.repairedMaxValue);
+            }
+            if (resolveData.repairedMinValue !== '') {
+                body.repaired_min_value = parseFloat(resolveData.repairedMinValue);
+            }
+
+            const response = await fetch(`${baseUrl}/tension-problems/${resolveData.problemId}/resolve`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to resolve problem');
+            }
+
+            setResolveDialogOpen(false);
+            setResolveData(null);
+            await fetchProblems();
+        } catch (error) {
+            console.error('Failed to resolve problem:', error);
+            alert('Failed to resolve problem');
+        } finally {
+            setSavingProblemId(null);
+        }
+    };
+
+    const handleSaveAndClose = () => {
+        onSave?.();
+        onOpenChange(false);
+    };
+
+    const getProblemPosition = (problem: TensionProblem): string => {
+        return problem.position_identifier ?? 
+            (record.record_type === 'twisting'
+                ? `#${problem.spindleNumber ?? problem.spindle_number ?? 'N/A'}`
+                : problem.position ?? 'N/A');
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="w-full max-w-[90vw] sm:max-w-5xl max-h-[90vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0">
+                    <DialogTitle className="flex items-center gap-2">
+                        <Badge variant="outline" className="capitalize">
+                            {record.record_type}
+                        </Badge>
+                        Edit Tension Record
+                    </DialogTitle>
+                    <DialogDescription>
+                        Update measurements and manage problems for this record
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex-1 overflow-y-auto pr-2">
+                    <Tabs defaultValue="measurements" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="details">Session Details</TabsTrigger>
+                            <TabsTrigger value="measurements">Measurements</TabsTrigger>
+                            <TabsTrigger value="problems">
+                                Problems ({problems.length})
+                            </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="details" className="mt-4">
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle>Session Details</CardTitle>
+                                    <CardDescription>
+                                        Click the pencil icon to edit session information
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid gap-4">
+                                        {[
+                                            { field: 'operator', label: 'Operator', placeholder: 'Enter operator name' },
+                                            { field: 'machine_number', label: 'Machine Number', placeholder: 'Enter machine number' },
+                                            { field: 'item_number', label: 'Item Number', placeholder: 'Enter item number' },
+                                            { field: 'item_description', label: 'Item Description', placeholder: 'Enter item description' },
+                                            ...(record.record_type === 'twisting' ? [{ field: 'yarn_code', label: 'Yarn Code', placeholder: 'Enter yarn code' }] : []),
+                                            { field: 'spec_tension', label: 'Spec Tension (cN)', placeholder: 'Enter spec tension', type: 'number' },
+                                            { field: 'tension_tolerance', label: 'Tolerance (±cN)', placeholder: 'Enter tolerance', type: 'number' },
+                                        ].map(({ field, label, placeholder, type }) => {
+                                            const isEditing = editingSessionField?.field === field;
+                                            const isSaving = savingSessionField === field;
+                                            const value = sessionData[field];
+
+                                            return (
+                                                <div key={field} className="flex items-center gap-3 py-2 border-b last:border-b-0">
+                                                    <Label className="w-40 font-medium text-sm">{label}</Label>
+                                                    <div className="flex-1 flex items-center gap-2">
+                                                        {isEditing ? (
+                                                            <>
+                                                                <Input
+                                                                    type={type || 'text'}
+                                                                    value={editingSessionField.value}
+                                                                    onChange={(e) => setEditingSessionField({
+                                                                        ...editingSessionField,
+                                                                        value: e.target.value
+                                                                    })}
+                                                                    placeholder={placeholder}
+                                                                    className="h-8 flex-1"
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') saveSessionField();
+                                                                        if (e.key === 'Escape') cancelEditSessionField();
+                                                                    }}
+                                                                />
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={cancelEditSessionField}
+                                                                    className="h-8 w-8 p-0"
+                                                                    disabled={isSaving}
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={saveSessionField}
+                                                                    disabled={isSaving}
+                                                                    className="h-8 w-8 p-0"
+                                                                >
+                                                                    {isSaving ? (
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    ) : (
+                                                                        <Check className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span className="flex-1 text-sm">
+                                                                    {value != null && value !== '' ? String(value) : <span className="text-muted-foreground italic">Not set</span>}
+                                                                </span>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() => startEditSessionField(field, value)}
+                                                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                                                >
+                                                                    <PencilIcon className="h-4 w-4" />
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="measurements" className="mt-4">
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle>Tension Measurements</CardTitle>
+                                    <CardDescription>
+                                        Click the pencil icon beside a value to edit. Spec: {specTension} cN (±{tolerance} cN) | Range: {minSpec} - {maxSpec} cN
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {loading ? (
+                                        <div className="flex h-[200px] items-center justify-center">
+                                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                        </div>
+                                    ) : measurements.length > 0 ? (
+                                        <div className="max-h-[400px] overflow-auto border rounded-md">
+                                            <Table>
+                                                <TableHeader className="sticky top-0 bg-background">
+                                                    <TableRow>
+                                                        <TableHead className="w-[100px]">
+                                                            {record.record_type === 'twisting' ? 'Spindle' : 'Position'}
+                                                        </TableHead>
+                                                        <TableHead className="text-center">Max Value</TableHead>
+                                                        <TableHead className="text-center">Min Value</TableHead>
+                                                        <TableHead className="text-center">Avg</TableHead>
+                                                        <TableHead className="text-center">Status</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {(measurements as (TwistingMeasurement | WeavingMeasurement)[]).map((measurement) => {
+                                                        const key = getMeasurementKey(measurement);
+                                                        const label = getMeasurementLabel(measurement);
+                                                        const maxVal = measurement.max_value != null ? Number(measurement.max_value) : null;
+                                                        const minVal = measurement.min_value != null ? Number(measurement.min_value) : null;
+                                                        const avgVal = measurement.avg_value != null ? Number(measurement.avg_value) : null;
+                                                        
+                                                        const isEditingMax = editingMeasurement?.key === key && editingMeasurement?.field === 'max';
+                                                        const isEditingMin = editingMeasurement?.key === key && editingMeasurement?.field === 'min';
+                                                        const isSavingMax = savingMeasurement === `${key}-max`;
+                                                        const isSavingMin = savingMeasurement === `${key}-min`;
+
+                                                        return (
+                                                            <TableRow key={key} className={measurement.is_out_of_spec ? 'bg-destructive/5' : ''}>
+                                                                <TableCell className="font-medium">{label}</TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        {isEditingMax ? (
+                                                                            <>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={editingMeasurement.value}
+                                                                                    onChange={(e) => setEditingMeasurement({
+                                                                                        ...editingMeasurement,
+                                                                                        value: e.target.value
+                                                                                    })}
+                                                                                    className="h-7 w-20 text-center"
+                                                                                    autoFocus
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter') saveMeasurementValue(measurement);
+                                                                                        if (e.key === 'Escape') cancelEditMeasurement();
+                                                                                    }}
+                                                                                />
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={cancelEditMeasurement}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                    disabled={isSavingMax}
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={() => saveMeasurementValue(measurement)}
+                                                                                    disabled={isSavingMax}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                >
+                                                                                    {isSavingMax ? (
+                                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                    ) : (
+                                                                                        <Check className="h-3 w-3" />
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="min-w-[40px] text-center">
+                                                                                    {maxVal != null ? maxVal.toFixed(1) : '-'}
+                                                                                </span>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => startEditMeasurement(key, 'max', maxVal)}
+                                                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                                                >
+                                                                                    <PencilIcon className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        {isEditingMin ? (
+                                                                            <>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={editingMeasurement.value}
+                                                                                    onChange={(e) => setEditingMeasurement({
+                                                                                        ...editingMeasurement,
+                                                                                        value: e.target.value
+                                                                                    })}
+                                                                                    className="h-7 w-20 text-center"
+                                                                                    autoFocus
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter') saveMeasurementValue(measurement);
+                                                                                        if (e.key === 'Escape') cancelEditMeasurement();
+                                                                                    }}
+                                                                                />
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={cancelEditMeasurement}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                    disabled={isSavingMin}
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={() => saveMeasurementValue(measurement)}
+                                                                                    disabled={isSavingMin}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                >
+                                                                                    {isSavingMin ? (
+                                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                    ) : (
+                                                                                        <Check className="h-3 w-3" />
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="min-w-[40px] text-center">
+                                                                                    {minVal != null ? minVal.toFixed(1) : '-'}
+                                                                                </span>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => startEditMeasurement(key, 'min', minVal)}
+                                                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                                                >
+                                                                                    <PencilIcon className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-center">
+                                                                    {avgVal != null ? avgVal.toFixed(1) : '-'}
+                                                                </TableCell>
+                                                                <TableCell className="text-center">
+                                                                    {measurement.is_out_of_spec ? (
+                                                                        <Badge variant="destructive" className="text-xs">
+                                                                            Out of Spec
+                                                                        </Badge>
+                                                                    ) : measurement.is_complete ? (
+                                                                        <Badge variant="secondary" className="text-xs">
+                                                                            OK
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge variant="outline" className="text-xs">
+                                                                            Incomplete
+                                                                        </Badge>
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-muted-foreground py-8">
+                                            No measurements found
+                                        </div>
+                                    )}
+                                    {measurements.length > 0 && (
+                                        <p className="text-xs text-muted-foreground mt-2 text-center">
+                                            Showing {measurements.length} measurements
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="problems" className="mt-4 space-y-4">
+                            {/* Add New Problem */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle>Add New Problem</CardTitle>
+                                    <CardDescription>
+                                        Report a new issue for this tension record
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid gap-4">
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <Label htmlFor="position">
+                                                    {record.record_type === 'twisting' ? 'Spindle Number' : 'Position'}
+                                                </Label>
+                                                <Input
+                                                    id="position"
+                                                    placeholder={record.record_type === 'twisting' ? 'e.g., 15' : 'e.g., L-A-5'}
+                                                    value={newProblem.position}
+                                                    onChange={(e) => setNewProblem({ ...newProblem, position: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <Label htmlFor="description">Description</Label>
+                                                <Input
+                                                    id="description"
+                                                    placeholder="Describe the problem..."
+                                                    value={newProblem.description}
+                                                    onChange={(e) => setNewProblem({ ...newProblem, description: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end">
+                                            <Button
+                                                onClick={addProblem}
+                                                disabled={saving || !newProblem.position || !newProblem.description}
+                                            >
+                                                {saving ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                ) : (
+                                                    <Plus className="h-4 w-4 mr-2" />
+                                                )}
+                                                Add Problem
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Existing Problems */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle>Existing Problems</CardTitle>
+                                    <CardDescription>
+                                        View and edit reported issues
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {problems.length > 0 ? (
+                                        <div className="max-h-[350px] overflow-auto border rounded-md">
+                                            <Table>
+                                                <TableHeader className="sticky top-0 bg-background">
+                                                    <TableRow>
+                                                        <TableHead className="w-[100px]">Position</TableHead>
+                                                        <TableHead>Description</TableHead>
+                                                        <TableHead className="w-[100px]">Severity</TableHead>
+                                                        <TableHead className="w-[100px]">Status</TableHead>
+                                                        <TableHead className="w-[150px]">Reported</TableHead>
+                                                        <TableHead className="w-[140px] text-right">Actions</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {problems.map((problem, index) => {
+                                                        const isEditing = editingProblem?.id === problem.id;
+                                                        const isSaving = savingProblemId === problem.id;
+
+                                                        if (isEditing && editingProblem) {
+                                                            return (
+                                                                <TableRow key={problem.id ?? index} className="bg-muted/50">
+                                                                    <TableCell>
+                                                                        <Input
+                                                                            value={editingProblem.position}
+                                                                            onChange={(e) => setEditingProblem({
+                                                                                ...editingProblem,
+                                                                                position: e.target.value
+                                                                            })}
+                                                                            className="h-8"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Textarea
+                                                                            value={editingProblem.description}
+                                                                            onChange={(e) => setEditingProblem({
+                                                                                ...editingProblem,
+                                                                                description: e.target.value
+                                                                            })}
+                                                                            className="min-h-[60px]"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Select
+                                                                            value={editingProblem.severity}
+                                                                            onValueChange={(value) => setEditingProblem({
+                                                                                ...editingProblem,
+                                                                                severity: value
+                                                                            })}
+                                                                        >
+                                                                            <SelectTrigger className="h-8">
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="low">Low</SelectItem>
+                                                                                <SelectItem value="medium">Medium</SelectItem>
+                                                                                <SelectItem value="high">High</SelectItem>
+                                                                                <SelectItem value="critical">Critical</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Badge variant="outline" className="text-xs">
+                                                                            {problem.resolution_status ?? 'open'}
+                                                                        </Badge>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {problem.reported_at || problem.timestamp
+                                                                            ? new Date(problem.reported_at || problem.timestamp!).toLocaleDateString()
+                                                                            : '-'}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex justify-end gap-1">
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                onClick={cancelEditProblem}
+                                                                                className="h-8 w-8 p-0"
+                                                                            >
+                                                                                <X className="h-4 w-4" />
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                onClick={saveProblem}
+                                                                                disabled={isSaving}
+                                                                                className="h-8"
+                                                                            >
+                                                                                {isSaving ? (
+                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                ) : (
+                                                                                    <Save className="h-4 w-4" />
+                                                                                )}
+                                                                            </Button>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <TableRow key={problem.id ?? index}>
+                                                                <TableCell className="font-medium">
+                                                                    {getProblemPosition(problem)}
+                                                                </TableCell>
+                                                                <TableCell className="max-w-[300px]">
+                                                                    <p className="truncate" title={problem.description}>
+                                                                        {problem.description}
+                                                                    </p>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge 
+                                                                        variant={
+                                                                            problem.severity === 'critical' ? 'destructive' :
+                                                                            problem.severity === 'high' ? 'destructive' :
+                                                                            'secondary'
+                                                                        }
+                                                                        className="text-xs"
+                                                                    >
+                                                                        {problem.severity ?? 'medium'}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge 
+                                                                        variant={problem.resolution_status === 'resolved' ? 'default' : 'outline'}
+                                                                        className="text-xs"
+                                                                    >
+                                                                        {problem.resolution_status ?? 'open'}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {problem.reported_at || problem.timestamp
+                                                                        ? new Date(problem.reported_at || problem.timestamp!).toLocaleDateString()
+                                                                        : '-'}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex justify-end gap-1">
+                                                                        {problem.id && problem.resolution_status !== 'resolved' && (
+                                                                            <>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => startEditProblem(problem)}
+                                                                                    className="h-8 w-8 p-0"
+                                                                                    title="Edit problem"
+                                                                                >
+                                                                                    <PencilIcon className="h-4 w-4" />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => openResolveDialog(problem)}
+                                                                                    disabled={isSaving}
+                                                                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                                                                                    title="Mark as resolved"
+                                                                                >
+                                                                                    {isSaving ? (
+                                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                    ) : (
+                                                                                        <CheckCircle className="h-4 w-4" />
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <div className="flex h-[100px] items-center justify-center text-muted-foreground">
+                                            No problems reported
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                    </Tabs>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="flex justify-end gap-2 flex-shrink-0">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSaveAndClose}>
+                        <Save className="h-4 w-4 mr-2" />
+                        Done
+                    </Button>
+                </div>
+            </DialogContent>
+
+            {/* Resolve Problem Dialog */}
+            <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Resolve Problem</DialogTitle>
+                        <DialogDescription>
+                            Enter the tension values after repair to mark this problem as resolved.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {resolveData && (
+                        <div className="space-y-4">
+                            <div className="rounded-lg border p-3 bg-muted/50">
+                                <div className="text-sm font-medium">Position: {resolveData.position}</div>
+                                <div className="text-sm text-muted-foreground mt-1">{resolveData.description}</div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="repaired-max">Repaired Max Value (cN)</Label>
+                                    <Input
+                                        id="repaired-max"
+                                        type="number"
+                                        placeholder="Enter max value"
+                                        value={resolveData.repairedMaxValue}
+                                        onChange={(e) => setResolveData({
+                                            ...resolveData,
+                                            repairedMaxValue: e.target.value
+                                        })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="repaired-min">Repaired Min Value (cN)</Label>
+                                    <Input
+                                        id="repaired-min"
+                                        type="number"
+                                        placeholder="Enter min value"
+                                        value={resolveData.repairedMinValue}
+                                        onChange={(e) => setResolveData({
+                                            ...resolveData,
+                                            repairedMinValue: e.target.value
+                                        })}
+                                    />
+                                </div>
+                            </div>
+
+                            {specTension > 0 && (
+                                <div className="text-xs text-muted-foreground text-center">
+                                    Spec Range: {minSpec.toFixed(1)} - {maxSpec.toFixed(1)} cN
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label htmlFor="resolution-notes">Resolution Notes (Optional)</Label>
+                                <Textarea
+                                    id="resolution-notes"
+                                    placeholder="Describe what was done to fix the problem..."
+                                    value={resolveData.resolutionNotes}
+                                    onChange={(e) => setResolveData({
+                                        ...resolveData,
+                                        resolutionNotes: e.target.value
+                                    })}
+                                    rows={2}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setResolveDialogOpen(false);
+                                        setResolveData(null);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={submitResolve}
+                                    disabled={savingProblemId === resolveData.problemId}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    {savingProblemId === resolveData.problemId ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : (
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                    )}
+                                    Mark as Resolved
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+        </Dialog>
+    );
+}

@@ -26,7 +26,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-
+deploy.sh
 .vercel
-
+id_rsa.pub
 .vercel

@@ -1,5 +1,15 @@
 'use client';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -7,7 +17,6 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -20,6 +29,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { TensionRecordEditDialog } from '@/components/tension-record-edit-dialog';
+import { TensionRecordViewDialog } from '@/components/tension-record-view-dialog';
+import { usePermissions } from '@/hooks/use-permissions';
 import {
     ColumnDef,
     ColumnFiltersState,
@@ -36,8 +48,10 @@ import {
     ChevronDown,
     DownloadIcon,
     EyeIcon,
+    FileText,
     MoreHorizontal,
     PencilIcon,
+    Trash2Icon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -71,7 +85,14 @@ interface LaravelPaginatedResponse<T> {
     total: number;
 }
 
-export const columns: ColumnDef<TensionRecord>[] = [
+interface ColumnActions {
+    onViewRecord: (record: TensionRecord) => void;
+    onEditRecord: (record: TensionRecord) => void;
+    onDeleteRecord: (record: TensionRecord) => void;
+    canDelete: boolean;
+}
+
+const createColumns = ({ onViewRecord, onEditRecord, onDeleteRecord, canDelete }: ColumnActions): ColumnDef<TensionRecord>[] => [
     {
         id: 'select',
         header: ({ table }) => (
@@ -101,7 +122,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Record Date',
         accessorFn: (row) => row.created_at,
         cell: ({ getValue }) => {
-            const date = new Date(getValue());
+            const date = new Date(getValue() as string);
             return (
                 <div>
                     {date.toLocaleString('en-ID', {
@@ -200,16 +221,19 @@ export const columns: ColumnDef<TensionRecord>[] = [
         enableHiding: false,
         cell: ({ row }) => {
             const record = row.original;
-            const handleDownload = () => {
-                 // const blob = new Blob([record.csv_data], { type: 'text/csv' });
+            const handleDownloadCsv = () => {
                 const baseUrl = window.location.origin;
                 const url = `${baseUrl}/tension-records/${record.id}/download`;
-
                 const a = document.createElement('a');
                 a.href = url;
-                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
                 a.click();
-                URL.revokeObjectURL(url);
+            };
+            const handleDownloadPdf = () => {
+                const baseUrl = window.location.origin;
+                const url = `${baseUrl}/tension-records/${record.id}/pdf`;
+                const a = document.createElement('a');
+                a.href = url;
+                a.click();
             };
             return (
                 <DropdownMenu>
@@ -220,16 +244,30 @@ export const columns: ColumnDef<TensionRecord>[] = [
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={handleDownload}>
-                            <DownloadIcon></DownloadIcon>Download
+                        <DropdownMenuItem onClick={() => onViewRecord(record)}>
+                            <EyeIcon className="mr-2 h-4 w-4" />View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEditRecord(record)}>
+                            <PencilIcon className="mr-2 h-4 w-4" />Edit Record
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                            <EyeIcon></EyeIcon>View
+                        <DropdownMenuItem onClick={handleDownloadCsv}>
+                            <DownloadIcon className="mr-2 h-4 w-4" />Download CSV
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
-                            <PencilIcon></PencilIcon>Update
+                        <DropdownMenuItem onClick={handleDownloadPdf}>
+                            <FileText className="mr-2 h-4 w-4" />Download PDF
                         </DropdownMenuItem>
+                        {canDelete && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                    onClick={() => onDeleteRecord(record)}
+                                    className="text-destructive focus:text-destructive"
+                                >
+                                    <Trash2Icon className="mr-2 h-4 w-4" />Delete Record
+                                </DropdownMenuItem>
+                            </>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             );
@@ -249,6 +287,83 @@ export function WeavingDataTable() {
     const [pageCount, setPageCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Permissions
+    const { hasRole } = usePermissions();
+    const canDelete = hasRole(['master', 'admin', 'super-admin']);
+
+    // View dialog state
+    const [selectedRecord, setSelectedRecord] = useState<TensionRecord | null>(null);
+    const [viewDialogOpen, setViewDialogOpen] = useState(false);
+
+    // Edit dialog state
+    const [editRecord, setEditRecord] = useState<TensionRecord | null>(null);
+    const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+    // Delete confirmation state
+    const [deleteRecord, setDeleteRecord] = useState<TensionRecord | null>(null);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const handleViewRecord = (record: TensionRecord) => {
+        setSelectedRecord(record);
+        setViewDialogOpen(true);
+    };
+
+    const handleEditRecord = (record: TensionRecord) => {
+        setEditRecord(record);
+        setEditDialogOpen(true);
+    };
+
+    const handleDeleteRecord = (record: TensionRecord) => {
+        setDeleteRecord(record);
+        setDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteRecord) return;
+
+        setDeleting(true);
+        try {
+            const baseUrl = window.location.origin;
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            const response = await fetch(`${baseUrl}/tension-records/${deleteRecord.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete record');
+            }
+
+            setDeleteDialogOpen(false);
+            setDeleteRecord(null);
+            setRefreshTrigger(prev => prev + 1);
+        } catch (error) {
+            console.error('Failed to delete record:', error);
+            alert('Failed to delete record');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const handleEditSave = () => {
+        setRefreshTrigger(prev => prev + 1);
+    };
+
+    const columns = React.useMemo(() => createColumns({
+        onViewRecord: handleViewRecord,
+        onEditRecord: handleEditRecord,
+        onDeleteRecord: handleDeleteRecord,
+        canDelete,
+    }), [canDelete]);
 
     const [pagination, setPagination] = useState({
         pageIndex: 0, // TanStack starts from 0
@@ -346,6 +461,7 @@ export function WeavingDataTable() {
     sorting,
     globalFilter,
     columnFilters,
+    refreshTrigger,
 ]);
 
     return (
@@ -461,6 +577,53 @@ export function WeavingDataTable() {
                     </Button>
                 </div>
             </div>
+
+            {/* View Dialog */}
+            {selectedRecord && (
+                <TensionRecordViewDialog
+                    record={selectedRecord}
+                    open={viewDialogOpen}
+                    onOpenChange={setViewDialogOpen}
+                />
+            )}
+
+            {/* Edit Dialog */}
+            {editRecord && (
+                <TensionRecordEditDialog
+                    record={editRecord}
+                    open={editDialogOpen}
+                    onOpenChange={setEditDialogOpen}
+                    onSave={handleEditSave}
+                />
+            )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Tension Record</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete this tension record? This action cannot be undone.
+                            {deleteRecord && (
+                                <span className="block mt-2 font-medium">
+                                    Machine: {deleteRecord.metadata?.machine_number || 'N/A'} | 
+                                    Item: {deleteRecord.metadata?.item_number || 'N/A'}
+                                </span>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            disabled={deleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {deleting ? 'Deleting...' : 'Delete'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

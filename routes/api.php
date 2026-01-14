@@ -1,82 +1,52 @@
 <?php
 
+use App\Http\Controllers\Api\DataSyncController;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
-use App\Http\Controllers\Api\StockTakeRecordController;
-use App\Http\Controllers\Api\TensionRecordController;
-use App\Http\Controllers\Api\FinishEarlierRecordController;
+use Illuminate\Support\Facades\Route;
 
-// Mobile routes group
-Route::prefix('mobile')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
 
-    // Public routes (no auth)
-    Route::post('/login', function (Request $request) {
-        $request->validate([
-            'login' => 'required|string', // can be email or username
-            'password' => 'required|string',
-        ]);
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
 
-        $login = $request->login;
-
-        $user = User::where('email', $login)
-                    ->orWhere('username', $login)
-                    ->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $token = $user->createToken('mobile-app-token')->plainTextToken;
-
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user,
-        ]);
-    });
-
-    // Routes that require authentication
-    Route::middleware(['throttle:60,1','auth:sanctum'])->group(function () {
-
-        Route::post('/logout', function (Request $request) {
-            $request->user()->currentAccessToken()->delete();
-            return response()->json(['message' => 'Logged out']);
-        });
-
-        // Tension features endpoints
-        Route::resource('tension-records', TensionRecordController::class)->only([
-            'index', 'store', 'show', 'destroy', 'update'
-        ]);
-
-        Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv'])
-            ->name('tension-records.download');
+// Data Sync API routes (for Electron desktop app)
+Route::prefix('sync')->name('sync.')->group(function () {
+    // Device registration (no auth required for initial registration)
+    Route::post('register-device', [DataSyncController::class, 'registerDevice'])
+        ->name('register-device');
+    
+    // Protected sync endpoints
+    Route::middleware('auth:sanctum')->group(function () {
+        // Sync status
+        Route::get('status', [DataSyncController::class, 'getSyncStatus'])
+            ->name('status');
         
-        Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
-            ->name('tension-records.statistics');
-
-        Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
-            ->whereIn('type', ['twisting', 'weaving'])
-            ->name('tension-records.by-type');
-
-        // Stock taking features endpoints
-        Route::get('stock-take-records/session/{sessionId}', [StockTakeRecordController::class, 'getSession']);
-        Route::get('stock-take-records/check-batch', [StockTakeRecordController::class, 'checkBatch']);
-        Route::post('stock-take-records/record-batch', [StockTakeRecordController::class, 'recordBatch']);
-        Route::patch('stock-take-records/{id}/status', [StockTakeRecordController::class, 'updateSessionStatus']);
-        Route::get('stock-take-records/{stockTakeRecord}/download', [StockTakeRecordController::class, 'downloadCsv']);
-        Route::resource('stock-take-records', StockTakeRecordController::class)->only([
-            'index', 'store', 'show', 'destroy', 'update'
-        ]);
-
-        // Finish Earlier Record Endpoints
-        Route::get('/finish-earlier', [FinishEarlierRecordController::class, 'index']);
-        Route::get('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'show']);
-        Route::get('/finish-earlier/session/{productionOrder}', [FinishEarlierRecordController::class, 'getSession']);
-        Route::get('/finish-earlier/{productionOrder}/download', [FinishEarlierRecordController::class, 'downloadCsv']);
-        Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
-        Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
-        Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish']);
-        Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy']);
+        // Upload data from client to server
+        Route::post('upload', [DataSyncController::class, 'upload'])
+            ->name('upload');
+        
+        // Download data from server to client
+        Route::get('download', [DataSyncController::class, 'download'])
+            ->name('download');
+        
+        // Conflicts management
+        Route::get('conflicts', [DataSyncController::class, 'getConflicts'])
+            ->name('conflicts');
+        Route::post('conflicts/{id}/resolve', [DataSyncController::class, 'resolveConflict'])
+            ->name('conflicts.resolve');
+        
+        // Sync logs
+        Route::get('logs', [DataSyncController::class, 'getSyncLogs'])
+            ->name('logs');
     });
 });

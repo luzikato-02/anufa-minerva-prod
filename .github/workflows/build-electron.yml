@@ -1,0 +1,225 @@
+name: Build Electron App
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: false
+        default: ''
+      release:
+        description: 'Create GitHub release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  NODE_VERSION: '20.x'
+  
+jobs:
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: |
+          npm ci --legacy-peer-deps
+          
+      - name: Build frontend assets
+        run: npm run build
+        
+      - name: Install Electron Forge
+        run: npm install --save-dev @electron-forge/cli @electron-forge/maker-squirrel @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
+        
+      - name: Package Electron app
+        run: npx electron-forge package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Create Windows Installer
+        run: npx electron-forge make --platform=win32 --arch=x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: List output files
+        run: |
+          echo "=== out directory ==="
+          dir out -Recurse
+          
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: out/make/**/*
+          retention-days: 30
+          
+      - name: Upload Windows Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: out/Anufa Minerva-win32-x64/**/*
+          retention-days: 30
+
+  build-linux:
+    name: Build Linux App
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+        
+      - name: Build frontend assets
+        run: npm run build
+        
+      - name: Install Electron Forge
+        run: npm install --save-dev @electron-forge/cli @electron-forge/maker-deb @electron-forge/maker-rpm @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
+        
+      - name: Create Linux packages
+        run: npx electron-forge make --platform=linux --arch=x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Upload Linux DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: out/make/deb/**/*.deb
+          retention-days: 30
+          if-no-files-found: ignore
+          
+      - name: Upload Linux RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-rpm
+          path: out/make/rpm/**/*.rpm
+          retention-days: 30
+          if-no-files-found: ignore
+          
+      - name: Upload Linux ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: out/make/zip/**/*.zip
+          retention-days: 30
+          if-no-files-found: ignore
+
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+        
+      - name: Build frontend assets
+        run: npm run build
+        
+      - name: Install Electron Forge
+        run: npm install --save-dev @electron-forge/cli @electron-forge/maker-zip @electron-forge/plugin-auto-unpack-natives @electron-forge/plugin-fuses @electron/fuses
+        
+      - name: Create macOS package
+        run: npx electron-forge make --platform=darwin --arch=x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Upload macOS ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: out/make/zip/**/*.zip
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f -name "*" | head -50
+          
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version }}" != "" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(date +%Y.%m.%d)" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Anufa Minerva v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.msi
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.zip
+            artifacts/**/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

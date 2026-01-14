@@ -94,6 +94,7 @@ export default function WeavingNumpad({
     formData: WeavingFormData;
     problems: WeavingProblem[];
     onReportProblem?: (position: string) => void;
+    onAutoReportProblem?: (position: string, description: string) => void;
     onOpenRecorder?: () => void;
     onDataCleared?: () => void;
 }) {
@@ -207,22 +208,33 @@ export default function WeavingNumpad({
         const numValue = Number.parseFloat(display);
         if (!isNaN(numValue)) {
             // Get the current spindle data before updating
-      const currentData = creelData[currentSide]?.[currentRow]?.[counter] || { max: null, min: null }
+            const currentData = creelData[currentSide]?.[currentRow]?.[counter] || { max: null, min: null }
 
-      // Check if both values will be filled after this submission
-      const otherValue = valueType === "Max" ? currentData.min : currentData.max
-      const bothWillBeFilled = otherValue !== null
+            // Check if both values will be filled after this submission
+            const otherValue = valueType === "Max" ? currentData.min : currentData.max
+            const bothWillBeFilled = otherValue !== null
+
+            // Check if the submitted value is out of spec and auto-report problem
+            const isValueOutOfSpec = numValue < minSpec || numValue > maxSpec;
+            if (isValueOutOfSpec && specTens > 0) {
+                const fullPosition = `${currentSide}-${currentRow}-Col${counter}`;
+                const problemType = numValue > maxSpec ? 'High Tension' : 'Low Tension';
+                const description = `${problemType}: ${valueType} value ${numValue.toFixed(1)} cN is outside spec range (${minSpec.toFixed(1)} - ${maxSpec.toFixed(1)} cN)`;
+                console.log(`Auto-reporting problem for ${fullPosition}: ${description}`);
+                onAutoReportProblem?.(fullPosition, description);
+            }
+
             storeValue(numValue);
             setDisplay('0');
             console.log(
                 `Submitted ${valueType} value ${numValue} for ${currentSide}-${currentRow}-Col${counter}`,
             );
             // If both values are now filled, move to next column
-      if (bothWillBeFilled && counter < 120) {
-        console.log(`Both values complete for ${currentSide}-${currentRow}-Col${counter}. Moving to Col${counter + 1}`)
-        setCounter(counter + 1)
-        setValueType("Max")
-      }
+            if (bothWillBeFilled && counter < 120) {
+                console.log(`Both values complete for ${currentSide}-${currentRow}-Col${counter}. Moving to Col${counter + 1}`)
+                setCounter(counter + 1)
+                setValueType("Max")
+            }
         }
         toggleValueType();
     };
