@@ -1,5 +1,5 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { IconArrowLeft, IconCheck, IconX, IconGitMerge, IconTrash } from '@tabler/icons-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { IconArrowLeft, IconCheck, IconGitMerge, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     AlertDialog,
@@ -61,8 +60,7 @@ export default function ConflictDetail({ conflict, diff }: Props) {
         });
         return merged;
     });
-
-    const { post, processing } = useForm();
+    const [processing, setProcessing] = useState(false);
 
     const getTableDisplayName = (tableName: string) => {
         const names: Record<string, string> = {
@@ -111,18 +109,27 @@ export default function ConflictDetail({ conflict, diff }: Props) {
     };
 
     const confirmResolve = () => {
-        const data: Record<string, unknown> = {
+        setProcessing(true);
+        
+        const formData: {
+            resolution: string;
+            notes: string;
+            merged_data?: Record<string, unknown>;
+        } = {
             resolution: resolveAction,
             notes: notes,
         };
 
         if (resolveAction === 'merged') {
-            data.merged_data = mergedData;
+            formData.merged_data = mergedData;
         }
 
-        router.post(`/admin/data-sync/conflicts/${conflict.id}/resolve`, data, {
+        router.post(`/admin/data-sync/conflicts/${conflict.id}/resolve`, formData, {
             onSuccess: () => {
                 setShowResolveDialog(false);
+            },
+            onFinish: () => {
+                setProcessing(false);
             },
         });
     };
