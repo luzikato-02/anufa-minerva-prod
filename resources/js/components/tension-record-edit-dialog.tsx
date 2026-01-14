@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Loader2, PencilIcon, Plus, Save, X } from 'lucide-react';
+import { Check, CheckCircle, Loader2, PencilIcon, Plus, Save, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 interface TensionProblem {
@@ -124,17 +124,34 @@ interface EditingProblem {
     severity: string;
 }
 
+interface EditingMeasurement {
+    key: string;
+    field: 'max' | 'min';
+    value: string;
+}
+
+interface EditingSessionField {
+    field: string;
+    value: string;
+}
+
 export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: Props) {
     const [measurements, setMeasurements] = useState<TwistingMeasurement[] | WeavingMeasurement[]>([]);
     const [problems, setProblems] = useState<TensionProblem[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [editedMeasurements, setEditedMeasurements] = useState<Map<string, { max: string; min: string }>>(new Map());
     const [newProblem, setNewProblem] = useState({ position: '', description: '' });
     const [editingProblem, setEditingProblem] = useState<EditingProblem | null>(null);
     const [savingProblemId, setSavingProblemId] = useState<number | null>(null);
     const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
     const [resolveData, setResolveData] = useState<ResolveDialogData | null>(null);
+    
+    // Inline editing states
+    const [editingMeasurement, setEditingMeasurement] = useState<EditingMeasurement | null>(null);
+    const [savingMeasurement, setSavingMeasurement] = useState<string | null>(null);
+    const [editingSessionField, setEditingSessionField] = useState<EditingSessionField | null>(null);
+    const [savingSessionField, setSavingSessionField] = useState<string | null>(null);
+    const [sessionData, setSessionData] = useState<Record<string, string | number | undefined>>({});
 
     const specTension = Number(
         record.spec_tension ?? record.form_data?.specTens ?? 0
@@ -185,10 +202,21 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
         if (open && record.id) {
             fetchMeasurements();
             fetchProblems();
-            setEditedMeasurements(new Map());
+            setEditingMeasurement(null);
             setEditingProblem(null);
+            setEditingSessionField(null);
+            // Initialize session data from record
+            setSessionData({
+                operator: record.metadata?.operator ?? record.form_data?.operator ?? '',
+                machine_number: record.metadata?.machine_number ?? record.form_data?.machineNumber ?? record.form_data?.machineNo ?? '',
+                item_number: record.metadata?.item_number ?? record.form_data?.itemNumber ?? record.form_data?.itemNo ?? '',
+                item_description: record.metadata?.item_description ?? record.form_data?.itemDesc ?? '',
+                yarn_code: record.metadata?.yarn_code ?? record.form_data?.yarnCode ?? '',
+                spec_tension: record.spec_tension ?? record.form_data?.specTens ?? '',
+                tension_tolerance: record.tension_tolerance ?? record.form_data?.tensPlus ?? '',
+            });
         }
-    }, [open, record.id, fetchMeasurements, fetchProblems]);
+    }, [open, record.id, record.metadata, record.form_data, record.spec_tension, record.tension_tolerance, fetchMeasurements, fetchProblems]);
 
     const getMeasurementKey = (measurement: TwistingMeasurement | WeavingMeasurement): string => {
         if (record.record_type === 'twisting') {
@@ -208,17 +236,25 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
         }
     };
 
-    const handleMeasurementChange = (key: string, field: 'max' | 'min', value: string) => {
-        const newEdited = new Map(editedMeasurements);
-        const current = newEdited.get(key) || { max: '', min: '' };
-        newEdited.set(key, { ...current, [field]: value });
-        setEditedMeasurements(newEdited);
+    const startEditMeasurement = (key: string, field: 'max' | 'min', currentValue: number | null) => {
+        setEditingMeasurement({
+            key,
+            field,
+            value: currentValue != null ? String(currentValue) : '',
+        });
     };
 
-    const saveMeasurement = async (measurement: TwistingMeasurement | WeavingMeasurement) => {
+    const cancelEditMeasurement = () => {
+        setEditingMeasurement(null);
+    };
+
+    const saveMeasurementValue = async (measurement: TwistingMeasurement | WeavingMeasurement) => {
+        if (!editingMeasurement) return;
+
         const key = getMeasurementKey(measurement);
-        const edited = editedMeasurements.get(key);
-        if (!edited) return;
+        if (editingMeasurement.key !== key) return;
+
+        setSavingMeasurement(`${key}-${editingMeasurement.field}`);
 
         const baseUrl = window.location.origin;
         let url: string;
@@ -236,8 +272,11 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
             const { csrfToken } = await csrfResponse.json();
 
             const body: Record<string, number | null> = {};
-            if (edited.max !== '') body.max_value = parseFloat(edited.max);
-            if (edited.min !== '') body.min_value = parseFloat(edited.min);
+            if (editingMeasurement.field === 'max') {
+                body.max_value = editingMeasurement.value !== '' ? parseFloat(editingMeasurement.value) : null;
+            } else {
+                body.min_value = editingMeasurement.value !== '' ? parseFloat(editingMeasurement.value) : null;
+            }
 
             const response = await fetch(url, {
                 method: 'PATCH',
@@ -254,14 +293,85 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                 throw new Error('Failed to save measurement');
             }
 
-            // Clear the edited value and refresh
-            const newEdited = new Map(editedMeasurements);
-            newEdited.delete(key);
-            setEditedMeasurements(newEdited);
+            setEditingMeasurement(null);
             await fetchMeasurements();
         } catch (error) {
             console.error('Failed to save measurement:', error);
             alert('Failed to save measurement');
+        } finally {
+            setSavingMeasurement(null);
+        }
+    };
+
+    const startEditSessionField = (field: string, currentValue: string | number | undefined) => {
+        setEditingSessionField({
+            field,
+            value: currentValue != null ? String(currentValue) : '',
+        });
+    };
+
+    const cancelEditSessionField = () => {
+        setEditingSessionField(null);
+    };
+
+    const saveSessionField = async () => {
+        if (!editingSessionField) return;
+
+        setSavingSessionField(editingSessionField.field);
+
+        const baseUrl = window.location.origin;
+
+        try {
+            const csrfResponse = await fetch(`${baseUrl}/csrf-token`, { credentials: 'include' });
+            const { csrfToken } = await csrfResponse.json();
+
+            // Build the update payload
+            const updatePayload: Record<string, string | number> = {};
+            const fieldMapping: Record<string, string> = {
+                operator: 'operator',
+                machine_number: 'machine_number',
+                item_number: 'item_number',
+                item_description: 'item_description',
+                yarn_code: 'yarn_code',
+                spec_tension: 'spec_tension',
+                tension_tolerance: 'tension_tolerance',
+            };
+
+            const apiField = fieldMapping[editingSessionField.field] || editingSessionField.field;
+            
+            // Convert numeric fields
+            if (editingSessionField.field === 'spec_tension' || editingSessionField.field === 'tension_tolerance') {
+                updatePayload[apiField] = editingSessionField.value !== '' ? parseFloat(editingSessionField.value) : 0;
+            } else {
+                updatePayload[apiField] = editingSessionField.value;
+            }
+
+            const response = await fetch(`${baseUrl}/tension-records/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(updatePayload),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save session field');
+            }
+
+            // Update local state
+            setSessionData(prev => ({
+                ...prev,
+                [editingSessionField.field]: editingSessionField.value,
+            }));
+            setEditingSessionField(null);
+        } catch (error) {
+            console.error('Failed to save session field:', error);
+            alert('Failed to save session field');
+        } finally {
+            setSavingSessionField(null);
         }
     };
 
@@ -451,19 +561,110 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
 
                 <div className="flex-1 overflow-y-auto pr-2">
                     <Tabs defaultValue="measurements" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="measurements">Edit Measurements</TabsTrigger>
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="details">Session Details</TabsTrigger>
+                            <TabsTrigger value="measurements">Measurements</TabsTrigger>
                             <TabsTrigger value="problems">
-                                Manage Problems ({problems.length})
+                                Problems ({problems.length})
                             </TabsTrigger>
                         </TabsList>
+
+                        <TabsContent value="details" className="mt-4">
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle>Session Details</CardTitle>
+                                    <CardDescription>
+                                        Click the pencil icon to edit session information
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid gap-4">
+                                        {[
+                                            { field: 'operator', label: 'Operator', placeholder: 'Enter operator name' },
+                                            { field: 'machine_number', label: 'Machine Number', placeholder: 'Enter machine number' },
+                                            { field: 'item_number', label: 'Item Number', placeholder: 'Enter item number' },
+                                            { field: 'item_description', label: 'Item Description', placeholder: 'Enter item description' },
+                                            ...(record.record_type === 'twisting' ? [{ field: 'yarn_code', label: 'Yarn Code', placeholder: 'Enter yarn code' }] : []),
+                                            { field: 'spec_tension', label: 'Spec Tension (cN)', placeholder: 'Enter spec tension', type: 'number' },
+                                            { field: 'tension_tolerance', label: 'Tolerance (±cN)', placeholder: 'Enter tolerance', type: 'number' },
+                                        ].map(({ field, label, placeholder, type }) => {
+                                            const isEditing = editingSessionField?.field === field;
+                                            const isSaving = savingSessionField === field;
+                                            const value = sessionData[field];
+
+                                            return (
+                                                <div key={field} className="flex items-center gap-3 py-2 border-b last:border-b-0">
+                                                    <Label className="w-40 font-medium text-sm">{label}</Label>
+                                                    <div className="flex-1 flex items-center gap-2">
+                                                        {isEditing ? (
+                                                            <>
+                                                                <Input
+                                                                    type={type || 'text'}
+                                                                    value={editingSessionField.value}
+                                                                    onChange={(e) => setEditingSessionField({
+                                                                        ...editingSessionField,
+                                                                        value: e.target.value
+                                                                    })}
+                                                                    placeholder={placeholder}
+                                                                    className="h-8 flex-1"
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') saveSessionField();
+                                                                        if (e.key === 'Escape') cancelEditSessionField();
+                                                                    }}
+                                                                />
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={cancelEditSessionField}
+                                                                    className="h-8 w-8 p-0"
+                                                                    disabled={isSaving}
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={saveSessionField}
+                                                                    disabled={isSaving}
+                                                                    className="h-8 w-8 p-0"
+                                                                >
+                                                                    {isSaving ? (
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    ) : (
+                                                                        <Check className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span className="flex-1 text-sm">
+                                                                    {value != null && value !== '' ? String(value) : <span className="text-muted-foreground italic">Not set</span>}
+                                                                </span>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() => startEditSessionField(field, value)}
+                                                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                                                >
+                                                                    <PencilIcon className="h-4 w-4" />
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
 
                         <TabsContent value="measurements" className="mt-4">
                             <Card>
                                 <CardHeader className="pb-3">
                                     <CardTitle>Tension Measurements</CardTitle>
                                     <CardDescription>
-                                        Edit individual measurement values. Spec: {specTension} cN (±{tolerance} cN) | Range: {minSpec} - {maxSpec} cN
+                                        Click the pencil icon beside a value to edit. Spec: {specTension} cN (±{tolerance} cN) | Range: {minSpec} - {maxSpec} cN
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
@@ -479,32 +680,141 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                         <TableHead className="w-[100px]">
                                                             {record.record_type === 'twisting' ? 'Spindle' : 'Position'}
                                                         </TableHead>
-                                                        <TableHead className="text-center">Current Max</TableHead>
-                                                        <TableHead className="text-center">Current Min</TableHead>
+                                                        <TableHead className="text-center">Max Value</TableHead>
+                                                        <TableHead className="text-center">Min Value</TableHead>
                                                         <TableHead className="text-center">Avg</TableHead>
                                                         <TableHead className="text-center">Status</TableHead>
-                                                        <TableHead className="text-center w-[120px]">New Max</TableHead>
-                                                        <TableHead className="text-center w-[120px]">New Min</TableHead>
-                                                        <TableHead className="w-[80px]"></TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {(measurements as (TwistingMeasurement | WeavingMeasurement)[]).map((measurement) => {
                                                         const key = getMeasurementKey(measurement);
-                                                        const edited = editedMeasurements.get(key);
                                                         const label = getMeasurementLabel(measurement);
                                                         const maxVal = measurement.max_value != null ? Number(measurement.max_value) : null;
                                                         const minVal = measurement.min_value != null ? Number(measurement.min_value) : null;
                                                         const avgVal = measurement.avg_value != null ? Number(measurement.avg_value) : null;
+                                                        
+                                                        const isEditingMax = editingMeasurement?.key === key && editingMeasurement?.field === 'max';
+                                                        const isEditingMin = editingMeasurement?.key === key && editingMeasurement?.field === 'min';
+                                                        const isSavingMax = savingMeasurement === `${key}-max`;
+                                                        const isSavingMin = savingMeasurement === `${key}-min`;
 
                                                         return (
                                                             <TableRow key={key} className={measurement.is_out_of_spec ? 'bg-destructive/5' : ''}>
                                                                 <TableCell className="font-medium">{label}</TableCell>
-                                                                <TableCell className="text-center">
-                                                                    {maxVal != null ? maxVal.toFixed(1) : '-'}
+                                                                <TableCell>
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        {isEditingMax ? (
+                                                                            <>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={editingMeasurement.value}
+                                                                                    onChange={(e) => setEditingMeasurement({
+                                                                                        ...editingMeasurement,
+                                                                                        value: e.target.value
+                                                                                    })}
+                                                                                    className="h-7 w-20 text-center"
+                                                                                    autoFocus
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter') saveMeasurementValue(measurement);
+                                                                                        if (e.key === 'Escape') cancelEditMeasurement();
+                                                                                    }}
+                                                                                />
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={cancelEditMeasurement}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                    disabled={isSavingMax}
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={() => saveMeasurementValue(measurement)}
+                                                                                    disabled={isSavingMax}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                >
+                                                                                    {isSavingMax ? (
+                                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                    ) : (
+                                                                                        <Check className="h-3 w-3" />
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="min-w-[40px] text-center">
+                                                                                    {maxVal != null ? maxVal.toFixed(1) : '-'}
+                                                                                </span>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => startEditMeasurement(key, 'max', maxVal)}
+                                                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                                                >
+                                                                                    <PencilIcon className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
                                                                 </TableCell>
-                                                                <TableCell className="text-center">
-                                                                    {minVal != null ? minVal.toFixed(1) : '-'}
+                                                                <TableCell>
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        {isEditingMin ? (
+                                                                            <>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={editingMeasurement.value}
+                                                                                    onChange={(e) => setEditingMeasurement({
+                                                                                        ...editingMeasurement,
+                                                                                        value: e.target.value
+                                                                                    })}
+                                                                                    className="h-7 w-20 text-center"
+                                                                                    autoFocus
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter') saveMeasurementValue(measurement);
+                                                                                        if (e.key === 'Escape') cancelEditMeasurement();
+                                                                                    }}
+                                                                                />
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={cancelEditMeasurement}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                    disabled={isSavingMin}
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={() => saveMeasurementValue(measurement)}
+                                                                                    disabled={isSavingMin}
+                                                                                    className="h-7 w-7 p-0"
+                                                                                >
+                                                                                    {isSavingMin ? (
+                                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                    ) : (
+                                                                                        <Check className="h-3 w-3" />
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="min-w-[40px] text-center">
+                                                                                    {minVal != null ? minVal.toFixed(1) : '-'}
+                                                                                </span>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => startEditMeasurement(key, 'min', minVal)}
+                                                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                                                >
+                                                                                    <PencilIcon className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
                                                                 </TableCell>
                                                                 <TableCell className="text-center">
                                                                     {avgVal != null ? avgVal.toFixed(1) : '-'}
@@ -523,35 +833,6 @@ export function TensionRecordEditDialog({ record, open, onOpenChange, onSave }: 
                                                                             Incomplete
                                                                         </Badge>
                                                                     )}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <Input
-                                                                        type="number"
-                                                                        placeholder="Max"
-                                                                        value={edited?.max ?? ''}
-                                                                        onChange={(e) => handleMeasurementChange(key, 'max', e.target.value)}
-                                                                        className="h-8 text-center"
-                                                                    />
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <Input
-                                                                        type="number"
-                                                                        placeholder="Min"
-                                                                        value={edited?.min ?? ''}
-                                                                        onChange={(e) => handleMeasurementChange(key, 'min', e.target.value)}
-                                                                        className="h-8 text-center"
-                                                                    />
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => saveMeasurement(measurement)}
-                                                                        disabled={!edited || (edited.max === '' && edited.min === '')}
-                                                                        className="h-8 w-full"
-                                                                    >
-                                                                        <Save className="h-4 w-4" />
-                                                                    </Button>
                                                                 </TableCell>
                                                             </TableRow>
                                                         );
