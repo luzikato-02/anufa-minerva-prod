@@ -303,7 +303,7 @@ class TensionRecordController extends Controller
 
     /**
      * Download CSV data for a specific record
-     * Format: Position, Max Value, Min Value, Problems, Max After Repair, Min After Repair
+     * Format: Session details at top, then Position, Max Value, Min Value, Problems, Max After Repair, Min After Repair
      */
     public function downloadCsv(TensionRecord $tensionRecord)
     {
@@ -311,6 +311,37 @@ class TensionRecordController extends Controller
         
         // Build CSV content with new format
         $csvLines = [];
+        
+        // Add session details section
+        $csvLines[] = 'SESSION DETAILS';
+        $csvLines[] = 'Field,Value';
+        $csvLines[] = sprintf('Record Type,%s', ucfirst($tensionRecord->record_type));
+        $csvLines[] = sprintf('Operator,"%s"', str_replace('"', '""', $tensionRecord->operator ?? ''));
+        $csvLines[] = sprintf('Machine Number,"%s"', str_replace('"', '""', $tensionRecord->machine_number ?? ''));
+        $csvLines[] = sprintf('Item Number,"%s"', str_replace('"', '""', $tensionRecord->item_number ?? ''));
+        $csvLines[] = sprintf('Item Description,"%s"', str_replace('"', '""', $tensionRecord->item_description ?? ''));
+        
+        if ($tensionRecord->isTwisting()) {
+            $csvLines[] = sprintf('DTEX Number,"%s"', str_replace('"', '""', $tensionRecord->dtex_number ?? ''));
+            $csvLines[] = sprintf('Yarn Code,"%s"', str_replace('"', '""', $tensionRecord->yarn_code ?? ''));
+            $csvLines[] = sprintf('TPM,%s', $tensionRecord->tpm ?? '');
+            $csvLines[] = sprintf('RPM,%s', $tensionRecord->rpm ?? '');
+        } else {
+            $csvLines[] = sprintf('Production Order,"%s"', str_replace('"', '""', $tensionRecord->production_order ?? ''));
+            $csvLines[] = sprintf('Bale Number,"%s"', str_replace('"', '""', $tensionRecord->bale_number ?? ''));
+            $csvLines[] = sprintf('Color Code,"%s"', str_replace('"', '""', $tensionRecord->color_code ?? ''));
+        }
+        
+        $csvLines[] = sprintf('Spec Tension (cN),%s', $tensionRecord->spec_tension ?? '');
+        $csvLines[] = sprintf('Tolerance (±cN),%s', $tensionRecord->tension_tolerance ?? '');
+        $csvLines[] = sprintf('Meters Check,%s', $tensionRecord->meters_check ?? '');
+        $csvLines[] = sprintf('Record Date,%s', $tensionRecord->created_at ? $tensionRecord->created_at->format('Y-m-d H:i:s') : '');
+        $csvLines[] = sprintf('Status,%s', ucfirst($tensionRecord->status ?? ''));
+        $csvLines[] = sprintf('Progress,%s%%', $tensionRecord->progress_percentage ?? 0);
+        
+        // Add blank line separator
+        $csvLines[] = '';
+        $csvLines[] = 'MEASUREMENTS';
         
         if ($tensionRecord->isTwisting()) {
             // Header for twisting
