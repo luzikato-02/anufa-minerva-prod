@@ -105,10 +105,22 @@ interface ConflictResolution {
 }
 
 declare global {
-    interface Window {
-        electronAPI?: ElectronAPI;
-        platform?: PlatformInfo;
-    }
+  interface Window {
+    electronAPI?: {
+      isElectron(): Promise<boolean>;
+      getServerUrl(): Promise<string | null>;
+      setServerUrl(url: string): Promise<boolean>;
+
+      onShowServerConfig(
+        callback: () => void
+      ): () => void;
+    };
+    windowAPI?: {
+      minimize: () => Promise<void>;
+      maximize: () => Promise<void>;
+      close: () => Promise<void>;
+    };
+  }
 }
 
 export {};

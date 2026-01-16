@@ -59,4 +59,7 @@ contextBridge.exposeInMainWorld('platform', {
     isLinux: process.platform === 'linux',
     platform: process.platform,
     arch: process.arch,
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
 });

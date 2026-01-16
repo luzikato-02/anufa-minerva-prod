@@ -23,7 +23,7 @@ return new class extends Migration
             $table->json('payload')->nullable()->comment('The data being synced');
             $table->text('error_message')->nullable()->comment('Error message if sync failed');
             $table->string('client_identifier', 100)->nullable()->comment('Unique identifier for the client device');
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
             
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->json('remote_data')->comment('Data from the remote/server database');
             $table->json('conflict_fields')->comment('List of fields that have conflicting values');
             $table->enum('resolution_status', ['pending', 'local_wins', 'remote_wins', 'merged', 'dismissed'])->default('pending');
-            $table->foreignId('resolved_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('resolved_by_user_id')->nullable()->index();
             $table->timestamp('resolved_at')->nullable();
             $table->text('resolution_notes')->nullable()->comment('Notes about the resolution decision');
             $table->json('merged_data')->nullable()->comment('Final merged data if merge resolution was used');
@@ -61,7 +61,7 @@ return new class extends Migration
             $table->string('device_type', 50)->nullable()->comment('Type of device (desktop, mobile, etc.)');
             $table->string('os_info', 100)->nullable()->comment('Operating system information');
             $table->string('app_version', 50)->nullable()->comment('Version of the app on this device');
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->timestamp('last_sync_at')->nullable()->comment('Last successful sync timestamp');
             $table->json('sync_settings')->nullable()->comment('Device-specific sync settings');
             $table->boolean('is_active')->default(true);

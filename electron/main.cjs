@@ -190,6 +190,8 @@ function createWindow() {
         height: 900,
         minWidth: 1024,
         minHeight: 768,
+        frame: false,
+        titleBarStyle: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -334,16 +336,8 @@ function createMenu() {
 
 // Show server configuration dialog
 async function showServerConfigDialog() {
-    const result = await dialog.showMessageBox(mainWindow, {
-        type: 'question',
-        buttons: ['Cancel', 'Configure'],
-        title: 'Server Configuration',
-        message: 'Enter the remote server URL to sync data with.',
-    });
-
-    if (result.response === 1) {
-        mainWindow.webContents.send('show-server-config');
-    }
+    // Show server config modal directly
+    mainWindow.webContents.send('show-server-config')
 }
 
 // Show about dialog
@@ -375,6 +369,13 @@ function setupIpcHandlers() {
         }
         return success;
     });
+
+    ipcMain.handle('window:minimize', () => mainWindow.minimize())
+    ipcMain.handle('window:maximize', () => {
+        mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()
+    })
+    ipcMain.handle('window:close', () => mainWindow.close())
+
 
     // Check if running in Electron
     ipcMain.handle('is-electron', () => true);
