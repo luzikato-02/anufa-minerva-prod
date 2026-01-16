@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Server configuration
     getServerUrl: () => ipcRenderer.invoke('get-server-url'),
     setServerUrl: (url) => ipcRenderer.invoke('set-server-url', url),
+    showServerConfig: () => ipcRenderer.invoke('show-server-config-dialog'),
     
     // Database operations
     dbExecute: (sql, params) => ipcRenderer.invoke('db-execute', sql, params),
@@ -59,7 +60,7 @@ contextBridge.exposeInMainWorld('platform', {
     isLinux: process.platform === 'linux',
     platform: process.platform,
     arch: process.arch,
-    minimize: () => ipcRenderer.invoke('window:minimize'),
-    maximize: () => ipcRenderer.invoke('window:maximize'),
-    close: () => ipcRenderer.invoke('window:close'),
+    minimize: () => ipcRenderer.send('window-minimize'),
+    maximize: () => ipcRenderer.send('window-maximize'),
+    close: () => ipcRenderer.send('window-close'),
 });

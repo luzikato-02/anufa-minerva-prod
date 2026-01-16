@@ -11,6 +11,7 @@ interface ElectronAPI {
     // Server configuration
     getServerUrl: () => Promise<string | null>;
     setServerUrl: (url: string) => Promise<boolean>;
+    showServerConfig: () => Promise<boolean>;
     
     // Database operations
     dbExecute: (sql: string, params?: unknown[]) => Promise<DbResult>;
@@ -110,15 +111,11 @@ declare global {
       isElectron(): Promise<boolean>;
       getServerUrl(): Promise<string | null>;
       setServerUrl(url: string): Promise<boolean>;
+      showServerConfig(): Promise<boolean>;
 
       onShowServerConfig(
         callback: () => void
       ): () => void;
-    };
-    windowAPI?: {
-      minimize: () => Promise<void>;
-      maximize: () => Promise<void>;
-      close: () => Promise<void>;
     };
   }
 }

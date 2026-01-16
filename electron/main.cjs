@@ -191,7 +191,7 @@ function createWindow() {
         minWidth: 1024,
         minHeight: 768,
         frame: false,
-        titleBarStyle: false,
+        titleBarStyle: 'hidden',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -228,8 +228,6 @@ function createWindow() {
         mainWindow = null;
     });
 
-    // Create application menu
-    createMenu();
 }
 
 // Get stored server URL from local database
@@ -252,86 +250,6 @@ function setServerUrl(url) {
         console.error('Failed to store server URL:', error);
         return false;
     }
-}
-
-// Create application menu
-function createMenu() {
-    const template = [
-        {
-            label: 'File',
-            submenu: [
-                {
-                    label: 'Configure Server',
-                    click: () => showServerConfigDialog()
-                },
-                { type: 'separator' },
-                {
-                    label: 'Data Sync',
-                    submenu: [
-                        {
-                            label: 'Sync Now',
-                            accelerator: 'CmdOrCtrl+S',
-                            click: () => mainWindow.webContents.send('trigger-sync')
-                        },
-                        {
-                            label: 'View Sync Log',
-                            click: () => mainWindow.webContents.send('show-sync-log')
-                        },
-                        {
-                            label: 'Resolve Conflicts',
-                            click: () => mainWindow.webContents.send('show-conflicts')
-                        }
-                    ]
-                },
-                { type: 'separator' },
-                { role: 'quit' }
-            ]
-        },
-        {
-            label: 'Edit',
-            submenu: [
-                { role: 'undo' },
-                { role: 'redo' },
-                { type: 'separator' },
-                { role: 'cut' },
-                { role: 'copy' },
-                { role: 'paste' },
-                { role: 'selectAll' }
-            ]
-        },
-        {
-            label: 'View',
-            submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
-                { role: 'toggleDevTools' },
-                { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
-                { type: 'separator' },
-                { role: 'togglefullscreen' }
-            ]
-        },
-        {
-            label: 'Help',
-            submenu: [
-                {
-                    label: 'About',
-                    click: () => showAboutDialog()
-                },
-                {
-                    label: 'Documentation',
-                    click: async () => {
-                        await shell.openExternal('https://github.com/your-repo/wiki');
-                    }
-                }
-            ]
-        }
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
 }
 
 // Show server configuration dialog
@@ -370,12 +288,26 @@ function setupIpcHandlers() {
         return success;
     });
 
-    ipcMain.handle('window:minimize', () => mainWindow.minimize())
-    ipcMain.handle('window:maximize', () => {
-        mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()
-    })
-    ipcMain.handle('window:close', () => mainWindow.close())
+    ipcMain.handle('show-server-config-dialog', () => {
+        showServerConfigDialog();
+        return true;
+    });
 
+    ipcMain.on('window-minimize', () => {
+        mainWindow?.minimize();
+        });
+
+    ipcMain.on('window-maximize', () => {
+    if (mainWindow?.isMaximized()) {
+        mainWindow.unmaximize();
+    } else {
+        mainWindow.maximize();
+    }
+    });
+
+    ipcMain.on('window-close', () => {
+    mainWindow?.close();
+    });
 
     // Check if running in Electron
     ipcMain.handle('is-electron', () => true);
