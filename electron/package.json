@@ -1,0 +1,13 @@
+{
+  "name": "anufa-minerva-desktop",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}

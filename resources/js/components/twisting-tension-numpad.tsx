@@ -58,6 +58,27 @@ interface TwistingProblem {
     timestamp: Date;
 }
 
+interface TwistingNumpadProps {
+    display: string;
+    setDisplay: (value: string) => void;
+    counter: number;
+    setCounter: (value: number) => void;
+    valueType: string;
+    setValueType: (value: string) => void;
+    spindleData: Record<number, SpindleData>;
+    setSpindleData: (
+        value:
+            | Record<number, SpindleData>
+            | ((prev: Record<number, SpindleData>) => Record<number, SpindleData>)
+    ) => void;
+    formData: TwistingFormData;
+    problems: TwistingProblem[];
+    onReportProblem?: (spindleNumber: number) => void;
+    onAutoReportProblem?: (spindleNumber: number, description: string) => void;
+    onOpenRecorder?: () => void;
+    onDataCleared?: () => void;
+}
+
 export default function TwistingNumpad({
     display,
     setDisplay,
@@ -70,30 +91,10 @@ export default function TwistingNumpad({
     formData,
     problems,
     onReportProblem,
+    onAutoReportProblem,
     onOpenRecorder,
     onDataCleared,
-}: {
-    display: string;
-    setDisplay: (value: string) => void;
-    counter: number;
-    setCounter: (value: number) => void;
-    valueType: string;
-    setValueType: (value: string) => void;
-    spindleData: Record<number, SpindleData>;
-    setSpindleData: (
-        value:
-            | Record<number, SpindleData>
-            | ((
-                  prev: Record<number, SpindleData>,
-              ) => Record<number, SpindleData>),
-    ) => void;
-    formData: TwistingFormData;
-    problems: TwistingProblem[];
-    onReportProblem?: (spindleNumber: number) => void;
-    onAutoReportProblem?: (spindleNumber: number, description: string) => void;
-    onOpenRecorder?: () => void;
-    onDataCleared?: () => void;
-}) {
+}: TwistingNumpadProps) {
     const [openFinishDialog, setOpenFinishDialog] = React.useState(false);
     // Get current spindle's max and min values
     const currentSpindleData = spindleData[counter] || { max: null, min: null };

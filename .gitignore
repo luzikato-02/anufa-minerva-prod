@@ -30,3 +30,5 @@ deploy.sh
 .vercel
 id_rsa.pub
 .vercel
+/electron/php/
+/electron/node_modules/
