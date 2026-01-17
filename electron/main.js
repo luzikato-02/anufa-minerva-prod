@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -34,7 +34,9 @@ function startPhpServer() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
-    height: 900,
+    height: 1000,
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
@@ -42,6 +44,22 @@ function createWindow() {
 
   mainWindow.loadURL(`http://127.0.0.1:${LARAVEL_PORT}`);
 }
+
+ipcMain.handle('window:minimize', () => {
+  mainWindow.minimize();
+});
+
+ipcMain.handle('window:maximize', () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
+
+ipcMain.handle('window:close', () => {
+  mainWindow.close();
+});
 
 app.whenReady().then(() => {
   startPhpServer();
