@@ -68,6 +68,39 @@ class StockTakeRecordController extends Controller
         return response()->json($records);
     }
 
+    /**
+     * Aggregate stats for the stock take stats cards.
+     */
+    public function statistics(): JsonResponse
+    {
+        $sessions = StockTakingRecord::all(['id', 'metadata']);
+
+        $stats = [
+            'total_sessions' => $sessions->count(),
+            'in_progress_sessions' => $sessions->where('session_status', 'In Progress')->count(),
+            'completed_sessions' => $sessions->where('session_status', 'Completed')->count(),
+            'total_batches' => $sessions->sum('total_batches'),
+            'total_checked_batches' => $sessions->sum('total_checked_batches'),
+        ];
+
+        $stats['overall_completion'] = $stats['total_batches'] > 0
+            ? round(($stats['total_checked_batches'] / $stats['total_batches']) * 100)
+            : 0;
+
+        $ratedSessions = $sessions->filter(fn ($session) => $session->total_batches > 0);
+
+        $stats['average_similitude_ratio'] = $ratedSessions->isNotEmpty()
+            ? round($ratedSessions->avg(
+                fn ($session) => ($session->total_checked_batches / $session->total_batches) * 100
+            ))
+            : 0;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $stats,
+        ]);
+    }
+
     public function getSession(Request $request, $sessionId): JsonResponse
     {
         try {

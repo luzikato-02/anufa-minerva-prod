@@ -10,10 +10,12 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
+import { usePermissions } from '@/lib/permissions';
+import { activityLog, dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, UserCheck, PanelLeftIcon, BookAIcon } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, ShieldIcon, HistoryIcon, ScrollTextIcon } from 'lucide-react';
+import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { ProcessParams } from './process-parameters';
@@ -24,12 +26,6 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: HomeIcon,
     },
-
-    {
-        title: 'User Maintenance Table',
-        href: userMaintenance(),
-        icon: UserCheck,
-    },
 ];
 
 const processParamsNavItems: NavItem[] = [
@@ -37,24 +33,28 @@ const processParamsNavItems: NavItem[] = [
         title: 'Record: Twisting Tension',
         href: twistingTensionMain(),
         icon: ConeIcon,
+        permission: 'tension-records.create',
     },
 
     {
         title: 'Record: Weaving Tension',
         href: weavingTensionMain(),
         icon: LayoutGrid,
+        permission: 'tension-records.create',
     },
 
     {
         title: 'Display: Tension Records',
         href: tensionRecordsDisplay(),
         icon: DatabaseBackupIcon,
+        permission: 'tension-records.view',
     },
 
     {
         title: 'Display: Finish Earlier Records',
         href: finishEarlierDisplay(),
         icon: LayoutGrid,
+        permission: 'finish-earlier.view',
     },
 
 ];
@@ -63,12 +63,14 @@ const inventoryNavItems: NavItem[] = [
         title: 'Record: Batch Stock Taking',
         href: batchStockTakingMain(),
         icon: NotebookIcon,
+        permission: 'stock-take.create',
     },
 
     {
         title: 'Display: Stock Take Records',
         href: stockTakeRecordsMain(),
         icon: BookAIcon,
+        permission: 'stock-take.view',
     },
 
     {
@@ -83,7 +85,29 @@ const inventoryNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
 ];
+
+const administrationNavItems: NavItem[] = [
+    {
+        title: 'User & Role Management',
+        href: userMaintenance(),
+        icon: ShieldIcon,
+        permission: 'users.view',
+    },
+
+    {
+        title: 'Activity Log',
+        href: activityLog(),
+        icon: HistoryIcon,
+        permission: 'activity-log.view',
+    },
+];
+
 const footerNavItems: NavItem[] = [
+    {
+        title: 'Log Viewer',
+        href: '/log-viewer',
+        icon: ScrollTextIcon,
+    },
     {
         title: 'Repository',
         href: 'https://github.com/laravel/react-starter-kit',
@@ -97,6 +121,13 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { can } = usePermissions();
+
+    const filterByPermission = (items: NavItem[]) =>
+        items.filter((item) => !item.permission || can(item.permission));
+
+    const visibleAdminItems = filterByPermission(administrationNavItems);
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -112,9 +143,10 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
-                <ProcessParams items={processParamsNavItems} />
-                <InventoryNav items={inventoryNavItems} />
+                <NavMain items={filterByPermission(mainNavItems)} />
+                <ProcessParams items={filterByPermission(processParamsNavItems)} />
+                <InventoryNav items={filterByPermission(inventoryNavItems)} />
+                {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}
             </SidebarContent>
 
             <SidebarFooter>

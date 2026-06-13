@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class FinishEarlierRecord extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $fillable = [
         'metadata',
@@ -43,5 +45,13 @@ class FinishEarlierRecord extends Model
         $this->save();
 
         return $this;
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['metadata'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 }

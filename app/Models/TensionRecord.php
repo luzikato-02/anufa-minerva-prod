@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class TensionRecord extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, LogsActivity;
 
     protected $fillable = [
         'record_type',
@@ -74,5 +76,13 @@ class TensionRecord extends Model
     public function getCompletedMeasurementsAttribute()
     {
         return $this->metadata['completed_measurements'] ?? 0;
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['record_type', 'metadata'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 }

@@ -123,4 +123,17 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Deploy Finalize Token
+    |--------------------------------------------------------------------------
+    |
+    | Shared secret used to authorize POST /deploy/finalize, which runs
+    | migrations, role/permission seeding, and config caching after an
+    | FTP-based deploy. Leave empty to disable the endpoint entirely.
+    |
+    */
+
+    'deploy_token' => env('DEPLOY_TOKEN'),
+
 ];
