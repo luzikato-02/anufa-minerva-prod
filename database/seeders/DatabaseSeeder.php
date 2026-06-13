@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(RolesAndPermissionsSeeder::class);
         $this->seedUsers();
         $this->seedTensionRecords();
         $this->seedStockTakeRecords();
@@ -25,7 +26,7 @@ class DatabaseSeeder extends Seeder
 
     private function seedUsers(): void
     {
-        User::firstOrCreate(
+        $testUser = User::firstOrCreate(
             ['email' => 'test@example.com'],
             [
                 'name' => 'Test User',
@@ -34,8 +35,9 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+        $testUser->syncRoles(['operator']);
 
-        User::firstOrCreate(
+        $adminUser = User::firstOrCreate(
             ['email' => 'admin@example.com'],
             [
                 'name' => 'Admin User',
@@ -44,6 +46,29 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+        $adminUser->syncRoles(['admin']);
+
+        $engineerUser = User::firstOrCreate(
+            ['email' => 'engineer@example.com'],
+            [
+                'name' => 'Engineer User',
+                'username' => 'engineer',
+                'password' => Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
+        $engineerUser->syncRoles(['engineer']);
+
+        $analystUser = User::firstOrCreate(
+            ['email' => 'analyst@example.com'],
+            [
+                'name' => 'Analyst User',
+                'username' => 'analyst',
+                'password' => Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
+        $analystUser->syncRoles(['analyst']);
     }
 
     private function seedTensionRecords(): void
