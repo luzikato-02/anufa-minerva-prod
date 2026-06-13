@@ -77,6 +77,16 @@ interface LaravelPaginatedResponse<T> {
     total: number;
 }
 
+// Percentage of batches that have been checked/found relative to the total.
+function calculateSimilitudeRatio(
+    totalCheckedBatches: number,
+    totalBatches: number,
+): number {
+    return totalBatches > 0
+        ? Math.round((totalCheckedBatches / totalBatches) * 100)
+        : 0;
+}
+
 export const columns: ColumnDef<StockTakeRecord>[] = [
     {
         id: 'select',
@@ -213,14 +223,10 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
     const [statusDialogOpen, setStatusDialogOpen] = useState(false);
     const [newStatus, setNewStatus] = useState(record.metadata.session_status);
 
-    const similitudeRatio =
-        record.metadata.total_batches > 0
-            ? Math.round(
-                  (record.metadata.total_checked_batches /
-                      record.metadata.total_batches) *
-                      100,
-              )
-            : 0;
+    const similitudeRatio = calculateSimilitudeRatio(
+        record.metadata.total_checked_batches,
+        record.metadata.total_batches,
+    );
 
     const handleDownloadCSV = async () => {
         try {
@@ -415,17 +421,6 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
                         </div>
                     </div>
 
-                    {/* Progress Bar */}
-                    {/* <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-gray-600">Completion</span>
-              <span className="text-xs font-semibold">{similitudeRatio}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-              <div className="h-full bg-blue-500 transition-all" style={{ width: `${similitudeRatio}%` }}></div>
-            </div>
-          </div> */}
-
                     {/* Batches Preview */}
                     {record.stock_take_summary &&
                         record.stock_take_summary.length > 0 && (
@@ -602,6 +597,39 @@ function ViewSessionDialog({ record }: { record: StockTakeRecord }) {
     );
 }
 
+// Parse a single CSV line into its fields, handling quoted values that may
+// contain commas or escaped quotes ("").
+function parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+
+        if (char === '"' && line[i + 1] === '"') {
+            current += '"';
+            i++;
+        } else if (char === '"') {
+            insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+
+    result.push(current.trim());
+    return result;
+}
+
+// Count unique material codes in the uploaded data
+function countUniqueMaterialCodes(data: Record<string, string>[]): number {
+    const uniqueCodes = new Set(data.map((row) => row['material_code']?.trim()));
+    return uniqueCodes.size;
+}
+
 export function StockTakeDataTable() {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [columnFilters, setColumnFilters] =
@@ -707,7 +735,7 @@ export function StockTakeDataTable() {
     ]);
 
     const [sessionLeader, setSessionLeader] = useState('');
-    const [jsonData, setJsonData] = useState<any[]>([]);
+    const [jsonData, setJsonData] = useState<Record<string, string>[]>([]);
     const [open, setOpen] = useState(false);
 
     const resetSessionForm = () => {
@@ -740,39 +768,6 @@ export function StockTakeDataTable() {
         reader.readAsText(file);
     };
 
-    function parseCSVLine(line: string): string[] {
-        const result: string[] = [];
-        let current = '';
-        let insideQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-
-            if (char === '"' && line[i + 1] === '"') {
-                current += '"';
-                i++;
-            } else if (char === '"') {
-                insideQuotes = !insideQuotes;
-            } else if (char === ',' && !insideQuotes) {
-                result.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-
-        result.push(current.trim());
-        return result;
-    }
-
-    // Count unique material codes in the uploaded data
-    const getUniqueMaterialCount = () => {
-        const uniqueCodes = new Set(
-            jsonData.map((row) => row['material_code']?.trim()),
-        );
-        return uniqueCodes.size;
-    };
-
     // Action when submitting new session
     const handleSubmit = async () => {
         if (!sessionLeader || jsonData.length === 0) {
@@ -784,7 +779,7 @@ export function StockTakeDataTable() {
             indv_batch_data: jsonData,
             metadata: {
                 total_batches: jsonData.length,
-                total_materials: getUniqueMaterialCount(),
+                total_materials: countUniqueMaterialCodes(jsonData),
                 total_checked_batches: 0,
                 session_leader: sessionLeader,
                 session_status: 'In Progress',

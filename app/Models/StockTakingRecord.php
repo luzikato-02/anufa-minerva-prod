@@ -33,13 +33,46 @@ class StockTakingRecord extends Model
         return $query->whereJsonContains('metadata->session_leader', $operator);
     }
 
+    /**
+     * Find a record by its primary key or its session_id.
+     */
+    public function scopeForSessionOrId($query, $id)
+    {
+        return $query->where('id', $id)->orWhere('session_id', $id);
+    }
+
     // Accessors
     public function getLeaderAttribute()
     {
         return $this->metadata['session_leader'] ?? null;
     }
 
-     // Automatically recompute before saving
+    public function getSessionLeaderAttribute()
+    {
+        return $this->metadata['session_leader'] ?? null;
+    }
+
+    public function getSessionStatusAttribute()
+    {
+        return $this->metadata['session_status'] ?? null;
+    }
+
+    public function getTotalBatchesAttribute()
+    {
+        return $this->metadata['total_batches'] ?? 0;
+    }
+
+    public function getTotalMaterialsAttribute()
+    {
+        return $this->metadata['total_materials'] ?? 0;
+    }
+
+    public function getTotalCheckedBatchesAttribute()
+    {
+        return $this->metadata['total_checked_batches'] ?? 0;
+    }
+
+    // Automatically recompute before saving
     protected static function booted()
     {
         static::saving(function ($record) {
@@ -47,7 +80,6 @@ class StockTakingRecord extends Model
         });
     }
 
-    // 👇 You define this function inside the model
     public function combineBatchData()
 {
     $indv = collect($this->indv_batch_data ?? []);

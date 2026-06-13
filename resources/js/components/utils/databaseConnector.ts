@@ -35,6 +35,57 @@ interface LaravelPaginatedResponse<T> {
   total: number
 }
 
+// Stock-taking interfaces
+export interface StockTakeBatch {
+  batch_number: string
+  material_code: string
+  material_description: string
+}
+
+export interface RecordedBatch extends StockTakeBatch {
+  actual_weight: number
+  total_bobbins: number
+  line_position: number | null
+  row_position: string
+  timestamp_found: string
+  user_found: string
+  explanation: string
+  recorded_at: string
+}
+
+interface StockTakeSessionResponse {
+  success: boolean
+  message?: string
+}
+
+interface StockTakeBatchCheckResponse {
+  exists: boolean
+  already_recorded?: boolean
+  batch_data?: Record<string, any>
+  message?: string
+}
+
+export interface RecordStockBatchPayload {
+  session_id: string
+  batch_number: string
+  material_code: string
+  material_description: string
+  actual_weight: number
+  total_bobbins: number
+  line_position: number
+  row_position: string
+  explanation: string
+  found_by: string
+  found_at: string
+}
+
+interface RecordStockBatchResponse {
+  success: boolean
+  message?: string
+  data?: RecordedBatch
+  errors?: Record<string, string[]>
+}
+
 // Database service class for Laravel backend
 export class LaravelDatabaseService {
   private baseUrl: string
@@ -62,9 +113,6 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
     // Step 2: Extract token from cookie
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
     const csrfToken = match ? decodeURIComponent(match[1]) : ""
-
-    console.log("🔍 Cookies:", document.cookie)
-    console.log("🧩 Extracted CSRF token:", csrfToken)
 
     // Step 3: POST with CSRF header
     const response = await fetch(`${this.baseUrl}/tension-records`, {
@@ -249,6 +297,64 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
 // Create singleton instance
 export const databaseService = new LaravelDatabaseService()
 
+// Load a stock-taking session by its id or session_id
+export async function getStockTakeSession(sessionId: string): Promise<StockTakeSessionResponse> {
+  const response = await fetch(
+    `/stock-take-records/session/${encodeURIComponent(sessionId)}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch session")
+  }
+
+  return response.json()
+}
+
+// Check whether a batch exists (and whether it's already recorded) for a session
+export async function checkStockBatch(sessionId: string, batchNumber: string): Promise<StockTakeBatchCheckResponse> {
+  const params = new URLSearchParams({
+    record_key: sessionId,
+    batch: batchNumber,
+  })
+
+  const response = await fetch(`/stock-take-records/check-batch?${params.toString()}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to check batch")
+  }
+
+  return response.json()
+}
+
+// Record a batch's stock-take result for a session
+export async function recordStockBatch(payload: RecordStockBatchPayload): Promise<RecordStockBatchResponse> {
+  const tokenRes = await fetch("/csrf-token", { credentials: "include" })
+  const { csrfToken } = await tokenRes.json()
+
+  const response = await fetch("/stock-take-records/record-batch", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to record batch")
+  }
+
+  return response.json()
+}
+
 // Helper function to prepare twisting data for Laravel database storage
 export function prepareTwistingDataForDatabase(): TensionRecord {
   const spindleData = loadFromLocalStorage("twisting-spindle-data", {})
@@ -358,6 +464,53 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
       item_description: formData.itemDescription,
     },
   }
+}
+
+// Recursively count measurement "leaf" entries (objects containing max/min keys).
+// Works for twisting's flat { "1": {max,min}, ... } and weaving's nested
+// { side: { row: { col: {max,min} } } } measurement_data shapes.
+function countMeasurementLeaves(node: any): number {
+  if (!node || typeof node !== "object") return 0
+  if ("max" in node && "min" in node) return 1
+  return Object.values(node).reduce((sum: number, child) => sum + countMeasurementLeaves(child), 0)
+}
+
+// Verify that a record fetched back from the database matches what was sent,
+// confirming the save was fully persisted.
+export function verifyPersistedRecord(
+  sent: TensionRecord,
+  fetched: TensionRecord | null,
+): { ok: boolean; reason?: string } {
+  if (!fetched) {
+    return { ok: false, reason: "Could not retrieve the saved record from the database for verification." }
+  }
+
+  const sentMeasurements = countMeasurementLeaves(sent.measurement_data)
+  const fetchedMeasurements = countMeasurementLeaves(fetched.measurement_data)
+  if (sentMeasurements !== fetchedMeasurements) {
+    return {
+      ok: false,
+      reason: `Measurement count mismatch: sent ${sentMeasurements}, saved ${fetchedMeasurements}.`,
+    }
+  }
+
+  const sentProblems = sent.problems?.length ?? 0
+  const fetchedProblems = fetched.problems?.length ?? 0
+  if (sentProblems !== fetchedProblems) {
+    return {
+      ok: false,
+      reason: `Problem count mismatch: sent ${sentProblems}, saved ${fetchedProblems}.`,
+    }
+  }
+
+  if (sent.metadata.completed_measurements !== fetched.metadata?.completed_measurements) {
+    return {
+      ok: false,
+      reason: `Completed measurements mismatch: sent ${sent.metadata.completed_measurements}, saved ${fetched.metadata?.completed_measurements}.`,
+    }
+  }
+
+  return { ok: true }
 }
 
 // Helper function to generate CSV for twisting data
