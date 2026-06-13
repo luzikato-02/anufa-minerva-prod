@@ -15,6 +15,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
+    checkStockBatch,
+    getStockTakeSession,
+    recordStockBatch,
+    type StockTakeBatch,
+} from '@/components/utils/databaseConnector';
+import {
     AlertCircle,
     ArrowLeft,
     Barcode,
@@ -40,7 +46,7 @@ export default function BatchStockTakingForm() {
     const [successMessage, setSuccessMessage] = useState('');
 
     const [showRecordingModal, setShowRecordingModal] = useState(false);
-    const [currentBatchData, setCurrentBatchData] = useState<any>(null);
+    const [currentBatchData, setCurrentBatchData] = useState<StockTakeBatch | null>(null);
     const [actualWeight, setActualWeight] = useState('');
     const [totalBobbins, setTotalBobbins] = useState('');
     const [linePosition, setLinePosition] = useState('');
@@ -63,29 +69,9 @@ export default function BatchStockTakingForm() {
         setSessionLoading(true);
 
         try {
-            // API call to validate and fetch session data
-            // Expected endpoint: GET /api/batch-stock-taking/session?session_id=${sessionId}
-            // Response: { success: boolean, data: { metadata, indv_batch_data }, message?: string }
-
-            console.log('Validating session ID:', sessionId);
-
-            // Simulated API call
-            const response = await fetch(
-                `/stock-take-records/session/${encodeURIComponent(sessionId)}`,
-                {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                },
-            );
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch session');
-            }
-
-            const data = await response.json();
+            const data = await getStockTakeSession(sessionId);
 
             if (data.success) {
-                console.log(data.message);
                 setSessionSelected(true);
             } else {
                 setSessionError(data.message || 'Session not found');
@@ -112,34 +98,7 @@ export default function BatchStockTakingForm() {
         setLoading(true);
 
         try {
-            // API call to check batch existence
-            console.log(
-                'Checking batch:',
-                batchNumber,
-                'for session:',
-                sessionId,
-            );
-
-            const params = new URLSearchParams({
-                record_key: sessionId.toString(),
-                batch: batchNumber.toString(),
-            });
-
-            const response = await fetch(
-                `/stock-take-records/check-batch?${params.toString()}`,
-                {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                },
-            );
-
-            if (!response.ok) {
-                throw new Error('Failed to check batch');
-            }
-
-            const data = await response.json();
-            console.log('Batch check response:', data);
+            const data = await checkStockBatch(sessionId, batchNumber);
 
             if (!data.exists) {
                 setError(data.message || 'Batch not found in this session');
@@ -162,10 +121,10 @@ export default function BatchStockTakingForm() {
                 data.message || 'Batch found and ready to record.',
             );
 
-            const batch = data.batch_data;
+            const batch = data.batch_data ?? {};
 
             // Normalize keys (handles both formats)
-            const normalizedBatch = {
+            const normalizedBatch: StockTakeBatch = {
                 batch_number: batch.batch_number ?? batch['Batch Number'] ?? '',
                 material_code:
                     batch.material_code ?? batch['Material Code'] ?? '',
@@ -174,8 +133,6 @@ export default function BatchStockTakingForm() {
                     batch['Material Desciption'] ??
                     '',
             };
-
-            console.log('Normalized batch data:', normalizedBatch);
 
             setCurrentBatchData(normalizedBatch);
             setShowRecordingModal(true);
@@ -208,21 +165,6 @@ export default function BatchStockTakingForm() {
             return;
         }
 
-        // if (!linePosition.trim()) {
-        //     setRecordingError('Please enter line number');
-        //     return;
-        // }
-
-        // if (!rowPosition.trim()) {
-        //     setRecordingError('Please enter row number');
-        //     return;
-        // }
-
-        // if (!explanation.trim()) {
-        // setRecordingError("Please enter an explanation")
-        // return
-        // }
-
         // Validate numeric values
         const weight = Number.parseFloat(actualWeight);
         const bobbins = Number.parseInt(totalBobbins, 10);
@@ -238,11 +180,10 @@ export default function BatchStockTakingForm() {
             return;
         }
 
-        // if (isNaN(line) || line <= 0) {
-        //     setRecordingError('Line number must be a valid positive number');
-        //     return;
-        // }
-
+        if (!currentBatchData) {
+            setRecordingError('No batch selected');
+            return;
+        }
 
         setRecordingLoading(true);
 
@@ -251,7 +192,7 @@ export default function BatchStockTakingForm() {
             const currentUser =
                 localStorage.getItem('current-user') || 'Unknown User';
 
-            const recordData = {
+            const data = await recordStockBatch({
                 session_id: sessionId,
                 batch_number: currentBatchData.batch_number,
                 material_code: currentBatchData.material_code,
@@ -263,33 +204,9 @@ export default function BatchStockTakingForm() {
                 explanation: explanation.trim(),
                 found_by: currentUser,
                 found_at: new Date().toISOString(),
-            };
-
-            console.log('Submitting batch record:', recordData);
-
-            const tokenRes = await fetch('/csrf-token', {
-                credentials: 'include',
             });
-            const { csrfToken } = await tokenRes.json();
-            console.log('Extracted CSRF Token from cookie:', csrfToken);
-            // API call to save batch record
-            const response = await fetch('/stock-take-records/record-batch', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken,
-                },
-                body: JSON.stringify(recordData),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to record batch');
-            }
-
-            const data = await response.json();
 
             if (data.success) {
-                console.log('Batch recorded successfully:', data.data);
                 setShowRecordingModal(false);
                 setSuccess(true);
                 setSuccessMessage('Batch recorded successfully!');

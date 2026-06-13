@@ -1,5 +1,3 @@
-import { databaseService, prepareTwistingDataForDatabase, prepareWeavingDataForDatabase } from "./databaseConnector"
-
 interface SpindleData {
   max: number | null
   min: number | null
@@ -53,12 +51,11 @@ interface WeavingProblem {
   timestamp: Date
 }
 
-export async function exportWeavingDataToCSV(
+export function exportWeavingDataToCSV(
   creelData: CreelData,
   formData: WeavingFormData,
   problems: WeavingProblem[],
   filename = "weaving-tension-data",
-  saveToDatabase = true,
 ) {
   const csvRows: string[] = []
 
@@ -117,28 +114,6 @@ export async function exportWeavingDataToCSV(
   // Create CSV content
   const csvContent = csvRows.join("\n")
 
-  // Save to database if requested
-  if (saveToDatabase) {
-    try {
-      const record = prepareWeavingDataForDatabase()
-      const result = await databaseService.saveTensionRecord(record)
-
-      if (result.status === "success") {
-  const newId = result.data?.id
-  console.log(result.status)
-  console.log("✅ Twisting data saved to database with ID:", newId)
-  showNotification("Data saved to database successfully!", "success")
-} else {
-  console.log(result.status)
-  // console.error("❌ Failed to save twisting data to database:", result.message || result.error)
-  // showNotification("Failed to save to database: " + (result.message || result.error), "error")
-}
-    } catch (error) {
-      console.error("❌ Database save error:", error)
-      showNotification("Database connection error", "error")
-    }
-  }
-
   // Download CSV file
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
@@ -154,12 +129,11 @@ export async function exportWeavingDataToCSV(
   }
 }
 
-export async function exportTwistingDataToCSV(
+export function exportTwistingDataToCSV(
   spindleData: Record<number, SpindleData>,
   formData: TwistingFormData,
   problems: TwistingProblem[],
   filename = "twisting-tension-data",
-  saveToDatabase = true,
 ) {
   const csvRows: string[] = []
 
@@ -213,29 +187,8 @@ export async function exportTwistingDataToCSV(
   // Create CSV content
   const csvContent = csvRows.join("\n")
 
-  // Save to database if requested
-  if (saveToDatabase) {
-    try {
-      const record = prepareTwistingDataForDatabase()
-      const result = await databaseService.saveTensionRecord(record)
-
-      if (result.success) {
-        console.log("✅ Twisting data saved to database with ID:", result.id)
-        // Show success notification
-        showNotification("Data saved to database successfully!", "success")
-      } else {
-        console.error("❌ Failed to save twisting data to database:", result.error)
-        showNotification("Failed to save to database: " + result.error, "error")
-      }
-    } catch (error) {
-      console.error("❌ Database save error:", error)
-      showNotification("Database connection error", "error")
-    }
-  }
-
   // Download CSV file
-  const csvContent2 = csvRows.join("\n")
-  const blob = new Blob([csvContent2], { type: "text/csv;charset=utf-8;" })
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
 
   if (link.download !== undefined) {
@@ -247,27 +200,4 @@ export async function exportTwistingDataToCSV(
     link.click()
     document.body.removeChild(link)
   }
-}
-
-// Helper function to show notifications
-function showNotification(message: string, type: "success" | "error" | "info" = "info") {
-  // Create a simple notification
-  const notification = document.createElement("div")
-  notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
-    type === "success"
-      ? "bg-green-500 text-white"
-      : type === "error"
-        ? "bg-red-500 text-white"
-        : "bg-blue-500 text-white"
-  }`
-  notification.textContent = message
-
-  document.body.appendChild(notification)
-
-  // Remove after 5 seconds
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.parentNode.removeChild(notification)
-    }
-  }, 5000)
 }

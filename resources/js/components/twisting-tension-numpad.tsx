@@ -26,7 +26,13 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { useState } from 'react';
+import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
 import { exportTwistingDataToCSV } from './utils/csv-export.js';
+import {
+    databaseService,
+    prepareTwistingDataForDatabase,
+    verifyPersistedRecord,
+} from './utils/databaseConnector';
 import {
     clearAllAppData,
     loadFromLocalStorage,
@@ -94,6 +100,16 @@ export default function TwistingNumpad({
     onDataCleared?: () => void;
 }) {
     const [openFinishDialog, setOpenFinishDialog] = React.useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
+    const [saveStatus, setSaveStatus] = React.useState<
+        'saving' | 'success' | 'error'
+    >('saving');
+    const [saveSteps, setSaveSteps] = React.useState<SaveStep[]>([]);
+    const [saveError, setSaveError] = React.useState<{
+        message: string;
+        details: string;
+    } | null>(null);
+    const [pendingKeepLocal, setPendingKeepLocal] = React.useState(true);
     // Get current spindle's max and min values
     const currentSpindleData = spindleData[counter] || { max: null, min: null };
     const [isSpindleModalOpen, setIsSpindleModalOpen] = useState(false);
@@ -185,7 +201,128 @@ export default function TwistingNumpad({
         }
     };
 
-    const finishValue = (keepTrigger: boolean) => {
+    const runSaveFlow = async (keepLocal: boolean) => {
+        setPendingKeepLocal(keepLocal);
+        setSaveError(null);
+        setSaveStatus('saving');
+        setSaveSteps([
+            { key: 'save', label: 'Saving to database', status: 'active' },
+            {
+                key: 'verify',
+                label: 'Verifying saved record',
+                status: 'pending',
+            },
+        ]);
+        setSaveDialogOpen(true);
+
+        const record = prepareTwistingDataForDatabase();
+        const result = await databaseService.saveTensionRecord(record);
+
+        if (!result.success) {
+            setSaveSteps((prev) =>
+                prev.map((step) =>
+                    step.key === 'save'
+                        ? { ...step, status: 'error' }
+                        : step,
+                ),
+            );
+            setSaveStatus('error');
+            setSaveError({
+                message:
+                    result.message ||
+                    result.error ||
+                    'Failed to save data to the database.',
+                details: JSON.stringify(
+                    {
+                        step: 'save',
+                        recordType: 'twisting',
+                        itemNumber: record.metadata.item_number,
+                        machineNumber: record.metadata.machine_number,
+                        error: result.error,
+                        message: result.message,
+                        timestamp: new Date().toISOString(),
+                    },
+                    null,
+                    2,
+                ),
+            });
+            return;
+        }
+
+        setSaveSteps((prev) =>
+            prev.map((step) =>
+                step.key === 'save'
+                    ? { ...step, status: 'done' }
+                    : step.key === 'verify'
+                      ? { ...step, status: 'active' }
+                      : step,
+            ),
+        );
+
+        const savedId = result.data?.id ?? result.id;
+        const fetched =
+            savedId != null
+                ? await databaseService.getTensionRecord(String(savedId))
+                : null;
+        const verification = verifyPersistedRecord(record, fetched);
+
+        if (!verification.ok) {
+            setSaveSteps((prev) =>
+                prev.map((step) =>
+                    step.key === 'verify'
+                        ? { ...step, status: 'error' }
+                        : step,
+                ),
+            );
+            setSaveStatus('error');
+            setSaveError({
+                message:
+                    verification.reason ||
+                    'Could not verify that the data was saved correctly.',
+                details: JSON.stringify(
+                    {
+                        step: 'verify',
+                        recordType: 'twisting',
+                        itemNumber: record.metadata.item_number,
+                        machineNumber: record.metadata.machine_number,
+                        savedId,
+                        reason: verification.reason,
+                        timestamp: new Date().toISOString(),
+                    },
+                    null,
+                    2,
+                ),
+            });
+            return;
+        }
+
+        setSaveSteps((prev) =>
+            prev.map((step) =>
+                step.key === 'verify' ? { ...step, status: 'done' } : step,
+            ),
+        );
+        setSaveStatus('success');
+    };
+
+    const handleSaveDialogClose = () => {
+        setSaveDialogOpen(false);
+        if (saveStatus === 'success' && !pendingKeepLocal) {
+            clearAllAppData();
+            console.log('Cleared all app data from localStorage');
+            setDisplay('0');
+            setCounter(1);
+            setValueType('Max');
+            setSpindleData({});
+            onDataCleared?.();
+            console.log('All data cleared - ready for new session');
+        }
+    };
+
+    const handleRetry = () => {
+        runSaveFlow(pendingKeepLocal);
+    };
+
+    const finishValue = async (keepTrigger: boolean) => {
         setOpenFinishDialog(false);
         // 1. Get all data from localStorage and export to CSV
         const savedSpindleData = loadFromLocalStorage(
@@ -217,23 +354,7 @@ export default function TwistingNumpad({
         );
         console.log('Exported all twisting data from localStorage to CSV');
 
-        if (!keepTrigger) {
-            // 2. Clear all localStorage data
-            clearAllAppData();
-            console.log('Cleared all app data from localStorage');
-            // 3. Reset display and counter
-            setDisplay('0');
-            setCounter(1);
-            setValueType('Max');
-
-            // 4. Clear spindle data
-            setSpindleData({});
-
-            // 5. Notify parent component to reset form data and problems
-            onDataCleared?.();
-
-            console.log('All data cleared - ready for new session');
-        }
+        await runSaveFlow(keepTrigger);
     };
 
     const NumberButton = ({
@@ -694,6 +815,16 @@ export default function TwistingNumpad({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <SaveStatusDialog
+                open={saveDialogOpen}
+                status={saveStatus}
+                steps={saveSteps}
+                errorMessage={saveError?.message}
+                errorDetails={saveError?.details}
+                onRetry={saveStatus === 'error' ? handleRetry : undefined}
+                onClose={handleSaveDialogClose}
+            />
         </div>
     );
 }

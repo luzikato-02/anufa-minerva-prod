@@ -5,10 +5,35 @@ use App\Http\Controllers\Controller;
 use App\Models\StockTakingRecord;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class StockTakeRecordController extends Controller
 {
+    /**
+     * Build a SQL fragment that extracts an unquoted scalar value from a JSON column.
+     * SQLite's JSON_EXTRACT already returns unquoted scalars; MySQL needs JSON_UNQUOTE.
+     */
+    private function jsonExtract(string $column, string $path): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "JSON_EXTRACT({$column}, '{$path}')"
+            : "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
+    }
+
+    /**
+     * Normalize a batch's identity fields, accepting either the canonical
+     * snake_case keys or the legacy "Title Case" keys used by CSV imports.
+     */
+    private function normalizeBatchKeys(array $batch): array
+    {
+        return [
+            'batch_number' => $batch['batch_number'] ?? $batch['Batch Number'] ?? null,
+            'material_code' => $batch['material_code'] ?? $batch['Material Code'] ?? null,
+            'material_description' => $batch['material_description'] ?? $batch['Material Desciption'] ?? null,
+        ];
+    }
+
     /**
      * Display a listing of stock take records
      */
@@ -19,16 +44,18 @@ class StockTakeRecordController extends Controller
     // 🔍 Global search (case-insensitive)
     if ($search = $request->input('search')) {
         $search = strtolower($search);
-        $query->where(function ($q) use ($search) {
-            $q->whereRaw('LOWER(record_type) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(csv_data) LIKE ?', ["%{$search}%"])
-              ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, "$.session_leader"))) LIKE ?', ["%{$search}%"]);
+        $leaderExpr = $this->jsonExtract('metadata', '$.session_leader');
+        $statusExpr = $this->jsonExtract('metadata', '$.session_status');
+        $query->where(function ($q) use ($search, $leaderExpr, $statusExpr) {
+            $q->whereRaw('LOWER(session_id) LIKE ?', ["%{$search}%"])
+              ->orWhereRaw("LOWER({$leaderExpr}) LIKE ?", ["%{$search}%"])
+              ->orWhereRaw("LOWER({$statusExpr}) LIKE ?", ["%{$search}%"]);
         });
     }
 
-        // Filter by operator
+        // Filter by session leader
         if ($request->has('session_leader')) {
-            $query->byOperator($request->session_leader);
+            $query->byLeader($request->session_leader);
         }
 
         // Order by latest first
@@ -45,9 +72,7 @@ class StockTakeRecordController extends Controller
     {
         try {
             // Find the stock taking record by session ID
-            $record = StockTakingRecord::where('id', $sessionId)
-                ->orWhere('session_id', $sessionId)
-                ->first();
+            $record = StockTakingRecord::forSessionOrId($sessionId)->first();
 
             if (!$record) {
                 return response()->json([
@@ -56,22 +81,8 @@ class StockTakeRecordController extends Controller
                 ], 404);
             }
 
-            // Extract metadata and batch data
-            $metadata = $record->metadata ?? [];
-            $batchData = $record->indv_batch_data ?? [];
-
             return response()->json([
                 'success' => true,
-                // 'data' => [
-                //     'metadata' => [
-                //         'total_batches' => $metadata['total_batches'] ?? count($batchData),
-                //         'total_materials' => $metadata['total_materials'] ?? 0,
-                //         'total_checked_batches' => $metadata['total_checked_batches'] ?? 0,
-                //         'session_leader' => $metadata['session_leader'] ?? null,
-                //         'session_status' => $metadata['session_status'] ?? 'active',
-                //     ],
-                //     'indv_batch_data' => $batchData,
-                // ],
                 'message' => 'Session loaded successfully'
             ]);
         } catch (\Exception $e) {
@@ -94,9 +105,7 @@ class StockTakeRecordController extends Controller
         ]);
 
         // Find the record by id or session_id
-        $record = StockTakingRecord::where('id', $id)
-            ->orWhere('session_id', $id)
-            ->first();
+        $record = StockTakingRecord::forSessionOrId($id)->first();
 
         if (!$record) {
             return response()->json([
@@ -116,7 +125,7 @@ class StockTakeRecordController extends Controller
             'message' => 'Session status updated successfully.',
             'data' => [
                 'session_id' => $record->session_id,
-                'session_status' => $metadata['session_status'],
+                'session_status' => $record->session_status,
             ],
         ]);
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -148,9 +157,7 @@ class StockTakeRecordController extends Controller
         }
 
         // Find the session record
-        $record = StockTakingRecord::where('id', $sessionId)
-            ->orWhere('session_id', $sessionId)
-            ->first();
+        $record = StockTakingRecord::forSessionOrId($sessionId)->first();
 
         if (!$record) {
             return response()->json([
@@ -162,8 +169,7 @@ class StockTakeRecordController extends Controller
         // Check if batch exists in the master list
         $batchData = $record->indv_batch_data ?? [];
         $foundBatch = collect($batchData)->first(function ($batch) use ($batchNumber) {
-            $batchKey = $batch['Batch Number'] ?? $batch['batch_number'] ?? null;
-            return $batchKey === $batchNumber;
+            return $this->normalizeBatchKeys($batch)['batch_number'] === $batchNumber;
         });
 
         if (!$foundBatch) {
@@ -209,13 +215,14 @@ class StockTakeRecordController extends Controller
     try {
         // Step 1️⃣: Accept both naming formats
         $data = $request->all();
+        $batchKeys = $this->normalizeBatchKeys($data);
 
         // Normalize keys so both formats work
         $normalized = [
             'session_id'           => $data['session_id'] ?? null,
-            'batch_number'         => $data['batch_number'] ?? $data['Batch Number'] ?? null,
-            'material_code'        => $data['material_code'] ?? $data['Material Code'] ?? null,
-            'material_description' => $data['material_description'] ?? $data['Material Desciption'] ?? null,
+            'batch_number'         => $batchKeys['batch_number'],
+            'material_code'        => $batchKeys['material_code'],
+            'material_description' => $batchKeys['material_description'],
             'actual_weight'        => $data['actual_weight'] ?? null,
             'total_bobbins'        => $data['total_bobbins'] ?? null,
             'line_position'        => $data['line_position'] ?? null,   // ✅ added
@@ -241,9 +248,7 @@ class StockTakeRecordController extends Controller
         ])->validate();
 
         // Step 3️⃣: Find session
-        $record = StockTakingRecord::where('id', $validated['session_id'])
-            ->orWhere('session_id', $validated['session_id'])
-            ->first();
+        $record = StockTakingRecord::forSessionOrId($validated['session_id'])->first();
 
         if (!$record) {
             return response()->json([
@@ -273,7 +278,7 @@ class StockTakeRecordController extends Controller
 
         // Update metadata count
         $metadata = $record->metadata ?? [];
-        $metadata['total_checked_batches'] = ($metadata['total_checked_batches'] ?? 0) + 1;
+        $metadata['total_checked_batches'] = $record->total_checked_batches + 1;
         $record->metadata = $metadata;
         $record->save();
 
@@ -417,40 +422,4 @@ class StockTakeRecordController extends Controller
             'summary' => $summary,
         ]);
     }
-
-
-
-    /**
-     * Get statistics for dashboard
-     */
-    // public function statistics(): JsonResponse
-    // {
-    //     $stats = [
-    //         'total_records' => TensionRecord::count(),
-    //         'twisting_records' => TensionRecord::byType('twisting')->count(),
-    //         'weaving_records' => TensionRecord::byType('weaving')->count(),
-    //         'recent_records' => TensionRecord::orderBy('created_at', 'desc')->take(5)->get(),
-    //         'operators' => TensionRecord::selectRaw("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.operator')) as operator")
-    //             ->whereNotNull('metadata->operator')
-    //             ->groupBy('operator')
-    //             ->pluck('operator'),
-    //         'machines' => TensionRecord::selectRaw("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.machine_number')) as machine")
-    //             ->whereNotNull('metadata->machine_number')
-    //             ->groupBy('machine')
-    //             ->pluck('machine'),
-    //         // ✅ Count records where problems array is not empty
-    //         'twisting_problems' => TensionRecord::byType('twisting')
-    //             ->whereRaw('JSON_LENGTH(problems) > 0')
-    //             ->count(),
-
-    //         'weaving_problems' => TensionRecord::byType('weaving')
-    //             ->whereRaw('JSON_LENGTH(problems) > 0')
-    //             ->count(),
-    //     ];
-
-    //     return response()->json([
-    //         'status' => 'success',
-    //         'data' => $stats
-    //     ]);
-    // }
 }
