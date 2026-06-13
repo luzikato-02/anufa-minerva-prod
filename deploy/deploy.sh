@@ -41,7 +41,6 @@ upload() {
     [[ -n "${!var:-}" ]] || { echo "Missing $var in $CONFIG_FILE" >&2; exit 1; }
   done
 
-  local build_dir
   build_dir=$(mktemp -d)
   trap 'rm -rf "$build_dir"' EXIT
 
