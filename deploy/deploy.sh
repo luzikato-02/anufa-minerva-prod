@@ -58,7 +58,10 @@ upload() {
   (cd "$build_dir" && npm run build)
 
   echo "==> Creating archives"
-  (cd "$build_dir" && zip -rq app.zip . -x '.git/*' '.github/*' 'node_modules/*' 'tests/*' '.env' 'public/build/*' '*.zip')
+  # public/build is included in app.zip (Laravel's Vite helper reads
+  # public/build/manifest.json from the app directory) AND in build.zip
+  # (served as static assets from the docroot).
+  (cd "$build_dir" && zip -rq app.zip . -x '.git/*' '.github/*' 'node_modules/*' 'tests/*' '.env' '*.zip')
   (cd "$build_dir/public" && zip -rq ../build.zip build)
 
   echo "==> Uploading app.zip to $CPANEL_SUBDOMAIN_PATH/app.zip"
