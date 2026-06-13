@@ -8,7 +8,7 @@ use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 
 // Mobile routes group
-Route::prefix('mobile')->group(function () {
+Route::prefix('mobile')->name('mobile.')->group(function () {
 
     // Public routes (no auth)
     Route::post('/login', function (Request $request) {

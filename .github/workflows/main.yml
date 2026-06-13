@@ -1,11 +1,20 @@
-name: Deploy Laravel to cPanel Subdomain (Manual)
+name: Build and Upload to cPanel
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options:
+          - production
+          - development
+        default: production
 
 jobs:
-  deploy:
+  build-and-upload:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
 
     steps:
       - name: Checkout repository
@@ -14,8 +23,8 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
-          extensions: mbstring, bcmath, pdo_mysql
+          php-version: '8.4'
+          extensions: mbstring, bcmath, pdo_mysql, dom, gd
           coverage: none
 
       - name: Install Composer dependencies
@@ -25,23 +34,31 @@ jobs:
             --prefer-dist \
             --optimize-autoloader
 
-      - name: Prepare Laravel
-        run: |
-          php artisan key:generate --force || true
-          php artisan config:clear
-          php artisan route:clear
-          php artisan view:clear
-
-      - name: Deploy to subdomain folder
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          server: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USERNAME }}
-          password: ${{ secrets.CPANEL_PASSWORD }}
-          local-dir: ./
-          server-dir: ${{ secrets.CPANEL_SUBDOMAIN_PATH }}/
-          exclude: |
-            **/.git*
-            **/.github*
-            **/node_modules/**
-            **/.env
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Create deploy archives
+        run: |
+          zip -rq app.zip . -x '.git/*' '.github/*' 'node_modules/*' 'tests/*' '.env' 'public/build/*' '*.zip'
+          cd public && zip -rq ../build.zip build && cd ..
+
+      - name: Upload app archive
+        run: |
+          curl -sS -T app.zip --ftp-create-dirs \
+            "ftp://${{ secrets.CPANEL_HOST }}/${{ vars.CPANEL_SUBDOMAIN_PATH }}/app.zip" \
+            --user "${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_PASSWORD }}"
+
+      - name: Upload build archive
+        run: |
+          curl -sS -T build.zip --ftp-create-dirs \
+            "ftp://${{ secrets.CPANEL_HOST }}/${{ vars.CPANEL_DOCROOT_PATH }}/build.zip" \
+            --user "${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_PASSWORD }}"

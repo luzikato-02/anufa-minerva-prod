@@ -1,0 +1,23 @@
+name: Finalize cPanel Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options:
+          - production
+          - development
+        default: production
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Run post-deploy tasks (migrate, seed roles, cache)
+        run: |
+          curl --fail-with-body -sS -X POST "${{ vars.APP_URL }}/deploy/finalize" \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}"
