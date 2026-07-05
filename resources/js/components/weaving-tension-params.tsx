@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { clearAllAppData } from "./utils/localStorage"
+import { clearAllAppData } from "@/lib/localStorage"
 
 interface TensionData {
   machineNumber: string
@@ -34,11 +34,13 @@ export default function WeavingParams({
   formData,
   setFormData,
   onStartRecording,
+  onExitSession,
   isStarting = false,
 }: {
   formData: TensionData
   setFormData: (value: TensionData | ((prev: TensionData) => TensionData)) => void
   onStartRecording?: () => void | Promise<void>
+  onExitSession?: () => void
   isStarting?: boolean
 }) {
   const [showPoWarning, setShowPoWarning] = useState(false)
@@ -240,6 +242,16 @@ export default function WeavingParams({
           <div className="space-y-1">
             <Button size="sm" className="w-full h-10 text-sm font-medium" onClick={startRecording} disabled={isStarting}>
               {isStarting ? "Checking for existing session..." : "Start Recording"}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-10 text-sm font-medium bg-transparent"
+              onClick={onExitSession}
+              disabled={isStarting}
+            >
+              Exit Session
             </Button>
 
             <div className="grid grid-cols-2 gap-2">

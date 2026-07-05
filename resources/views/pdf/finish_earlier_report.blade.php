@@ -67,8 +67,7 @@ h2, h3 {
         <tr><td><strong>Machine:</strong> {{ $metadata['machine_number'] }}</td></tr>
         <tr><td><strong>Style:</strong> {{ $metadata['style'] }}</td></tr>
         <tr><td><strong>Production Order:</strong> {{ $metadata['production_order'] }}</td></tr>
-        <tr><td><strong>Roll Construction:</strong> {{ $metadata['roll_construction'] }}</td></tr>
-        {{-- <tr><td><strong>Total Finish Earlier:</strong> {{ $metadata['total_finish_earlier'] }}</td></tr>
+{{-- <tr><td><strong>Total Finish Earlier:</strong> {{ $metadata['total_finish_earlier'] }}</td></tr>
         <tr><td><strong>Average Meters Finish:</strong> {{ number_format($metadata['average_meters_finish'], 0) }}</td></tr> --}}
     </table>
 

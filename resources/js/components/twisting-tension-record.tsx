@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import TwistingNumpad from "@/components/twisting-tension-numpad"
 import TwistingProblemReport from "@/components/twisting-tension-problems"
 import TwistingParams from "@/components/twisting-tension-params"
-import { saveToLocalStorage, loadFromLocalStorage, restoreProblemsWithDates } from "@/components/utils/localStorage"
+import { saveToLocalStorage, loadFromLocalStorage, restoreProblemsWithDates } from "@/lib/localStorage"
 
 interface SpindleData {
   max: number | null

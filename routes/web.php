@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
+use App\Http\Controllers\Api\FinishEarlierScanController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
@@ -40,7 +42,7 @@ Route::post('/deploy/finalize', [DeployController::class, 'finalize'])
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', function () {
-    return Inertia::render('welcome');
+        return redirect()->route('dashboard');
     })->name('home');
 
     Route::get('dashboard', function () {
@@ -97,7 +99,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tension-problems', [TensionRecordController::class, 'problems'])
             ->name('tension-records.problems');
 
-        // ✅ Filtered endpoints (now conflict-free)
+        // Filtered endpoints
         Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
             ->whereIn('type', ['twisting', 'weaving'])
             ->name('tension-records.by-type');
@@ -147,9 +149,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('permission:finish-earlier.create')->group(function () {
         Route::post('/finish-earlier/start-session', [FinishEarlierRecordController::class, 'store']);
         Route::post('/finish-earlier/{productionOrder}/add-entry', [FinishEarlierRecordController::class, 'addEntry']);
+        Route::post('/finish-earlier/submit-scan', [FinishEarlierRecordController::class, 'submitScan']);
+
+        Route::get('finish-earlier-scan', fn () => Inertia::render('finish-earlier-scan'))
+            ->name('finish-earlier-scan');
+        Route::post('finish-earlier-scan/extract', [FinishEarlierScanController::class, 'extract']);
     });
 
     Route::post('/finish-earlier/{id}/finish', [FinishEarlierRecordController::class, 'finish'])
+        ->middleware('permission:finish-earlier.edit');
+
+    Route::patch('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'update'])
         ->middleware('permission:finish-earlier.edit');
 
     Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy'])
@@ -242,6 +252,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('api/activity-log', [ActivityLogController::class, 'index']);
     });
+
+    // ---- DOCUMENT INTELLIGENCE ----
+    Route::get('document-intelligence', fn () => Inertia::render('document-intelligence'))
+        ->name('document-intelligence');
+    Route::post('document-intelligence/process', [DocumentIntelligenceController::class, 'process']);
 });
 
 require __DIR__.'/settings.php';

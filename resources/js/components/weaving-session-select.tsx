@@ -4,6 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AlertCircle, Loader2, Plus, Search } from "lucide-react"
 
 export default function WeavingSessionSelect({
@@ -11,22 +19,37 @@ export default function WeavingSessionSelect({
   isChecking,
   onCreateNew,
   onContinue,
+  onCheckExists,
 }: {
   initialPo: string
   isChecking: boolean
   onCreateNew: (po: string) => void
   onContinue: (po: string) => Promise<boolean>
+  onCheckExists: (po: string) => Promise<boolean>
 }) {
   const [po, setPo] = useState(initialPo)
   const [error, setError] = useState<string | null>(null)
+  const [isCheckingNew, setIsCheckingNew] = useState(false)
+  const [existingSessionPo, setExistingSessionPo] = useState<string | null>(null)
 
-  const handleCreateNew = () => {
+  const handleCreateNew = async () => {
     setError(null)
-    if (!po.trim()) {
+    const trimmed = po.trim()
+    if (!trimmed) {
       setError("Please enter a production order number")
       return
     }
-    onCreateNew(po.trim())
+    setIsCheckingNew(true)
+    try {
+      const exists = await onCheckExists(trimmed)
+      if (exists) {
+        setExistingSessionPo(trimmed)
+      } else {
+        onCreateNew(trimmed)
+      }
+    } finally {
+      setIsCheckingNew(false)
+    }
   }
 
   const handleContinue = async () => {
@@ -38,6 +61,8 @@ export default function WeavingSessionSelect({
     const found = await onContinue(po.trim())
     if (!found) setError("No active session found for this production order.")
   }
+
+  const busy = isChecking || isCheckingNew
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-2">
@@ -67,7 +92,7 @@ export default function WeavingSessionSelect({
                 setPo(e.target.value)
                 setError(null)
               }}
-              disabled={isChecking}
+              disabled={busy}
               className="h-10 text-sm"
             />
             <p className="text-xs text-muted-foreground">
@@ -86,18 +111,27 @@ export default function WeavingSessionSelect({
           {/* Create New Session Button */}
           <Button
             onClick={handleCreateNew}
-            disabled={isChecking || !po.trim()}
+            disabled={busy || !po.trim()}
             className="h-10 w-full text-sm font-medium"
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Session
+            {isCheckingNew ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Checking...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Create New Session
+              </>
+            )}
           </Button>
 
           {/* Continue Session Button */}
           <Button
             variant="outline"
             onClick={handleContinue}
-            disabled={isChecking || !po.trim()}
+            disabled={busy || !po.trim()}
             className="h-10 w-full text-sm font-medium"
           >
             {isChecking ? (
@@ -127,6 +161,38 @@ export default function WeavingSessionSelect({
           </div>
         </CardContent>
       </Card>
+
+      {/* Existing session detected during "Create New" — must continue it */}
+      <AlertDialog open={!!existingSessionPo} onOpenChange={(open) => { if (!open) setExistingSessionPo(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Session already exists</AlertDialogTitle>
+            <AlertDialogDescription>
+              An in-progress session for <strong>{existingSessionPo}</strong> already exists.
+              You must continue it or use a different production order.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => setExistingSessionPo(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => {
+                const currentPo = existingSessionPo
+                setExistingSessionPo(null)
+                if (currentPo) onContinue(currentPo)
+              }}
+            >
+              Continue Session
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

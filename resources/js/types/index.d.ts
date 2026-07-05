@@ -30,6 +30,7 @@ export interface SharedData {
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
+    app_env: string;
     [key: string]: unknown;
 }
 

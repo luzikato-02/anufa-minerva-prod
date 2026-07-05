@@ -279,18 +279,9 @@ class TensionRecordController extends Controller
             'total_records' => TensionRecord::count(),
             'twisting_records' => TensionRecord::byType('twisting')->count(),
             'weaving_records' => TensionRecord::byType('weaving')->count(),
-            'recent_records' => TensionRecord::orderBy('created_at', 'desc')->take(5)->get(),
-            'operators' => TensionRecord::whereNotNull('operator_generated')
-                ->distinct()
-                ->pluck('operator_generated'),
-            'machines' => TensionRecord::whereNotNull('machine_number_generated')
-                ->distinct()
-                ->pluck('machine_number_generated'),
-            // ✅ Count records where problems array is not empty
             'twisting_problems' => TensionRecord::byType('twisting')
                 ->whereRaw("{$problemsLengthExpr} > 0")
                 ->count(),
-
             'weaving_problems' => TensionRecord::byType('weaving')
                 ->whereRaw("{$problemsLengthExpr} > 0")
                 ->count(),

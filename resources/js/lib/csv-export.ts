@@ -59,12 +59,9 @@ export function exportWeavingDataToCSV(
 ) {
   const csvRows: string[] = []
 
-  // Add title and timestamp
   csvRows.push("WEAVING TENSION DATA EXPORT")
   csvRows.push(`Export Date: ${new Date().toLocaleString()}`)
   csvRows.push("")
-
-  // Section 1: Configuration Parameters
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Item Number,${formData.itemNumber}`)
@@ -78,12 +75,9 @@ export function exportWeavingDataToCSV(
   csvRows.push(`Machine Number,${formData.machineNumber}`)
   csvRows.push(`Operator,${formData.operator}`)
   csvRows.push("")
-
-  // Section 2: Tension Measurement Data
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Position,Creel Side,Row,Column,Max Value,Min Value")
 
-  // Add data rows
   Object.entries(creelData).forEach(([side, rows]) => {
     Object.entries(rows).forEach(([row, columns]) => {
       Object.entries(columns).forEach(([col, data]) => {
@@ -96,25 +90,20 @@ export function exportWeavingDataToCSV(
   })
 
   csvRows.push("")
-
-  // Section 3: Problem Reports
   csvRows.push("=== PROBLEM REPORTS ===")
   csvRows.push("Position,Description,Timestamp")
 
   if (problems.length > 0) {
     problems.forEach((problem) => {
       const timestamp = problem.timestamp.toLocaleString()
-      const description = `"${problem.description.replace(/"/g, '""')}"` // Escape quotes in description
+      const description = `"${problem.description.replace(/"/g, '""')}"`
       csvRows.push(`${problem.position},${description},${timestamp}`)
     })
   } else {
     csvRows.push("No problems reported")
   }
 
-  // Create CSV content
   const csvContent = csvRows.join("\n")
-
-  // Download CSV file
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
 
@@ -137,12 +126,9 @@ export function exportTwistingDataToCSV(
 ) {
   const csvRows: string[] = []
 
-  // Add title and timestamp
   csvRows.push("TWISTING TENSION DATA EXPORT")
   csvRows.push(`Export Date: ${new Date().toLocaleString()}`)
   csvRows.push("")
-
-  // Section 1: Configuration Parameters
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Operator,${formData.operator}`)
@@ -156,12 +142,9 @@ export function exportTwistingDataToCSV(
   csvRows.push(`RPM,${formData.rpm}`)
   csvRows.push(`Machine Number,${formData.machineNumber}`)
   csvRows.push("")
-
-  // Section 2: Tension Measurement Data
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Spindle Number,Max Value,Min Value")
 
-  // Add data rows
   Object.entries(spindleData).forEach(([spindleNumber, data]) => {
     const maxValue = data.max !== null ? data.max : ""
     const minValue = data.min !== null ? data.min : ""
@@ -169,25 +152,20 @@ export function exportTwistingDataToCSV(
   })
 
   csvRows.push("")
-
-  // Section 3: Problem Reports
   csvRows.push("=== PROBLEM REPORTS ===")
   csvRows.push("Spindle Number,Description,Timestamp")
 
   if (problems.length > 0) {
     problems.forEach((problem) => {
       const timestamp = problem.timestamp.toLocaleString()
-      const description = `"${problem.description.replace(/"/g, '""')}"` // Escape quotes in description
+      const description = `"${problem.description.replace(/"/g, '""')}"`
       csvRows.push(`${problem.spindleNumber},${description},${timestamp}`)
     })
   } else {
     csvRows.push("No problems reported")
   }
 
-  // Create CSV content
   const csvContent = csvRows.join("\n")
-
-  // Download CSV file
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
 

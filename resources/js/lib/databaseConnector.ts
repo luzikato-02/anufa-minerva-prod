@@ -1,5 +1,5 @@
-import { loadFromLocalStorage, restoreProblemsWithDates } from "../utils/localStorage"
-// Database record interface
+import { loadFromLocalStorage, restoreProblemsWithDates } from "./localStorage"
+
 interface TensionRecord {
   id?: string
   record_type: "twisting" | "weaving"
@@ -20,7 +20,6 @@ interface TensionRecord {
   }
 }
 
-// Laravel API response interfaces
 interface LaravelResponse<T> {
   data: T
   message?: string
@@ -35,7 +34,6 @@ interface LaravelPaginatedResponse<T> {
   total: number
 }
 
-// Stock-taking interfaces
 export interface StockTakeBatch {
   batch_number: string
   material_code: string
@@ -86,16 +84,13 @@ interface RecordStockBatchResponse {
   errors?: Record<string, string[]>
 }
 
-// Database service class for Laravel backend
 export class LaravelDatabaseService {
   private baseUrl: string
 
   constructor() {
-    // Configure this to point to your Laravel API
     this.baseUrl = window.location.origin;
   }
 
-  // Get headers with authentication
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -104,66 +99,54 @@ export class LaravelDatabaseService {
     return headers
   }
 
-  // Save tension record to Laravel backend
-async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: number; message?: string; data?: any; error?: string }> {
-  try {
-    // Step 1: Ensure CSRF cookie is set
-    await fetch(`${this.baseUrl}/csrf-token`, { credentials: "include" })
-
-    // Step 2: Extract token from cookie
-    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-    const csrfToken = match ? decodeURIComponent(match[1]) : ""
-
-    // Step 3: POST with CSRF header
-    const response = await fetch(`${this.baseUrl}/tension-records`, {
-      method: "POST",
-      headers: {
-        ...this.getHeaders(),
-        "X-XSRF-TOKEN": csrfToken,
-      },
-      body: JSON.stringify(recordData),
-      credentials: "include",
-    })
-
-    console.log("Response status:", response.status)
-
-    const resultText = await response.text()
-    console.log("Response body:", resultText)
-
-    // Try parsing JSON
-    let result: any
+  async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: number; message?: string; data?: any; error?: string }> {
     try {
-      result = JSON.parse(resultText)
-    } catch {
-      result = { message: resultText }
-    }
+      await fetch(`${this.baseUrl}/csrf-token`, { credentials: "include" })
 
-    // If not ok, return error object
-    if (!response.ok) {
+      const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
+      const csrfToken = match ? decodeURIComponent(match[1]) : ""
+
+      const response = await fetch(`${this.baseUrl}/tension-records`, {
+        method: "POST",
+        headers: {
+          ...this.getHeaders(),
+          "X-XSRF-TOKEN": csrfToken,
+        },
+        body: JSON.stringify(recordData),
+        credentials: "include",
+      })
+
+      const resultText = await response.text()
+
+      let result: any
+      try {
+        result = JSON.parse(resultText)
+      } catch {
+        result = { message: resultText }
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          message: result.message || `HTTP ${response.status}`,
+          error: result.error || resultText,
+        }
+      }
+
+      return {
+        success: result.status === "success" || result.success === true,
+        id: result.id || result.data?.id,
+        message: result.message,
+        data: result.data,
+      }
+    } catch (err: any) {
       return {
         success: false,
-        message: result.message || `HTTP ${response.status}`,
-        error: result.error || resultText,
+        error: err.message || "Unknown error",
       }
     }
-
-    // Normalize Laravel’s response shape
-    return {
-      success: result.status === "success" || result.success === true,
-      id: result.id || result.data?.id,
-      message: result.message,
-      data: result.data,
-    }
-  } catch (err: any) {
-    console.error("Save failed:", err)
-    return {
-      success: false,
-      error: err.message || "Unknown error",
-    }
   }
-}
 
-  // Get all tension records from Laravel backend
   async getTensionRecords(
     recordType?: "twisting" | "weaving",
     page = 1,
@@ -192,7 +175,6 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
 
       const result = await response.json()
 
-      // Handle Laravel pagination response
       if (result.data && Array.isArray(result.data)) {
         return {
           records: result.data.map((record: any) => ({
@@ -208,7 +190,6 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
         }
       }
 
-      // Handle simple array response
       const records = Array.isArray(result) ? result : result.data || []
       return {
         records: records.map((record: any) => ({
@@ -222,7 +203,6 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
     }
   }
 
-  // Get single tension record by ID
   async getTensionRecord(id: string): Promise<TensionRecord | null> {
     try {
       const response = await fetch(`${this.baseUrl}/tension-records/${id}`, {
@@ -246,7 +226,6 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
     }
   }
 
-  // Delete tension record
   async deleteTensionRecord(id: string): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/tension-records/${id}`, {
@@ -268,36 +247,10 @@ async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: numbe
       }
     }
   }
-
-  // Update tension record
-  async updateTensionRecord(id: string, record: Partial<TensionRecord>): Promise<{ success: boolean; error?: string }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/tension-records/${id}`, {
-        method: "PUT",
-        headers: this.getHeaders(),
-        body: JSON.stringify(record),
-      })
-
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.message || `HTTP error! status: ${response.status}`)
-      }
-
-      return { success: true }
-    } catch (error) {
-      console.error("Failed to update tension record:", error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }
-    }
-  }
 }
 
-// Create singleton instance
 export const databaseService = new LaravelDatabaseService()
 
-// Load a stock-taking session by its id or session_id
 export async function getStockTakeSession(sessionId: string): Promise<StockTakeSessionResponse> {
   const response = await fetch(
     `/stock-take-records/session/${encodeURIComponent(sessionId)}`,
@@ -314,7 +267,6 @@ export async function getStockTakeSession(sessionId: string): Promise<StockTakeS
   return response.json()
 }
 
-// Check whether a batch exists (and whether it's already recorded) for a session
 export async function checkStockBatch(sessionId: string, batchNumber: string): Promise<StockTakeBatchCheckResponse> {
   const params = new URLSearchParams({
     record_key: sessionId,
@@ -334,7 +286,6 @@ export async function checkStockBatch(sessionId: string, batchNumber: string): P
   return response.json()
 }
 
-// Record a batch's stock-take result for a session
 export async function recordStockBatch(payload: RecordStockBatchPayload): Promise<RecordStockBatchResponse> {
   const tokenRes = await fetch("/csrf-token", { credentials: "include" })
   const { csrfToken } = await tokenRes.json()
@@ -355,8 +306,6 @@ export async function recordStockBatch(payload: RecordStockBatchPayload): Promis
   return response.json()
 }
 
-// Start (or resume, if one already exists server-side) a weaving-tension
-// session for a production order.
 export async function startWeavingSession(
   formData: any,
 ): Promise<{ success: boolean; data?: any; message?: string }> {
@@ -387,7 +336,6 @@ export async function startWeavingSession(
   }
 }
 
-// Look up the in-progress weaving session for a production order, if any.
 export async function getWeavingSession(
   productionOrder: string,
 ): Promise<{ success: boolean; data?: any; message?: string }> {
@@ -412,8 +360,6 @@ export async function getWeavingSession(
   }
 }
 
-// Persist progress against an existing weaving-tension session record.
-// `status` marks whether the session is still in progress or finished.
 export async function updateWeavingSession(
   id: number,
   record: any,
@@ -449,7 +395,6 @@ export async function updateWeavingSession(
   }
 }
 
-// Helper function to prepare twisting data for Laravel database storage
 export function prepareTwistingDataForDatabase(): TensionRecord {
   const spindleData = loadFromLocalStorage("twisting-spindle-data", {})
   const formData = loadFromLocalStorage("twisting-form-data", {
@@ -467,16 +412,14 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
   const problems = loadFromLocalStorage("twisting-problems", [])
   const restoredProblems = restoreProblemsWithDates(problems)
 
-  // Generate CSV data
   const csvData = generateTwistingCSV(spindleData, formData, restoredProblems)
 
-  // Calculate statistics
   const entries = Object.entries(spindleData)
   const totalMeasurements = entries.length
   const completedMeasurements = entries.filter(
     ([_, data]: [string, any]) => data.max !== null && data.min !== null,
   ).length
-  const progressPercentage = totalMeasurements > 0 ? Math.round((completedMeasurements / 84) * 100) : 0
+  const progressPercentage = totalMeasurements > 0 ? Math.round((completedMeasurements / totalMeasurements) * 100) : 0
 
   return {
     record_type: "twisting",
@@ -497,7 +440,6 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
   }
 }
 
-// Helper function to prepare weaving data for Laravel database storage
 export function prepareWeavingDataForDatabase(): TensionRecord {
   const creelData = loadFromLocalStorage("weaving-creel-data", {
     AI: {},
@@ -520,10 +462,8 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
   const problems = loadFromLocalStorage("weaving-problems", [])
   const restoredProblems = restoreProblemsWithDates(problems)
 
-  // Generate CSV data
   const csvData = generateWeavingCSV(creelData, formData, restoredProblems)
 
-  // Calculate statistics
   let totalMeasurements = 0
   let completedMeasurements = 0
 
@@ -538,8 +478,7 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
     })
   })
 
-  const maxPositions = 4 * 5 * 120 // 4 sides * 5 rows * 120 columns
-  const progressPercentage = maxPositions > 0 ? Math.round((completedMeasurements / maxPositions) * 100) : 0
+  const progressPercentage = totalMeasurements > 0 ? Math.round((completedMeasurements / totalMeasurements) * 100) : 0
 
   return {
     record_type: "weaving",
@@ -560,17 +499,12 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
   }
 }
 
-// Recursively count measurement "leaf" entries (objects containing max/min keys).
-// Works for twisting's flat { "1": {max,min}, ... } and weaving's nested
-// { side: { row: { col: {max,min} } } } measurement_data shapes.
 function countMeasurementLeaves(node: any): number {
   if (!node || typeof node !== "object") return 0
   if ("max" in node && "min" in node) return 1
   return Object.values(node).reduce((sum: number, child) => sum + countMeasurementLeaves(child), 0)
 }
 
-// Verify that a record fetched back from the database matches what was sent,
-// confirming the save was fully persisted.
 export function verifyPersistedRecord(
   sent: TensionRecord,
   fetched: TensionRecord | null,
@@ -607,16 +541,12 @@ export function verifyPersistedRecord(
   return { ok: true }
 }
 
-// Helper function to generate CSV for twisting data
 function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): string {
   const csvRows: string[] = []
 
-  // Add title and timestamp
   csvRows.push("TWISTING TENSION DATA EXPORT")
   csvRows.push(`Export Date: ${new Date().toLocaleString()}`)
   csvRows.push("")
-
-  // Section 1: Configuration Parameters
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Operator,${formData.operator}`)
@@ -630,8 +560,6 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   csvRows.push(`Machine Number,${formData.machineNumber}`)
   csvRows.push(`Yarn Code,${formData.yarnCode}`)
   csvRows.push("")
-
-  // Section 2: Tension Measurement Data
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Spindle Number,Max Value,Min Value")
 
@@ -642,15 +570,13 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   })
 
   csvRows.push("")
-
-  // Section 3: Problem Reports
   csvRows.push("=== PROBLEM REPORTS ===")
   csvRows.push("Spindle Number,Description,Timestamp")
 
   if (problems.length > 0) {
     problems.forEach((problem) => {
       const timestamp = problem.timestamp.toLocaleString()
-      const description = `"${problem.description.replace(/"/g, '""')}"` // Escape quotes
+      const description = `"${problem.description.replace(/"/g, '""')}"`
       csvRows.push(`${problem.spindleNumber},${description},${timestamp}`)
     })
   } else {
@@ -660,16 +586,12 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   return csvRows.join("\n")
 }
 
-// Helper function to generate CSV for weaving data
 function generateWeavingCSV(creelData: any, formData: any, problems: any[]): string {
   const csvRows: string[] = []
 
-  // Add title and timestamp
   csvRows.push("WEAVING TENSION DATA EXPORT")
   csvRows.push(`Export Date: ${new Date().toLocaleString()}`)
   csvRows.push("")
-
-  // Section 1: Configuration Parameters
   csvRows.push("=== CONFIGURATION PARAMETERS ===")
   csvRows.push("Parameter,Value")
   csvRows.push(`Item Number,${formData.itemNumber}`)
@@ -683,8 +605,6 @@ function generateWeavingCSV(creelData: any, formData: any, problems: any[]): str
   csvRows.push(`Machine Number,${formData.machineNumber}`)
   csvRows.push(`Operator,${formData.operator}`)
   csvRows.push("")
-
-  // Section 2: Tension Measurement Data
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Position,Creel Side,Row,Column,Max Value,Min Value")
 
@@ -700,15 +620,13 @@ function generateWeavingCSV(creelData: any, formData: any, problems: any[]): str
   })
 
   csvRows.push("")
-
-  // Section 3: Problem Reports
   csvRows.push("=== PROBLEM REPORTS ===")
   csvRows.push("Position,Description,Timestamp")
 
   if (problems.length > 0) {
     problems.forEach((problem) => {
       const timestamp = problem.timestamp.toLocaleString()
-      const description = `"${problem.description.replace(/"/g, '""')}"` // Escape quotes
+      const description = `"${problem.description.replace(/"/g, '""')}"`
       csvRows.push(`${problem.position},${description},${timestamp}`)
     })
   } else {

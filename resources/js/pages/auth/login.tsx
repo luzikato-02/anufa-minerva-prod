@@ -43,7 +43,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     autoComplete="email"
                                     placeholder="Enter username"
                                 />
-                    
+                                <InputError message={errors.login} />
                             </div>
 
                             <div className="grid gap-2">

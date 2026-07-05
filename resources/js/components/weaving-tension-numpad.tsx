@@ -12,18 +12,18 @@ import { ChevronLeft, ChevronRight, Delete, X } from 'lucide-react';
 import * as React from 'react';
 import { useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
-import { exportWeavingDataToCSV } from './utils/csv-export';
+import { exportWeavingDataToCSV } from '@/lib/csv-export';
 import {
     databaseService,
     prepareWeavingDataForDatabase,
     updateWeavingSession,
     verifyPersistedRecord,
-} from './utils/databaseConnector';
+} from '@/lib/databaseConnector';
 import {
     clearAllAppData,
     loadFromLocalStorage,
     restoreProblemsWithDates,
-} from './utils/localStorage';
+} from '@/lib/localStorage';
 import {
     Dialog,
     DialogContent,
@@ -37,6 +37,7 @@ import { Alert } from '@/components/ui/alert';
 interface SpindleData {
     max: number | null;
     min: number | null;
+    updatedAt?: string;
 }
 
 interface CreelData {
@@ -216,6 +217,7 @@ export default function WeavingNumpad({
             newData[currentSide][currentRow][counter] = {
                 ...newData[currentSide][currentRow][counter],
                 [valueType.toLowerCase()]: numValue,
+                updatedAt: new Date().toISOString(),
             };
 
             return newData;
@@ -443,6 +445,7 @@ export default function WeavingNumpad({
                 newData[currentSide][currentRow][counter] = {
                     ...newData[currentSide][currentRow][counter],
                     [valueType.toLowerCase()]: null,
+                    updatedAt: new Date().toISOString(),
                 };
             }
 

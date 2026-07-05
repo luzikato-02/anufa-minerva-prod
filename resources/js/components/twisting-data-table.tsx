@@ -63,7 +63,7 @@ import {
     YAxis,
 } from 'recharts';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
-import { databaseService, verifyPersistedRecord } from './utils/databaseConnector';
+import { databaseService, verifyPersistedRecord } from '@/lib/databaseConnector';
 
 interface TensionRecord {
     id: string;

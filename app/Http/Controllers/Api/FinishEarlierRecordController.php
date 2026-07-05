@@ -48,7 +48,7 @@ class FinishEarlierRecordController extends Controller
             'machine_number'     => 'required|string',
             'style'              => 'required|string',
             'production_order'   => 'required|string',
-            'roll_construction'  => 'required|string',
+            'roll_construction'  => 'nullable|string',
             'shift_group'  => 'required|string',
         ]);
 
@@ -57,7 +57,7 @@ class FinishEarlierRecordController extends Controller
             'machine_number'        => $validated['machine_number'],
             'style'                 => $validated['style'],
             'production_order'      => $validated['production_order'],
-            'roll_construction'     => $validated['roll_construction'],
+            'roll_construction'     => $validated['roll_construction'] ?? '',
             'shift_group'           => $validated['shift_group'],
             'total_finish_earlier'  => 0,     // placeholder
             'average_meters_finish' => 0,     // placeholder
@@ -141,6 +141,114 @@ class FinishEarlierRecordController extends Controller
             'message' => 'Recording finished.',
             'data' => $record,
         ]);
+    }
+
+    /**
+     * Create a complete record from a scanned form in one atomic write.
+     */
+    public function submitScan(Request $request)
+    {
+        $validated = $request->validate([
+            'metadata.machine_number'    => 'required|string',
+            'metadata.style'             => 'required|string',
+            'metadata.production_order'  => 'required|string',
+            'metadata.roll_construction' => 'sometimes|nullable|string',
+            'metadata.shift_group'       => 'required|string',
+            'entries'                    => 'required|array|min:1',
+            'entries.*.creel_side'       => 'required|string',
+            'entries.*.row_number'       => 'required|string',
+            'entries.*.column_number'    => 'required|string',
+            'entries.*.meters_finish'    => 'required|numeric',
+            'conflict_resolution'        => 'sometimes|in:replace,merge',
+        ]);
+
+        $productionOrder = $validated['metadata']['production_order'];
+        $existing = FinishEarlierRecord::where('metadata->production_order', $productionOrder)->first();
+
+        if ($existing && !isset($validated['conflict_resolution'])) {
+            return response()->json([
+                'conflict' => true,
+                'existing' => [
+                    'id'          => $existing->id,
+                    'entry_count' => count($existing->entries ?? []),
+                    'created_at'  => $existing->created_at->toDateTimeString(),
+                ],
+            ], 409);
+        }
+
+        $entries = $validated['entries'];
+        $meta    = $validated['metadata'];
+
+        if ($existing && ($validated['conflict_resolution'] ?? '') === 'merge') {
+            $merged = array_merge($existing->entries ?? [], $entries);
+            $total  = count($merged);
+            $meta['total_finish_earlier']  = $total;
+            $meta['average_meters_finish'] = $total > 0
+                ? (int) round(array_sum(array_column($merged, 'meters_finish')) / $total)
+                : 0;
+            $existing->update(['metadata' => $meta, 'entries' => $merged]);
+            return response()->json(['message' => 'Record merged.', 'id' => $existing->id, 'data' => $existing], 200);
+        }
+
+        if ($existing) {
+            $existing->delete();
+        }
+
+        $total = count($entries);
+        $meta['total_finish_earlier']  = $total;
+        $meta['average_meters_finish'] = $total > 0
+            ? (int) round(array_sum(array_column($entries, 'meters_finish')) / $total)
+            : 0;
+
+        $record = FinishEarlierRecord::create(['metadata' => $meta, 'entries' => $entries]);
+
+        return response()->json([
+            'message' => 'Record created from scan.',
+            'id'      => $record->id,
+            'data'    => $record,
+        ], 201);
+    }
+
+    /**
+     * Update metadata fields and/or entries for an existing record.
+     */
+    public function update(Request $request, $id)
+    {
+        $record = FinishEarlierRecord::findOrFail($id);
+
+        $validated = $request->validate([
+            'machine_number'          => 'sometimes|required|string',
+            'style'                   => 'sometimes|required|string',
+            'production_order'        => 'sometimes|required|string',
+            'shift_group'             => 'sometimes|required|string',
+            'roll_construction'       => 'nullable|string',
+            'entries'                 => 'sometimes|array',
+            'entries.*.creel_side'    => 'required_with:entries|string',
+            'entries.*.row_number'    => 'required_with:entries|string',
+            'entries.*.column_number' => 'required_with:entries|string',
+            'entries.*.meters_finish' => 'required_with:entries|numeric',
+        ]);
+
+        $metaKeys = ['machine_number', 'style', 'production_order', 'shift_group', 'roll_construction'];
+        $metaUpdates = array_intersect_key($validated, array_flip($metaKeys));
+
+        $updates = [];
+        $metadata = array_merge($record->metadata, $metaUpdates);
+
+        if (isset($validated['entries'])) {
+            $entries = $validated['entries'];
+            $total = count($entries);
+            $metadata['total_finish_earlier']  = $total;
+            $metadata['average_meters_finish'] = $total > 0
+                ? (int) round(array_sum(array_column($entries, 'meters_finish')) / $total)
+                : 0;
+            $updates['entries'] = $entries;
+        }
+
+        $updates['metadata'] = $metadata;
+        $record->update($updates);
+
+        return response()->json(['message' => 'Record updated.', 'data' => $record]);
     }
 
     /**

@@ -19,7 +19,7 @@ import {
     getStockTakeSession,
     recordStockBatch,
     type StockTakeBatch,
-} from '@/components/utils/databaseConnector';
+} from '@/lib/databaseConnector';
 import {
     AlertCircle,
     ArrowLeft,

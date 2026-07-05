@@ -1,20 +1,32 @@
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Icon } from '@/components/icon';
 import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
+    SidebarGroup,
+    SidebarGroupContent,
     SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, batchStockTakingMain, creelVisualization, dashboard, finishEarlierDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
-import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, ShieldIcon, HistoryIcon, ScrollTextIcon } from 'lucide-react';
+import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
+import { type NavItem, type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye } from 'lucide-react';
+import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
@@ -26,6 +38,11 @@ const mainNavItems: NavItem[] = [
         title: 'Home',
         href: dashboard(),
         icon: HomeIcon,
+    },
+    {
+        title: 'Document Intelligence',
+        href: documentIntelligence(),
+        icon: FileSearch,
     },
 ];
 
@@ -40,14 +57,14 @@ const processParamsNavItems: NavItem[] = [
     {
         title: 'Record: Weaving Tension',
         href: weavingTensionMain(),
-        icon: LayoutGrid,
+        icon: Layers,
         permission: 'tension-records.create',
     },
 
     {
         title: 'Display: Tension Records',
         href: tensionRecordsDisplay(),
-        icon: DatabaseBackupIcon,
+        icon: Table2,
         permission: 'tension-records.view',
     },
 
@@ -56,27 +73,27 @@ const inventoryNavItems: NavItem[] = [
    {
         title: 'Record: Batch Stock Taking',
         href: batchStockTakingMain(),
-        icon: NotebookIcon,
+        icon: ClipboardList,
         permission: 'stock-take.create',
     },
 
     {
         title: 'Display: Stock Take Records',
         href: stockTakeRecordsMain(),
-        icon: BookAIcon,
+        icon: Table2,
         permission: 'stock-take.view',
     },
 
     {
         title: 'Record: Liner Material I/O',
         href: underConstruction(),
-        icon: LayoutGrid,
+        icon: ArrowLeftRight,
     },
 
     {
         title: 'Display: Liner Material I/O',
         href: underConstruction(),
-        icon: LayoutGrid,
+        icon: Table2,
     },
 ];
 
@@ -84,13 +101,19 @@ const loomNavItems: NavItem[] = [
     {
         title: 'Display: Finish Earlier Records',
         href: finishEarlierDisplay(),
-        icon: LayoutGrid,
+        icon: Table2,
         permission: 'finish-earlier.view',
+    },
+    {
+        title: 'Scan: Finish Earlier Form',
+        href: finishEarlierScan(),
+        icon: ScanLine,
+        permission: 'finish-earlier.create',
     },
     {
         title: 'Display: Creel Visualization',
         href: creelVisualization(),
-        icon: LayoutGrid,
+        icon: Eye,
         permission: 'creel.view',
     },
 ];
@@ -111,26 +134,11 @@ const administrationNavItems: NavItem[] = [
     },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Log Viewer',
-        href: '/log-viewer',
-        icon: ScrollTextIcon,
-    },
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
 
 export function AppSidebar() {
     const { can } = usePermissions();
+    const { app_env } = usePage<SharedData>().props;
+    const [prodWarningOpen, setProdWarningOpen] = useState(false);
 
     const filterByPermission = (items: NavItem[]) =>
         items.filter((item) => !item.permission || can(item.permission));
@@ -138,31 +146,77 @@ export function AppSidebar() {
     const visibleAdminItems = filterByPermission(administrationNavItems);
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarHeader>
+        <>
+            <AlertDialog open={prodWarningOpen} onOpenChange={setProdWarningOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Not available in production</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The Log Viewer is disabled in the production environment.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setProdWarningOpen(false)}>
+                            OK
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
-            <SidebarContent>
-                <NavMain items={filterByPermission(mainNavItems)} />
-                <ProcessParams items={filterByPermission(processParamsNavItems)} />
-                <InventoryNav items={filterByPermission(inventoryNavItems)} />
-                <LoomNav items={filterByPermission(loomNavItems)} />
-                {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}
-            </SidebarContent>
+            <Sidebar collapsible="icon" variant="inset">
+                <SidebarHeader>
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton size="lg" asChild>
+                                <Link href={dashboard()} prefetch>
+                                    <AppLogo />
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                </SidebarHeader>
 
-            <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
-                <NavUser />
-            </SidebarFooter>
-        </Sidebar>
+                <SidebarContent>
+                    <NavMain items={filterByPermission(mainNavItems)} />
+                    <ProcessParams items={filterByPermission(processParamsNavItems)} />
+                    <InventoryNav items={filterByPermission(inventoryNavItems)} />
+                    <LoomNav items={filterByPermission(loomNavItems)} />
+                    {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}
+                </SidebarContent>
+
+                <SidebarFooter>
+                    <SidebarGroup className="group-data-[collapsible=icon]:p-0 mt-auto">
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton
+                                        className="text-neutral-600 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-100"
+                                        onClick={
+                                            app_env === 'production'
+                                                ? () => setProdWarningOpen(true)
+                                                : undefined
+                                        }
+                                        asChild={app_env !== 'production'}
+                                    >
+                                        {app_env === 'production' ? (
+                                            <>
+                                                <Icon iconNode={ScrollTextIcon} className="h-5 w-5" />
+                                                <span>Log Viewer</span>
+                                            </>
+                                        ) : (
+                                            <a href="/log-viewer">
+                                                <Icon iconNode={ScrollTextIcon} className="h-5 w-5" />
+                                                <span>Log Viewer</span>
+                                            </a>
+                                        )}
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                    <NavUser />
+                </SidebarFooter>
+            </Sidebar>
+        </>
     );
 }

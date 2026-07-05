@@ -3,12 +3,13 @@ import WeavingNumpad from "./weaving-tension-numpad"
 import WeavingProblems from "./weaving-tension-problems"
 import WeavingParams from "./weaving-tension-params"
 import WeavingSessionSelect from "./weaving-session-select"
-import { saveToLocalStorage, loadFromLocalStorage, removeFromLocalStorage, restoreProblemsWithDates } from "./utils/localStorage"
-import { getWeavingSession, prepareWeavingDataForDatabase, startWeavingSession, updateWeavingSession } from "./utils/databaseConnector"
+import { saveToLocalStorage, loadFromLocalStorage, removeFromLocalStorage, restoreProblemsWithDates, mergeCreelData, type MergeConflictSummary } from "@/lib/localStorage"
+import { getWeavingSession, prepareWeavingDataForDatabase, startWeavingSession, updateWeavingSession } from "@/lib/databaseConnector"
 
 interface SpindleData {
   max: number | null
   min: number | null
+  updatedAt?: string
 }
 
 interface CreelData {
@@ -88,6 +89,7 @@ export default function WeavingTensionPage() {
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [sessionProductionOrder, setSessionProductionOrder] = useState<string | null>(null)
   const [isStartingSession, setIsStartingSession] = useState(false)
+  const [mergeSummary, setMergeSummary] = useState<MergeConflictSummary | null>(null)
   const isFirstRender = useRef(true)
   const autosaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -184,6 +186,30 @@ export default function WeavingTensionPage() {
     }
   }, [creelData, submittedProblems, sessionId])
 
+  // Merge server measurement_data into current local creelData state.
+  // Uses functional setState so `prev` is always the hydrated local value.
+  const applyServerMerge = (serverData: any) => {
+    const serverGrid = serverData && Object.keys(serverData).length > 0
+      ? serverData
+      : { AI: {}, BI: {}, AO: {}, BO: {} }
+    setCreelData(prev => {
+      const { merged, conflicts } = mergeCreelData(prev, serverGrid)
+      const hasActivity = conflicts.localOnly + conflicts.serverOnly + conflicts.localWon + conflicts.serverWon > 0
+      if (hasActivity) setMergeSummary(conflicts)
+      return merged
+    })
+  }
+
+  // Check whether an in-progress session exists for a PO without hydrating state.
+  const checkSessionExists = async (po: string): Promise<boolean> => {
+    try {
+      const result = await getWeavingSession(po)
+      return result.success && !!result.data
+    } catch {
+      return false
+    }
+  }
+
   // Session select: navigate to params form with PO pre-filled (new session)
   const handleSessionCreateNew = (po: string) => {
     setFormData((prev) => ({
@@ -203,11 +229,7 @@ export default function WeavingTensionPage() {
         setSessionId(record.id)
         setSessionProductionOrder(po)
         setFormData((prev) => ({ ...prev, ...record.form_data }))
-        setCreelData(
-          record.measurement_data && Object.keys(record.measurement_data).length > 0
-            ? record.measurement_data
-            : { AI: {}, BI: {}, AO: {}, BO: {} },
-        )
+        applyServerMerge(record.measurement_data)
         setSubmittedProblems(restoreProblemsWithDates(record.problems ?? []))
         setCurrentView("recorder")
         return true
@@ -241,11 +263,7 @@ export default function WeavingTensionPage() {
         setSessionId(record.id)
         setSessionProductionOrder(productionOrder)
         setFormData((prev) => ({ ...prev, ...record.form_data }))
-        setCreelData(
-          record.measurement_data && Object.keys(record.measurement_data).length > 0
-            ? record.measurement_data
-            : { AI: {}, BI: {}, AO: {}, BO: {} },
-        )
+        applyServerMerge(record.measurement_data)
         setSubmittedProblems(restoreProblemsWithDates(record.problems ?? []))
       } else {
         // No resumable session for this production order. If the locally
@@ -306,62 +324,97 @@ export default function WeavingTensionPage() {
     console.log("All weaving data cleared and reset to initial state - returned to session select")
   }
 
+  const conflictBanner = mergeSummary && (
+    <div className="fixed top-4 inset-x-0 flex justify-center z-50 px-4 pointer-events-none">
+      <div className="pointer-events-auto max-w-sm w-full bg-amber-50 border border-amber-300 rounded-lg shadow-md p-3 flex items-start gap-2">
+        <span className="text-amber-600 mt-0.5 shrink-0">⚠</span>
+        <div className="flex-1 text-sm text-amber-800">
+          <strong>Session merged.</strong>{" "}
+          {mergeSummary.localWon > 0 && <span>Local newer: {mergeSummary.localWon} pos. </span>}
+          {mergeSummary.serverWon > 0 && <span>Server newer: {mergeSummary.serverWon} pos. </span>}
+          {mergeSummary.localOnly > 0 && <span>Local-only synced: {mergeSummary.localOnly} pos. </span>}
+          {mergeSummary.serverOnly > 0 && <span>Server-only synced: {mergeSummary.serverOnly} pos.</span>}
+        </div>
+        <button
+          onClick={() => setMergeSummary(null)}
+          className="text-amber-600 hover:text-amber-900 shrink-0 leading-none"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+
   if (currentView === "problems") {
     return (
-      <WeavingProblems
-        onBack={() => setCurrentView("numpad")}
-        position={currentPosition}
-        submittedProblems={submittedProblems}
-        setSubmittedProblems={setSubmittedProblems}
-      />
+      <>
+        {conflictBanner}
+        <WeavingProblems
+          onBack={() => setCurrentView("numpad")}
+          position={currentPosition}
+          submittedProblems={submittedProblems}
+          setSubmittedProblems={setSubmittedProblems}
+        />
+      </>
     )
   }
 
   if (currentView === "session-select") {
     return (
-      <WeavingSessionSelect
-        initialPo={sessionProductionOrder ?? ""}
-        isChecking={isStartingSession}
-        onCreateNew={handleSessionCreateNew}
-        onContinue={handleSessionContinue}
-      />
+      <>
+        {conflictBanner}
+        <WeavingSessionSelect
+          initialPo={sessionProductionOrder ?? ""}
+          isChecking={isStartingSession}
+          onCreateNew={handleSessionCreateNew}
+          onContinue={handleSessionContinue}
+          onCheckExists={checkSessionExists}
+        />
+      </>
     )
   }
 
   if (currentView === "recorder") {
     return (
-      <WeavingParams
-        formData={formData}
-        setFormData={setFormData}
-        onStartRecording={handleStartRecording}
-        isStarting={isStartingSession}
-      />
+      <>
+        {conflictBanner}
+        <WeavingParams
+          formData={formData}
+          setFormData={setFormData}
+          onStartRecording={handleStartRecording}
+          onExitSession={() => setCurrentView("session-select")}
+          isStarting={isStartingSession}
+        />
+      </>
     )
   }
 
   return (
-    <WeavingNumpad
-      sessionId={sessionId}
-      display={display}
-      setDisplay={setDisplay}
-      counter={counter}
-      setCounter={setCounter}
-      valueType={valueType}
-      setValueType={setValueType}
-      creelSideIndex={creelSideIndex}
-      setCreelSideIndex={setCreelSideIndex}
-      creelRowIndex={creelRowIndex}
-      setCreelRowIndex={setCreelRowIndex}
-      creelData={creelData}
-      setCreelData={setCreelData}
-      formData={formData}
-      problems={submittedProblems}
-      onReportProblem={(position) => {
-        setCurrentPosition(position)
-        setCurrentView("problems")
-      }}
-      onOpenRecorder={() => setCurrentView("recorder")}
-      onDataCleared={handleDataCleared}
-    />
+    <>
+      {conflictBanner}
+      <WeavingNumpad
+        sessionId={sessionId}
+        display={display}
+        setDisplay={setDisplay}
+        counter={counter}
+        setCounter={setCounter}
+        valueType={valueType}
+        setValueType={setValueType}
+        creelSideIndex={creelSideIndex}
+        setCreelSideIndex={setCreelSideIndex}
+        creelRowIndex={creelRowIndex}
+        setCreelRowIndex={setCreelRowIndex}
+        creelData={creelData}
+        setCreelData={setCreelData}
+        formData={formData}
+        problems={submittedProblems}
+        onReportProblem={(position) => {
+          setCurrentPosition(position)
+          setCurrentView("problems")
+        }}
+        onOpenRecorder={() => setCurrentView("recorder")}
+        onDataCleared={handleDataCleared}
+      />
+    </>
   )
 }

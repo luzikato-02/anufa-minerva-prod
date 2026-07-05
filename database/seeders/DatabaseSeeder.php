@@ -35,7 +35,7 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
-        $testUser->syncRoles(['operator']);
+        $testUser->syncRoles(['admin']);
 
         $adminUser = User::firstOrCreate(
             ['email' => 'admin@example.com'],

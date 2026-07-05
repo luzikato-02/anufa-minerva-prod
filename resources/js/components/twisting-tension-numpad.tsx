@@ -27,17 +27,17 @@ import {
 import * as React from 'react';
 import { useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
-import { exportTwistingDataToCSV } from './utils/csv-export.js';
+import { exportTwistingDataToCSV } from '@/lib/csv-export';
 import {
     databaseService,
     prepareTwistingDataForDatabase,
     verifyPersistedRecord,
-} from './utils/databaseConnector';
+} from '@/lib/databaseConnector';
 import {
     clearAllAppData,
     loadFromLocalStorage,
     restoreProblemsWithDates,
-} from './utils/localStorage.js';
+} from '@/lib/localStorage';
 
 interface SpindleData {
     max: number | null;
