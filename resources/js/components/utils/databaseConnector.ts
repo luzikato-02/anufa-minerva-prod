@@ -355,6 +355,100 @@ export async function recordStockBatch(payload: RecordStockBatchPayload): Promis
   return response.json()
 }
 
+// Start (or resume, if one already exists server-side) a weaving-tension
+// session for a production order.
+export async function startWeavingSession(
+  formData: any,
+): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    await fetch(`${window.location.origin}/csrf-token`, { credentials: "include" })
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
+    const csrfToken = match ? decodeURIComponent(match[1]) : ""
+
+    const response = await fetch("/tension-records/start-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-XSRF-TOKEN": csrfToken,
+      },
+      body: JSON.stringify({ form_data: formData }),
+      credentials: "include",
+    })
+
+    const result = await response.json()
+    if (!response.ok) {
+      return { success: false, message: result.message || `HTTP ${response.status}` }
+    }
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.warn("Failed to start weaving session:", error)
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" }
+  }
+}
+
+// Look up the in-progress weaving session for a production order, if any.
+export async function getWeavingSession(
+  productionOrder: string,
+): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const response = await fetch(`/tension-records/session/${encodeURIComponent(productionOrder)}`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    })
+
+    if (response.status === 404) {
+      return { success: false }
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.warn("Failed to fetch weaving session:", error)
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" }
+  }
+}
+
+// Persist progress against an existing weaving-tension session record.
+// `status` marks whether the session is still in progress or finished.
+export async function updateWeavingSession(
+  id: number,
+  record: any,
+  status: "in_progress" | "completed" = "in_progress",
+): Promise<{ success: boolean; id?: number; data?: any; message?: string; error?: string }> {
+  try {
+    await fetch(`${window.location.origin}/csrf-token`, { credentials: "include" })
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
+    const csrfToken = match ? decodeURIComponent(match[1]) : ""
+
+    const response = await fetch(`/tension-records/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-XSRF-TOKEN": csrfToken,
+      },
+      body: JSON.stringify({
+        ...record,
+        metadata: { ...record.metadata, status },
+      }),
+      credentials: "include",
+    })
+
+    const result = await response.json()
+    if (!response.ok) {
+      return { success: false, message: result.message || `HTTP ${response.status}`, error: result.error }
+    }
+    return { success: true, id: result.data?.id, data: result.data, message: result.message }
+  } catch (error) {
+    console.warn("Failed to update weaving session:", error)
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+  }
+}
+
 // Helper function to prepare twisting data for Laravel database storage
 export function prepareTwistingDataForDatabase(): TensionRecord {
   const spindleData = loadFromLocalStorage("twisting-spindle-data", {})

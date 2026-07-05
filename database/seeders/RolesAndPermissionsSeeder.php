@@ -29,6 +29,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'finish-earlier.create',
             'finish-earlier.edit',
             'finish-earlier.delete',
+            'creel.view',
+            'creel.create',
+            'creel.edit',
+            'creel.delete',
             'users.view',
             'users.manage',
             'roles.manage',
@@ -54,12 +58,17 @@ class RolesAndPermissionsSeeder extends Seeder
                 'finish-earlier.create',
                 'finish-earlier.edit',
                 'finish-earlier.delete',
+                'creel.view',
+                'creel.create',
+                'creel.edit',
+                'creel.delete',
                 'activity-log.view',
             ],
             'analyst' => [
                 'tension-records.view',
                 'stock-take.view',
                 'finish-earlier.view',
+                'creel.view',
                 'activity-log.view',
             ],
             'operator' => [
@@ -72,6 +81,8 @@ class RolesAndPermissionsSeeder extends Seeder
                 'finish-earlier.view',
                 'finish-earlier.create',
                 'finish-earlier.edit',
+                'creel.view',
+                'creel.create',
             ],
         ];
 

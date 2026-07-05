@@ -74,7 +74,7 @@ class TensionRecordController extends Controller
         $query->orderBy('created_at', 'desc');
 
         // Paginate results
-        $perPage = $request->get('per_page', 10);
+        $perPage = min((int) $request->get('per_page', 10), 200);
         $records = $query->paginate($perPage);
 
         return response()->json($records);
@@ -114,6 +114,92 @@ class TensionRecordController extends Controller
             'message' => 'Tension record saved successfully',
             'data' => $record
         ], 201);
+    }
+
+    /**
+     * Start a resumable weaving-tension session for a production order, or
+     * return the existing in-progress session for it if one already exists.
+     */
+    public function startSession(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'form_data' => 'required|array',
+            'form_data.productionOrder' => 'required|string',
+        ]);
+
+        $formData = $validated['form_data'];
+
+        $statusExpr = $this->jsonExtract('metadata', '$.status');
+        $existing = TensionRecord::byType('weaving')
+            ->where('form_data->productionOrder', $formData['productionOrder'])
+            ->where(function ($q) use ($statusExpr) {
+                $q->where('metadata->status', 'in_progress')
+                  ->orWhereRaw("{$statusExpr} IS NULL");
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Resuming existing session',
+                'data' => $existing,
+            ]);
+        }
+
+        $record = TensionRecord::create([
+            'record_type' => 'weaving',
+            'csv_data' => '',
+            'form_data' => $formData,
+            'measurement_data' => [],
+            'problems' => [],
+            'metadata' => [
+                'status' => 'in_progress',
+                'total_measurements' => 0,
+                'completed_measurements' => 0,
+                'progress_percentage' => 0,
+                'operator' => $formData['operator'] ?? null,
+                'machine_number' => $formData['machineNumber'] ?? null,
+                'item_number' => $formData['itemNumber'] ?? null,
+                'item_description' => $formData['itemDescription'] ?? null,
+            ],
+            'user_id' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Session started',
+            'data' => $record,
+        ], 201);
+    }
+
+    /**
+     * Fetch the in-progress weaving session for a production order, if any,
+     * so measurement entry can resume where it left off.
+     */
+    public function getSession(string $productionOrder): JsonResponse
+    {
+        $statusExpr = $this->jsonExtract('metadata', '$.status');
+        $record = TensionRecord::byType('weaving')
+            ->where('form_data->productionOrder', $productionOrder)
+            ->where(function ($q) use ($statusExpr) {
+                $q->where('metadata->status', 'in_progress')
+                  ->orWhereRaw("{$statusExpr} IS NULL");
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (! $record) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No in-progress session found for this production order',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $record,
+        ]);
     }
 
     /**
@@ -176,6 +262,7 @@ class TensionRecordController extends Controller
             $tensionRecord->created_at->format('Y-m-d'),
             $tensionRecord->operator ?? 'unknown'
         );
+        $filename = preg_replace('/[^\w\-.]/', '-', $filename);
         return response($tensionRecord->csv_data)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
@@ -280,7 +367,7 @@ class TensionRecordController extends Controller
         $flattened = $flattened->sortByDesc('record_created_at')->values();
 
         // Manual pagination
-        $perPage = (int) $request->input('per_page', 10);
+        $perPage = min((int) $request->input('per_page', 10), 200);
         $page = (int) $request->input('page', 1);
         $total = $flattened->count();
         $items = $flattened->slice(($page - 1) * $perPage, $perPage)->values();

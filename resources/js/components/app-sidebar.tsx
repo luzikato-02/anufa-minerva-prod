@@ -11,13 +11,14 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, dashboard, tensionRecordsDisplay, twistingTensionMain, underConstruction, weavingTensionMain, stockTakeRecordsMain, batchStockTakingMain, userMaintenance, finishEarlierDisplay } from '@/routes';
+import { activityLog, batchStockTakingMain, creelVisualization, dashboard, finishEarlierDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { BookOpen, Folder, LayoutGrid, HomeIcon, ConeIcon, DatabaseBackupIcon, NotebookIcon, BookAIcon, ShieldIcon, HistoryIcon, ScrollTextIcon } from 'lucide-react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
+import { LoomNav } from './loom-nav';
 import { ProcessParams } from './process-parameters';
 
 const mainNavItems: NavItem[] = [
@@ -50,13 +51,6 @@ const processParamsNavItems: NavItem[] = [
         permission: 'tension-records.view',
     },
 
-    {
-        title: 'Display: Finish Earlier Records',
-        href: finishEarlierDisplay(),
-        icon: LayoutGrid,
-        permission: 'finish-earlier.view',
-    },
-
 ];
 const inventoryNavItems: NavItem[] = [
    {
@@ -83,6 +77,21 @@ const inventoryNavItems: NavItem[] = [
         title: 'Display: Liner Material I/O',
         href: underConstruction(),
         icon: LayoutGrid,
+    },
+];
+
+const loomNavItems: NavItem[] = [
+    {
+        title: 'Display: Finish Earlier Records',
+        href: finishEarlierDisplay(),
+        icon: LayoutGrid,
+        permission: 'finish-earlier.view',
+    },
+    {
+        title: 'Display: Creel Visualization',
+        href: creelVisualization(),
+        icon: LayoutGrid,
+        permission: 'creel.view',
     },
 ];
 
@@ -146,6 +155,7 @@ export function AppSidebar() {
                 <NavMain items={filterByPermission(mainNavItems)} />
                 <ProcessParams items={filterByPermission(processParamsNavItems)} />
                 <InventoryNav items={filterByPermission(inventoryNavItems)} />
+                <LoomNav items={filterByPermission(loomNavItems)} />
                 {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}
             </SidebarContent>
 

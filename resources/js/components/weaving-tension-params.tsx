@@ -1,10 +1,20 @@
-"use client"
-
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { clearAllAppData } from "./utils/localStorage"
 
 interface TensionData {
@@ -24,11 +34,15 @@ export default function WeavingParams({
   formData,
   setFormData,
   onStartRecording,
+  isStarting = false,
 }: {
   formData: TensionData
   setFormData: (value: TensionData | ((prev: TensionData) => TensionData)) => void
-  onStartRecording?: () => void
+  onStartRecording?: () => void | Promise<void>
+  isStarting?: boolean
 }) {
+  const [showPoWarning, setShowPoWarning] = useState(false)
+
   const handleInputChange = (field: keyof TensionData, value: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -36,9 +50,12 @@ export default function WeavingParams({
     }))
   }
 
-  const startRecording = () => {
-    console.log("Started recording with data:", formData)
-    onStartRecording?.()
+  const startRecording = async () => {
+    if (!formData.productionOrder.trim()) {
+      setShowPoWarning(true)
+      return
+    }
+    await onStartRecording?.()
   }
 
   const clearData = () => {
@@ -58,15 +75,9 @@ export default function WeavingParams({
   }
 
   const clearAllData = () => {
-    if (
-      confirm(
-        "Are you sure you want to clear all saved data? This will remove all forms, measurements, and problem reports.",
-      )
-    ) {
-      clearAllAppData()
-      clearData()
-      console.log("All app data cleared from localStorage")
-    }
+    clearAllAppData()
+    clearData()
+    console.log("All app data cleared from localStorage")
   }
 
   return (
@@ -111,7 +122,7 @@ export default function WeavingParams({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label htmlFor="productionOrder" className="text-xs font-medium text-foreground">
-                  Production Order
+                  Production Order <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="productionOrder"
@@ -227,8 +238,8 @@ export default function WeavingParams({
 
           {/* Action Buttons */}
           <div className="space-y-1">
-            <Button size="sm" className="w-full h-10 text-sm font-medium" onClick={startRecording}>
-              Start Recording
+            <Button size="sm" className="w-full h-10 text-sm font-medium" onClick={startRecording} disabled={isStarting}>
+              {isStarting ? "Checking for existing session..." : "Start Recording"}
             </Button>
 
             <div className="grid grid-cols-2 gap-2">
@@ -240,18 +251,48 @@ export default function WeavingParams({
               >
                 Clear Form
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 text-xs font-medium hover:bg-destructive hover:text-destructive-foreground bg-transparent"
-                onClick={clearAllData}
-              >
-                Clear All Data
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 text-xs font-medium hover:bg-destructive hover:text-destructive-foreground bg-transparent"
+                  >
+                    Clear All Data
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear all saved data?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will remove all forms, measurements, and problem reports. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={clearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Clear All Data
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </CardContent>
       </Card>
+    <AlertDialog open={showPoWarning} onOpenChange={setShowPoWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Production Order Required</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please enter a production order number before starting. Sessions are identified by production order.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowPoWarning(false)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

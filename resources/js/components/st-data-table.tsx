@@ -58,11 +58,6 @@ import {
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 
-declare module '@tanstack/react-table' {
-    interface TableMeta<TData> {
-        onStatusChange?: (id: string, status: string) => void;
-    }
-}
 
 interface StockTakeRecord {
     id: string;

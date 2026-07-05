@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\CreelRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockTakeRecordController;
@@ -110,6 +111,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('weaving-tension-main', function () {
             return Inertia::render('weaving-tension-main');
         })->name('weaving-tension-main');
+
+        // Resumable weaving-tension sessions, keyed by production order
+        Route::post('tension-records/start-session', [TensionRecordController::class, 'startSession'])
+            ->name('tension-records.start-session');
+        Route::get('tension-records/session/{productionOrder}', [TensionRecordController::class, 'getSession'])
+            ->name('tension-records.session');
     });
 
     // Resolve a specific problem within a tension record
@@ -174,6 +181,58 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('api/roles/{role}', [RoleController::class, 'destroy']);
         Route::get('api/permissions', [RoleController::class, 'permissions']);
     });
+
+    // ---- CREEL VISUALIZATION ----
+    Route::middleware('permission:creel.view')->group(function () {
+        Route::get('creel-visualization', fn () => Inertia::render('creel-visualization'))
+            ->name('creel-visualization');
+        Route::get('creel-viewer/{id}', function ($id) {
+            $record = \App\Models\CreelRecord::findOrFail($id);
+
+            // Collect all finish-earlier entries for this production order
+            $feRecords = \App\Models\FinishEarlierRecord::where(
+                'metadata->production_order', $record->order_number
+            )->get();
+
+            $finishedPositions = $feRecords->flatMap(function ($fe) {
+                return collect($fe->entries ?? [])->map(fn ($e) => [
+                    'side'   => $e['creel_side']    ?? '',
+                    'column' => (int) ($e['column_number'] ?? 0),
+                    'row'    => $e['row_number']    ?? '',
+                    'meters' => (float) ($e['meters_finish'] ?? 0),
+                ]);
+            })->filter(fn ($p) => $p['side'] && $p['column'] && $p['row'])
+              ->values()->all();
+
+            return Inertia::render('creel-viewer', [
+                'record'            => $record,
+                'finishedPositions' => $finishedPositions,
+            ]);
+        })->name('creel-viewer');
+
+        // Look up the latest creel record for a given production order (used by finish-earlier table)
+        Route::get('creel-records/by-order/{orderNumber}', function ($orderNumber) {
+            $record = \App\Models\CreelRecord::where('order_number', $orderNumber)
+                ->orderBy('created_at', 'desc')->first();
+            if (!$record) {
+                return response()->json(['id' => null], 404);
+            }
+            return response()->json(['id' => $record->id]);
+        });
+
+        Route::get('creel-records', [CreelRecordController::class, 'index']);
+        Route::get('creel-records/{id}', [CreelRecordController::class, 'show']);
+    });
+    Route::post('creel-records', [CreelRecordController::class, 'store'])
+        ->middleware('permission:creel.create');
+    Route::patch('creel-records/{id}/positions', [CreelRecordController::class, 'positions'])
+        ->middleware('permission:creel.edit');
+    Route::patch('creel-records/{id}/specs', [CreelRecordController::class, 'specs'])
+        ->middleware('permission:creel.edit');
+    Route::patch('creel-records/{id}/raw', [CreelRecordController::class, 'rawUpdate'])
+        ->middleware('permission:creel.edit');
+    Route::delete('creel-records/{id}', [CreelRecordController::class, 'destroy'])
+        ->middleware('permission:creel.delete');
 
     // ---- ACTIVITY LOG ----
     Route::middleware('permission:activity-log.view')->group(function () {

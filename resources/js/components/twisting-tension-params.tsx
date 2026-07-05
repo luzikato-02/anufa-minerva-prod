@@ -1,5 +1,14 @@
-'use client';
-
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -60,15 +69,9 @@ export default function TwistingParams({
     };
 
     const clearAllData = () => {
-        if (
-            confirm(
-                'Are you sure you want to clear all saved data? This will remove all forms, measurements, and problem reports.',
-            )
-        ) {
-            clearAllAppData();
-            clearData();
-            console.log('All app data cleared from localStorage');
-        }
+        clearAllAppData();
+        clearData();
+        console.log('All app data cleared from localStorage');
     };
 
     return (
@@ -325,14 +328,31 @@ export default function TwistingParams({
                             >
                                 Clear Form
                             </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-10 bg-transparent text-xs font-medium hover:bg-destructive hover:text-destructive-foreground"
-                                onClick={clearAllData}
-                            >
-                                Clear All Data
-                            </Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-10 bg-transparent text-xs font-medium hover:bg-destructive hover:text-destructive-foreground"
+                                    >
+                                        Clear All Data
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Clear all saved data?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This will remove all forms, measurements, and problem reports. This action cannot be undone.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={clearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                            Clear All Data
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </div>
                     </div>
                 </CardContent>

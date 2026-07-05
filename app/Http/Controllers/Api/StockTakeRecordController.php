@@ -62,7 +62,7 @@ class StockTakeRecordController extends Controller
         $query->orderBy('created_at', 'desc');
 
         // Paginate results
-        $perPage = $request->get('per_page', 10);
+        $perPage = min((int) $request->get('per_page', 10), 200);
         $records = $query->paginate($perPage);
 
         return response()->json($records);

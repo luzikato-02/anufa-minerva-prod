@@ -1,4 +1,3 @@
-'use client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -44,6 +43,7 @@ import {
     CircleAlertIcon,
     DownloadIcon,
     EyeIcon,
+    LayoutGrid,
     MoreHorizontal,
     PlusIcon,
     UploadIcon,
@@ -107,7 +107,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Record Date',
         accessorFn: (row) => row.created_at,
         cell: ({ getValue }) => {
-            const date = new Date(getValue());
+            const date = new Date(getValue() as string);
             return (
                 <div>
                     {date.toLocaleString('en-ID', {
@@ -124,7 +124,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Shift Group',
         accessorFn: (row) => row.metadata?.shift_group,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -132,7 +132,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Machine Number',
         accessorFn: (row) => row.metadata?.machine_number,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -140,7 +140,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Production Order',
         accessorFn: (row) => row.metadata?.production_order,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -148,7 +148,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Material Description',
         accessorFn: (row) => row.metadata?.style,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -156,7 +156,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Roll Construction',
         accessorFn: (row) => row.metadata?.roll_construction,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -164,7 +164,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Total Finish Ealier Bobbins',
         accessorFn: (row) => row.metadata?.total_finish_earlier,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -172,7 +172,7 @@ export const columns: ColumnDef<FinishEarlierRecord>[] = [
         header: 'Average Meters Finish',
         accessorFn: (row) => row.metadata?.average_meters_finish,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -239,7 +239,7 @@ function ViewSessionDialog({ record }: { record: FinishEarlierRecord }) {
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => setOpen(true)}>
-            <EyeIcon className="h-4 w-4" />
+            <EyeIcon className="size-4" />
         </Button>
             </DialogTrigger>
             <DialogContent className="p-0 sm:max-w-[700px]">
@@ -316,6 +316,30 @@ function ViewSessionDialog({ record }: { record: FinishEarlierRecord }) {
                     <Button variant="outline" onClick={handleDownloadCSV}>
                         <DownloadIcon className="mr-2 h-4 w-4" />
                         Download CSV
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={async () => {
+                            const po = record.metadata.production_order;
+                            try {
+                                const res = await fetch(`/creel-records/by-order/${encodeURIComponent(po)}`);
+                                if (!res.ok) {
+                                    alert(`No creel record found for production order "${po}".`);
+                                    return;
+                                }
+                                const { id } = await res.json();
+                                if (!id) {
+                                    alert(`No creel record found for production order "${po}".`);
+                                    return;
+                                }
+                                window.open(`/creel-viewer/${id}`, '_blank');
+                            } catch {
+                                alert('Failed to look up creel record.');
+                            }
+                        }}
+                    >
+                        <LayoutGrid className="mr-2 h-4 w-4" />
+                        View Creel
                     </Button>
 
                     {/* <Dialog
@@ -584,12 +608,12 @@ export function FinishEarlierDataTable() {
                     </TableBody>
                 </Table>
             </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
+            <div className="flex items-center justify-end gap-2 py-4">
                 <div className="flex-1 text-sm text-muted-foreground">
                     {table.getFilteredSelectedRowModel().rows.length} of{' '}
                     {table.getFilteredRowModel().rows.length} row(s) selected.
                 </div>
-                <div className="space-x-2">
+                <div className="flex gap-2">
                     <Button
                         variant="outline"
                         size="sm"

@@ -16,6 +16,7 @@ import { exportWeavingDataToCSV } from './utils/csv-export';
 import {
     databaseService,
     prepareWeavingDataForDatabase,
+    updateWeavingSession,
     verifyPersistedRecord,
 } from './utils/databaseConnector';
 import {
@@ -67,6 +68,7 @@ interface WeavingProblem {
 }
 
 export default function WeavingNumpad({
+    sessionId,
     display,
     setDisplay,
     counter,
@@ -85,6 +87,7 @@ export default function WeavingNumpad({
     onOpenRecorder,
     onDataCleared,
 }: {
+    sessionId?: number | null;
     display: string;
     setDisplay: (value: string) => void;
     counter: number;
@@ -258,7 +261,12 @@ export default function WeavingNumpad({
         setSaveDialogOpen(true);
 
         const record = prepareWeavingDataForDatabase();
-        const result = await databaseService.saveTensionRecord(record);
+        // If a resumable session already exists on the server, finish it in
+        // place; otherwise fall back to the one-shot create (e.g. offline
+        // entry where the session couldn't be started).
+        const result = sessionId
+            ? await updateWeavingSession(sessionId, record, 'completed')
+            : await databaseService.saveTensionRecord(record);
 
         if (!result.success) {
             setSaveSteps((prev) =>

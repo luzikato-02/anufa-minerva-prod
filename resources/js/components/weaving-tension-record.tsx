@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import WeavingNumpad from "./weaving-tension-numpad"
 import WeavingProblems from "./weaving-tension-problems"
 import WeavingParams from "./weaving-tension-params"
-import { saveToLocalStorage, loadFromLocalStorage, restoreProblemsWithDates } from "./utils/localStorage"
+import WeavingSessionSelect from "./weaving-session-select"
+import { saveToLocalStorage, loadFromLocalStorage, removeFromLocalStorage, restoreProblemsWithDates } from "./utils/localStorage"
+import { getWeavingSession, prepareWeavingDataForDatabase, startWeavingSession, updateWeavingSession } from "./utils/databaseConnector"
 
 interface SpindleData {
   max: number | null
@@ -28,6 +30,7 @@ interface TensionData {
   machineNumber: string
   metersCheck: string
   itemNumber: string
+  itemDescription: string
   operator: string
   productionOrder: string
   baleNumber: string
@@ -45,7 +48,7 @@ interface NumpadState {
 }
 
 export default function WeavingTensionPage() {
-  const [currentView, setCurrentView] = useState<"numpad" | "problems" | "recorder">("recorder")
+  const [currentView, setCurrentView] = useState<"numpad" | "problems" | "recorder" | "session-select">("session-select")
   const [currentPosition, setCurrentPosition] = useState("AI-A-Col1")
 
   // Lifted all numpad state to preserve during navigation
@@ -71,6 +74,7 @@ export default function WeavingTensionPage() {
     machineNumber: "",
     metersCheck: "",
     itemNumber: "",
+    itemDescription: "",
     operator: "",
     productionOrder: "",
     baleNumber: "",
@@ -78,6 +82,14 @@ export default function WeavingTensionPage() {
     specTens: "",
     tensPlus: "",
   })
+
+  // Server-side session for the current production order, so measurement
+  // entry can be resumed later (from this device or another one).
+  const [sessionId, setSessionId] = useState<number | null>(null)
+  const [sessionProductionOrder, setSessionProductionOrder] = useState<string | null>(null)
+  const [isStartingSession, setIsStartingSession] = useState(false)
+  const isFirstRender = useRef(true)
+  const autosaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -91,6 +103,9 @@ export default function WeavingTensionPage() {
       creelSideIndex: 0,
       creelRowIndex: 0,
     })
+    const savedSessionId = loadFromLocalStorage<number | null>("weaving-session-id", null)
+    const savedSessionProductionOrder = loadFromLocalStorage<string | null>("weaving-session-po", null)
+    const savedCurrentView = loadFromLocalStorage<string>("weaving-current-view", "session-select")
 
     setFormData(savedFormData)
     setCreelData(savedCreelData)
@@ -100,6 +115,13 @@ export default function WeavingTensionPage() {
     setValueType(savedNumpadState.valueType)
     setCreelSideIndex(savedNumpadState.creelSideIndex)
     setCreelRowIndex(savedNumpadState.creelRowIndex)
+    setSessionId(savedSessionId)
+    setSessionProductionOrder(savedSessionProductionOrder)
+
+    // Restore mid-recording numpad state; otherwise always start at session-select
+    if (savedCurrentView === "numpad" && savedSessionId) {
+      setCurrentView("numpad")
+    }
   }, [])
 
   // Save form data to localStorage whenever it changes
@@ -129,6 +151,125 @@ export default function WeavingTensionPage() {
     saveToLocalStorage("weaving-numpad-state", numpadState)
   }, [display, counter, valueType, creelSideIndex, creelRowIndex])
 
+  // Persist the active session so a page refresh still knows which record to update
+  useEffect(() => {
+    saveToLocalStorage("weaving-session-id", sessionId)
+    saveToLocalStorage("weaving-session-po", sessionProductionOrder)
+  }, [sessionId, sessionProductionOrder])
+
+  // Persist current view so a mid-recording refresh restores to numpad
+  useEffect(() => {
+    saveToLocalStorage("weaving-current-view", currentView)
+  }, [currentView])
+
+  // Autosave progress to the server session after each measurement/problem change,
+  // debounced so rapid entry doesn't fire a request per keystroke.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    if (!sessionId) return
+
+    if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current)
+    autosaveTimeout.current = setTimeout(() => {
+      const record = prepareWeavingDataForDatabase()
+      updateWeavingSession(sessionId, record, "in_progress").catch((error) =>
+        console.warn("Weaving session autosave failed:", error),
+      )
+    }, 600)
+
+    return () => {
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current)
+    }
+  }, [creelData, submittedProblems, sessionId])
+
+  // Session select: navigate to params form with PO pre-filled (new session)
+  const handleSessionCreateNew = (po: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      productionOrder: po,
+    }))
+    setCurrentView("recorder")
+  }
+
+  // Session select: fetch existing session and pre-populate form, then go to params
+  const handleSessionContinue = async (po: string): Promise<boolean> => {
+    setIsStartingSession(true)
+    try {
+      const resumed = await getWeavingSession(po)
+      if (resumed.success && resumed.data) {
+        const record = resumed.data
+        setSessionId(record.id)
+        setSessionProductionOrder(po)
+        setFormData((prev) => ({ ...prev, ...record.form_data }))
+        setCreelData(
+          record.measurement_data && Object.keys(record.measurement_data).length > 0
+            ? record.measurement_data
+            : { AI: {}, BI: {}, AO: {}, BO: {} },
+        )
+        setSubmittedProblems(restoreProblemsWithDates(record.problems ?? []))
+        setCurrentView("recorder")
+        return true
+      }
+      return false
+    } catch (error) {
+      console.warn("Could not check for existing session:", error)
+      return false
+    } finally {
+      setIsStartingSession(false)
+    }
+  }
+
+  // Called when the user submits the params form to begin/resume measurement entry.
+  // Looks for an existing in-progress session for this production order on the
+  // server and hydrates from it; otherwise starts a new session.
+  const handleStartRecording = async () => {
+    const productionOrder = formData.productionOrder.trim()
+
+    if (!productionOrder) {
+      setCurrentView("numpad")
+      return
+    }
+
+    setIsStartingSession(true)
+    try {
+      const resumed = await getWeavingSession(productionOrder)
+
+      if (resumed.success && resumed.data) {
+        const record = resumed.data
+        setSessionId(record.id)
+        setSessionProductionOrder(productionOrder)
+        setFormData((prev) => ({ ...prev, ...record.form_data }))
+        setCreelData(
+          record.measurement_data && Object.keys(record.measurement_data).length > 0
+            ? record.measurement_data
+            : { AI: {}, BI: {}, AO: {}, BO: {} },
+        )
+        setSubmittedProblems(restoreProblemsWithDates(record.problems ?? []))
+      } else {
+        // No resumable session for this production order. If the locally
+        // cached grid belongs to a different production order, drop it so
+        // it doesn't leak into the new session.
+        if (sessionProductionOrder && sessionProductionOrder !== productionOrder) {
+          setCreelData({ AI: {}, BI: {}, AO: {}, BO: {} })
+          setSubmittedProblems([])
+        }
+
+        const started = await startWeavingSession(formData)
+        setSessionId(started.success ? started.data?.id ?? null : null)
+        setSessionProductionOrder(started.success ? productionOrder : null)
+      }
+    } catch (error) {
+      console.warn("Could not reach server to start/resume weaving session; continuing offline", error)
+      setSessionId(null)
+      setSessionProductionOrder(null)
+    } finally {
+      setIsStartingSession(false)
+      setCurrentView("numpad")
+    }
+  }
+
   // Handle data clearing after finish
   const handleDataCleared = () => {
     // Reset all state to initial values
@@ -136,6 +277,7 @@ export default function WeavingTensionPage() {
       machineNumber: "",
       metersCheck: "",
       itemNumber: "",
+      itemDescription: "",
       operator: "",
       productionOrder: "",
       baleNumber: "",
@@ -155,11 +297,13 @@ export default function WeavingTensionPage() {
     setValueType("Max")
     setCreelSideIndex(0)
     setCreelRowIndex(0)
+    setSessionId(null)
+    setSessionProductionOrder(null)
+    removeFromLocalStorage("weaving-session-id")
+    removeFromLocalStorage("weaving-session-po")
 
-    // Force navigate back to params form for fresh start
-    setCurrentView("recorder")
-
-    console.log("All weaving data cleared and reset to initial state - returned to params form")
+    setCurrentView("session-select")
+    console.log("All weaving data cleared and reset to initial state - returned to session select")
   }
 
   if (currentView === "problems") {
@@ -173,14 +317,31 @@ export default function WeavingTensionPage() {
     )
   }
 
+  if (currentView === "session-select") {
+    return (
+      <WeavingSessionSelect
+        initialPo={sessionProductionOrder ?? ""}
+        isChecking={isStartingSession}
+        onCreateNew={handleSessionCreateNew}
+        onContinue={handleSessionContinue}
+      />
+    )
+  }
+
   if (currentView === "recorder") {
     return (
-      <WeavingParams formData={formData} setFormData={setFormData} onStartRecording={() => setCurrentView("numpad")} />
+      <WeavingParams
+        formData={formData}
+        setFormData={setFormData}
+        onStartRecording={handleStartRecording}
+        isStarting={isStartingSession}
+      />
     )
   }
 
   return (
     <WeavingNumpad
+      sessionId={sessionId}
       display={display}
       setDisplay={setDisplay}
       counter={counter}

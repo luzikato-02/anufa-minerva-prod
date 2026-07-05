@@ -16,7 +16,7 @@ class FinishEarlierRecordController extends Controller
     public function index(Request $request)
     {
         // Default: 10 rows per page, but frontend can override using ?per_page=
-        $perPage = $request->get('per_page', 10);
+        $perPage = min((int) $request->get('per_page', 10), 200);
 
         $records = FinishEarlierRecord::orderBy('created_at', 'desc')
         ->paginate($perPage);

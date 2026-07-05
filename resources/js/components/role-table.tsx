@@ -59,6 +59,7 @@ const PERMISSION_GROUPS: { label: string; prefix: string }[] = [
     { label: 'Tension Records', prefix: 'tension-records' },
     { label: 'Stock Take', prefix: 'stock-take' },
     { label: 'Finish Earlier', prefix: 'finish-earlier' },
+    { label: 'Creel Visualization', prefix: 'creel' },
     { label: 'Users', prefix: 'users' },
     { label: 'Roles', prefix: 'roles' },
     { label: 'Activity Log', prefix: 'activity-log' },

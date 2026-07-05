@@ -1,5 +1,3 @@
-'use client';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -130,7 +128,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Record Date',
         accessorFn: (row) => row.created_at,
         cell: ({ getValue }) => {
-            const date = new Date(getValue());
+            const date = new Date(getValue() as string);
             return (
                 <div>
                     {date.toLocaleString('en-ID', {
@@ -147,7 +145,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Item Number',
         accessorFn: (row) => row.metadata?.item_number,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -155,7 +153,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Yarn Mat. Code',
         accessorFn: (row) => row.metadata?.yarn_code,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -163,7 +161,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Operator',
         accessorFn: (row) => row.metadata?.operator,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -171,7 +169,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Machine Number',
         accessorFn: (row) => row.form_data?.machineNumber,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
 
@@ -180,7 +178,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Density (Dtex)',
         accessorFn: (row) => row.form_data?.dtexNumber,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -188,7 +186,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Table Twist (TPM)',
         accessorFn: (row) => row.form_data?.tpm,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -196,7 +194,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Cycle Speed (RPM)',
         accessorFn: (row) => row.form_data?.rpm,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -204,7 +202,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Spec. Tension (cN)',
         accessorFn: (row) => row.form_data?.specTens,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -212,7 +210,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Tens. Deviation (cN)',
         accessorFn: (row) => row.form_data?.tensPlus,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
@@ -220,7 +218,7 @@ export const columns: ColumnDef<TensionRecord>[] = [
         header: 'Meters Check (m)',
         accessorFn: (row) => row.form_data?.metersCheck,
         cell: ({ getValue }) => (
-            <div className="capitalize">{getValue() ?? 'N/A'}</div>
+            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
         ),
     },
     {
