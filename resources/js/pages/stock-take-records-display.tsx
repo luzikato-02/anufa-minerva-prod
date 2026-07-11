@@ -22,6 +22,12 @@ export default function StockTakeRecordsDisplay() {
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+                        <div className="flex items-center justify-between px-4">
+                            <div>
+                                <h1 className="text-xl font-semibold">Stock Take Records</h1>
+                                <p className="text-sm text-muted-foreground">Inventory scan and batch verification records</p>
+                            </div>
+                        </div>
                         <StockTakeStatsCards />
 
                         <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">

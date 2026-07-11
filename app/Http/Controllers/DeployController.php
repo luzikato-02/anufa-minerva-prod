@@ -36,8 +36,11 @@ class DeployController extends Controller
 
         $output['admin_user'] = $this->ensureAdminUser();
 
-        Artisan::call('storage:link');
+        Artisan::call('storage:link', ['--relative' => true]);
         $output['storage_link'] = Artisan::output();
+
+        Artisan::call('optimize:clear');
+        $output['optimize_clear'] = Artisan::output();
 
         Artisan::call('optimize');
         $output['optimize'] = Artisan::output();

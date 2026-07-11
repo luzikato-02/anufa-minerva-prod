@@ -67,6 +67,12 @@ protected function credentials(): array
 
     RateLimiter::clear($this->throttleKey());
 
+    if ($user->status === 'inactive') {
+        throw ValidationException::withMessages([
+            'login' => 'User authorization revoked. Contact your Minerva system administrator to manage your access',
+        ]);
+    }
+
     return $user;
 }
     /**

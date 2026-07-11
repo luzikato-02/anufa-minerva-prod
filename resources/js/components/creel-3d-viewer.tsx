@@ -1,7 +1,7 @@
 import { GizmoHelper, GizmoViewcube, GizmoViewport, OrbitControls, Text } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Loader2 } from 'lucide-react';
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -100,6 +100,55 @@ const BASE_FLG_ZOFF: Record<SideName, number> = {
 
 const TOTAL_POSITIONS = COLS * ROWS.length * SIDES.length; // 2000
 
+// Shared geometry instances — created once at module load, never disposed (viewer is persistent).
+// ponytail: shared across all InstancedMesh instances to avoid N identical GPU uploads (one per batch before).
+const BOBBIN_GEO   = new THREE.CylinderGeometry(BOB_R,        BOB_R,        BOB_H,        12);
+const FLANGE_GEO   = new THREE.CylinderGeometry(FLG_R,        FLG_R,        FLG_H,        12);
+const PEG_GEO      = new THREE.CylinderGeometry(PEG_R,        PEG_R,        PEG_H,         6);
+const FIN_RING_GEO = new THREE.TorusGeometry(BOB_R + 0.06, 0.07, 8, 16);
+const OVERLAP_GEO  = new THREE.TorusGeometry(BOB_R + 0.14, 0.04, 8, 16);
+const SELECTED_GEO = new THREE.CylinderGeometry(BOB_R * 1.04, BOB_R * 1.04, BOB_H * 1.06, 12);
+
+// Rack frame geometry — 36 individual meshes collapsed into 3 InstancedMeshes (posts/rails/beams).
+const RACK_H       = ROW_Y['A'] + ROW_PITCH;
+const RACK_HC      = RACK_H / 2 - ROW_PITCH * 0.5;
+const RAIL_W       = COLS * COL_PITCH + COL_PITCH;
+const RAIL_CX      = COLS * COL_PITCH * 0.5 + COL_PITCH * 0.5;
+const BEAM_Y       = RACK_HC + RACK_H / 2 + 0.2;
+const RACK_POST_XS = [1, 11, 21, 31, 41, 51, 61, 71, 81, 91, 100].map(c => c * COL_PITCH);
+const RACK_RAIL_YS = [
+    ROW_Y['A'] + ROW_PITCH * 0.55,
+    (ROW_Y['A'] + ROW_Y['B']) / 2,
+    (ROW_Y['B'] + ROW_Y['C']) / 2,
+    (ROW_Y['C'] + ROW_Y['D']) / 2,
+    (ROW_Y['D'] + ROW_Y['E']) / 2,
+    -ROW_PITCH * 0.55,
+];
+const RACK_ZS          = [RACK_A_Z, RACK_B_Z];
+const RACK_POST_GEO    = new THREE.BoxGeometry(0.12, RACK_H + 0.3, 0.12);
+const RACK_RAIL_GEO    = new THREE.BoxGeometry(RAIL_W, 0.09, 0.09);
+const RACK_BEAM_GEO    = new THREE.BoxGeometry(RAIL_W, 0.18, 0.18);
+const RACK_POST_COUNT  = RACK_POST_XS.length * RACK_ZS.length;  // 22
+const RACK_RAIL_COUNT  = RACK_RAIL_YS.length * RACK_ZS.length;  // 12
+const RACK_BEAM_COUNT  = RACK_ZS.length;                         // 2
+
+// Pre-baked instance matrices for the rack frame — static forever, computed once.
+const _rackDummy = new THREE.Object3D();
+const RACK_POST_MATRICES = RACK_ZS.flatMap(z =>
+    RACK_POST_XS.map(x => { _rackDummy.position.set(x, RACK_HC, z); _rackDummy.updateMatrix(); return _rackDummy.matrix.clone(); })
+);
+const RACK_RAIL_MATRICES = RACK_ZS.flatMap(z =>
+    RACK_RAIL_YS.map(y => { _rackDummy.position.set(RAIL_CX, y, z); _rackDummy.updateMatrix(); return _rackDummy.matrix.clone(); })
+);
+const RACK_BEAM_MATRICES = RACK_ZS.map(z =>
+    (_rackDummy.position.set(RAIL_CX, BEAM_Y, z), _rackDummy.updateMatrix(), _rackDummy.matrix.clone())
+);
+
+// Reusable scratch objects — avoids per-event/per-effect heap allocation.
+const _dummy = new THREE.Object3D();
+const _mat   = new THREE.Matrix4();
+const _vec   = new THREE.Vector3();
+
 // ── palette ───────────────────────────────────────────────────────────────────
 
 export const PALETTE_HEX = [
@@ -147,11 +196,11 @@ function AllBobbinFixtures({ visibleSides }: { visibleSides: SideName[] }) {
         [visibleSides],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!pegRef.current || !flgRef.current) return;
         pegRef.current.count = positions.length;
         flgRef.current.count = positions.length;
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         positions.forEach(({ side, col, row }, i) => {
             placeBobbinMatrix(dummy, col, row, side);
             pegRef.current.setMatrixAt(i, dummy.matrix);
@@ -162,15 +211,12 @@ function AllBobbinFixtures({ visibleSides }: { visibleSides: SideName[] }) {
         flgRef.current.instanceMatrix.needsUpdate = true;
     }, [positions]);
 
-    const flangeGeo = useMemo(() => new THREE.CylinderGeometry(FLG_R, FLG_R, FLG_H, 20), []);
-    const pegGeo    = useMemo(() => new THREE.CylinderGeometry(PEG_R, PEG_R, PEG_H, 8),  []);
-
     return (
         <>
-            <instancedMesh ref={pegRef} args={[pegGeo, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
+            <instancedMesh ref={pegRef} args={[PEG_GEO, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
                 <meshStandardMaterial color={PEG_COLOR} metalness={0.8} roughness={0.3} />
             </instancedMesh>
-            <instancedMesh ref={flgRef} args={[flangeGeo, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
+            <instancedMesh ref={flgRef} args={[FLANGE_GEO, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
                 <meshStandardMaterial color={FLANGE_COLOR} metalness={0.2} roughness={0.5} />
             </instancedMesh>
         </>
@@ -186,7 +232,6 @@ function EmptyBobbins({ occupiedKeys, visibleSides, onAssignHover, onEmptyHover 
     onEmptyHover?: (info: ClickInfo | null) => void;
 }) {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
-    const geo     = useMemo(() => new THREE.CylinderGeometry(BOB_R, BOB_R, BOB_H, 20), []);
     const { camera, gl } = useThree();
 
     const empties = useMemo(
@@ -198,16 +243,25 @@ function EmptyBobbins({ occupiedKeys, visibleSides, onAssignHover, onEmptyHover 
         [occupiedKeys, visibleSides],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!meshRef.current) return;
         meshRef.current.count = empties.length;
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         empties.forEach(({ side, col, row }, i) => {
             placeBobbinMatrix(dummy, col, row, side);
             meshRef.current.setMatrixAt(i, dummy.matrix);
         });
         meshRef.current.instanceMatrix.needsUpdate = true;
     }, [empties]);
+
+    const rectRef = useRef<DOMRect | null>(null);
+    useLayoutEffect(() => {
+        const el = gl.domElement;
+        const reset = () => { rectRef.current = null; };
+        el.addEventListener('pointerenter', reset);
+        window.addEventListener('resize', reset);
+        return () => { el.removeEventListener('pointerenter', reset); window.removeEventListener('resize', reset); };
+    }, [gl.domElement]);
 
     const handlePointerMove = useCallback(
         (e: { stopPropagation?: () => void; instanceId?: number }) => {
@@ -220,15 +274,15 @@ function EmptyBobbins({ occupiedKeys, visibleSides, onAssignHover, onEmptyHover 
                 return;
             }
             const { side, col, row } = empties[id];
-            const mat = new THREE.Matrix4();
-            meshRef.current.getMatrixAt(id, mat);
-            const wp   = new THREE.Vector3().setFromMatrixPosition(mat).project(camera);
-            const rect = gl.domElement.getBoundingClientRect();
+            meshRef.current.getMatrixAt(id, _mat);
+            _vec.setFromMatrixPosition(_mat).project(camera);
+            if (!rectRef.current) rectRef.current = gl.domElement.getBoundingClientRect();
+            const rect = rectRef.current;
             const info: ClickInfo = {
                 pos: { side, column: col, row },
                 currentBatch: null,
-                screenX: ((wp.x + 1) / 2) * rect.width  + rect.left,
-                screenY: ((-wp.y + 1) / 2) * rect.height + rect.top,
+                screenX: ((_vec.x + 1) / 2) * rect.width  + rect.left,
+                screenY: ((-_vec.y + 1) / 2) * rect.height + rect.top,
             };
             onAssignHover?.(info);
             onEmptyHover?.(info);
@@ -244,7 +298,7 @@ function EmptyBobbins({ occupiedKeys, visibleSides, onAssignHover, onEmptyHover 
     return (
         <instancedMesh
             ref={meshRef}
-            args={[geo, undefined, TOTAL_POSITIONS]}
+            args={[BOBBIN_GEO, undefined, TOTAL_POSITIONS]}
             frustumCulled={false}
             onPointerMove={(onAssignHover || onEmptyHover) ? handlePointerMove : undefined}
             onPointerLeave={(onAssignHover || onEmptyHover) ? handlePointerLeave : undefined}
@@ -262,7 +316,6 @@ function FinishedEarlierRings({ finishedPositions }: { finishedPositions: Finish
 
     // TorusGeometry: ring radius = BOB_R + 0.06 (just outside bobbin body),
     // tube radius = 0.07, giving a clearly visible amber band around each bobbin.
-    const geo = useMemo(() => new THREE.TorusGeometry(BOB_R + 0.06, 0.07, 8, 24), []);
 
     const validPositions = useMemo(
         () => finishedPositions.filter(
@@ -271,9 +324,9 @@ function FinishedEarlierRings({ finishedPositions }: { finishedPositions: Finish
         [finishedPositions],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!meshRef.current || validPositions.length === 0) return;
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         validPositions.forEach((p, i) => {
             // TorusGeometry lies in the XY plane by default; we need it in the XZ plane
             // (around the bobbin cylinder axis), so rotate 90° around X just like the bobbin.
@@ -288,7 +341,7 @@ function FinishedEarlierRings({ finishedPositions }: { finishedPositions: Finish
     if (validPositions.length === 0) return null;
 
     return (
-        <instancedMesh ref={meshRef} args={[geo, undefined, validPositions.length]} frustumCulled={false}>
+        <instancedMesh ref={meshRef} args={[FIN_RING_GEO, undefined, validPositions.length]} frustumCulled={false}>
             <meshStandardMaterial color={FINISHED_RING_HEX} emissive={FINISHED_RING_HEX} emissiveIntensity={0.4} roughness={0.3} metalness={0.1} />
         </instancedMesh>
     );
@@ -299,16 +352,15 @@ function FinishedEarlierRings({ finishedPositions }: { finishedPositions: Finish
 function OverlapMarkers({ overlapKeys }: { overlapKeys: Set<string> }) {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
     // Slightly larger ring than FinishedEarlierRings, thinner tube — sits outside both
-    const geo = useMemo(() => new THREE.TorusGeometry(BOB_R + 0.14, 0.04, 8, 24), []);
 
     const positions = useMemo(
         () => ALL_POSITIONS.filter(({ side, col, row }) => overlapKeys.has(`${side}:${col}:${row}`)),
         [overlapKeys],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!meshRef.current || positions.length === 0) return;
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         positions.forEach((p, i) => {
             dummy.position.set(colX(p.col), ROW_Y[p.row], SIDE_Z[p.side]);
             dummy.rotation.set(Math.PI / 2, 0, 0);
@@ -321,7 +373,7 @@ function OverlapMarkers({ overlapKeys }: { overlapKeys: Set<string> }) {
     if (positions.length === 0) return null;
 
     return (
-        <instancedMesh ref={meshRef} args={[geo, undefined, positions.length]} frustumCulled={false}>
+        <instancedMesh ref={meshRef} args={[OVERLAP_GEO, undefined, positions.length]} frustumCulled={false}>
             <meshStandardMaterial
                 color={OVERLAP_RING_HEX}
                 emissive={OVERLAP_RING_HEX}
@@ -340,7 +392,6 @@ function SelectedBobbins({ selectedPositions, visibleSides }: {
     visibleSides: SideName[];
 }) {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
-    const geo = useMemo(() => new THREE.CylinderGeometry(BOB_R * 1.04, BOB_R * 1.04, BOB_H * 1.06, 20), []);
 
     const positions = useMemo(
         () => ALL_POSITIONS.filter(
@@ -351,11 +402,11 @@ function SelectedBobbins({ selectedPositions, visibleSides }: {
         [selectedPositions, visibleSides],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!meshRef.current) return;
         meshRef.current.count = positions.length;
         if (positions.length === 0) return;
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         positions.forEach(({ side, col, row }, i) => {
             placeBobbinMatrix(dummy, col, row, side);
             meshRef.current.setMatrixAt(i, dummy.matrix);
@@ -366,7 +417,7 @@ function SelectedBobbins({ selectedPositions, visibleSides }: {
     if (selectedPositions.size === 0) return null;
 
     return (
-        <instancedMesh ref={meshRef} args={[geo, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
+        <instancedMesh ref={meshRef} args={[SELECTED_GEO, undefined, TOTAL_POSITIONS]} frustumCulled={false}>
             <meshStandardMaterial
                 color={SELECT_GLOW_HEX}
                 emissive={SELECT_GLOW_HEX}
@@ -398,7 +449,13 @@ interface BatchBobbinsProps {
 
 function BatchBobbins({ batch, displayPositions, colorHex, finishedKeys, isSelected, hasSelection, visibleSides, onHover, onAssignHover, camera, domElement }: BatchBobbinsProps) {
     const meshRef  = useRef<THREE.InstancedMesh>(null!);
-    const geo      = useMemo(() => new THREE.CylinderGeometry(BOB_R, BOB_R, BOB_H, 20), []);
+    const rectRef  = useRef<DOMRect | null>(null);
+    useLayoutEffect(() => {
+        const reset = () => { rectRef.current = null; };
+        domElement.addEventListener('pointerenter', reset);
+        window.addEventListener('resize', reset);
+        return () => { domElement.removeEventListener('pointerenter', reset); window.removeEventListener('resize', reset); };
+    }, [domElement]);
 
     const rawPositions = isSelected ? batch.positions : displayPositions;
     const positions    = rawPositions.filter(p => visibleSides.includes(p.side));
@@ -409,11 +466,11 @@ function BatchBobbins({ batch, displayPositions, colorHex, finishedKeys, isSelec
     const emissiveColor  = isSelected ? colorHex : '#000000';
     const emissiveIntens = isSelected ? 0.4 : 0;
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!meshRef.current) return;
         meshRef.current.count = count; // visible instance count (may be < maxCount)
         if (count === 0) { meshRef.current.instanceMatrix.needsUpdate = true; return; }
-        const dummy = new THREE.Object3D();
+        const dummy = _dummy;
         positions.forEach((pos, i) => {
             placeBobbinMatrix(dummy, pos.column, pos.row, pos.side);
             meshRef.current.setMatrixAt(i, dummy.matrix);
@@ -427,12 +484,12 @@ function BatchBobbins({ batch, displayPositions, colorHex, finishedKeys, isSelec
             const id = e.instanceId;
             if (id === undefined || id >= count) return;
             const pos = positions[id];
-            const mat = new THREE.Matrix4();
-            meshRef.current.getMatrixAt(id, mat);
-            const wp = new THREE.Vector3().setFromMatrixPosition(mat).project(camera);
-            const rect = domElement.getBoundingClientRect();
-            const sx = ((wp.x + 1) / 2) * rect.width  + rect.left;
-            const sy = ((-wp.y + 1) / 2) * rect.height + rect.top;
+            meshRef.current.getMatrixAt(id, _mat);
+            _vec.setFromMatrixPosition(_mat).project(camera);
+            if (!rectRef.current) rectRef.current = domElement.getBoundingClientRect();
+            const rect = rectRef.current;
+            const sx = ((_vec.x + 1) / 2) * rect.width  + rect.left;
+            const sy = ((-_vec.y + 1) / 2) * rect.height + rect.top;
             const key = `${pos.side}:${pos.column}:${pos.row}`;
             onHover({
                 batch: batch.batch, net_weight: batch.net_weight,
@@ -454,7 +511,7 @@ function BatchBobbins({ batch, displayPositions, colorHex, finishedKeys, isSelec
     return (
         <instancedMesh
             ref={meshRef}
-            args={[geo, undefined, Math.max(1, maxCount)]}
+            args={[BOBBIN_GEO, undefined, Math.max(1, maxCount)]}
             frustumCulled={false}
             onPointerMove={handlePointerMove}
             onPointerLeave={() => { onHover(null); onAssignHover?.(null); }}
@@ -473,49 +530,34 @@ function BatchBobbins({ batch, displayPositions, colorHex, finishedKeys, isSelec
     );
 }
 
-// ── CreelRackFrame — open green metal scaffold (posts + rails) ────────────────
+// ── RackFrames — both racks as 3 InstancedMeshes (was 36 individual meshes) ───
 
-function CreelRackFrame({ frameZ }: { frameZ: number }) {
-    const postColor = '#2d5a27';   // industrial green
-    const railColor = '#3a7a33';
+function RackFrames() {
+    const postRef = useRef<THREE.InstancedMesh>(null!);
+    const railRef = useRef<THREE.InstancedMesh>(null!);
+    const beamRef = useRef<THREE.InstancedMesh>(null!);
 
-    // 11 vertical posts along the 100 columns
-    const postXs = [1, 11, 21, 31, 41, 51, 61, 71, 81, 91, 100].map(c => c * COL_PITCH);
-    const rackH  = ROW_Y['A'] + ROW_PITCH;
-    const rackHC = rackH / 2 - ROW_PITCH * 0.5;
-
-    // 6 horizontal rails: above A, between each pair, below E
-    const railYs = [
-        ROW_Y['A'] + ROW_PITCH * 0.55,
-        (ROW_Y['A'] + ROW_Y['B']) / 2,
-        (ROW_Y['B'] + ROW_Y['C']) / 2,
-        (ROW_Y['C'] + ROW_Y['D']) / 2,
-        (ROW_Y['D'] + ROW_Y['E']) / 2,
-        -ROW_PITCH * 0.55,
-    ];
+    useLayoutEffect(() => {
+        RACK_POST_MATRICES.forEach((m, i) => postRef.current.setMatrixAt(i, m));
+        RACK_RAIL_MATRICES.forEach((m, i) => railRef.current.setMatrixAt(i, m));
+        RACK_BEAM_MATRICES.forEach((m, i) => beamRef.current.setMatrixAt(i, m));
+        postRef.current.instanceMatrix.needsUpdate = true;
+        railRef.current.instanceMatrix.needsUpdate = true;
+        beamRef.current.instanceMatrix.needsUpdate = true;
+    }, []);
 
     return (
-        <group>
-            {/* Vertical posts */}
-            {postXs.map((x) => (
-                <mesh key={x} position={[x, rackHC, frameZ]}>
-                    <boxGeometry args={[0.12, rackH + 0.3, 0.12]} />
-                    <meshStandardMaterial color={postColor} metalness={0.4} roughness={0.6} />
-                </mesh>
-            ))}
-            {/* Horizontal rails */}
-            {railYs.map((y, ri) => (
-                <mesh key={ri} position={[COLS * COL_PITCH * 0.5 + COL_PITCH * 0.5, y, frameZ]}>
-                    <boxGeometry args={[COLS * COL_PITCH + COL_PITCH, 0.09, 0.09]} />
-                    <meshStandardMaterial color={railColor} metalness={0.3} roughness={0.7} />
-                </mesh>
-            ))}
-            {/* Top beam */}
-            <mesh position={[COLS * COL_PITCH * 0.5 + COL_PITCH * 0.5, rackHC + rackH / 2 + 0.2, frameZ]}>
-                <boxGeometry args={[COLS * COL_PITCH + COL_PITCH, 0.18, 0.18]} />
-                <meshStandardMaterial color={postColor} metalness={0.4} roughness={0.5} />
-            </mesh>
-        </group>
+        <>
+            <instancedMesh ref={postRef} args={[RACK_POST_GEO, undefined, RACK_POST_COUNT]} frustumCulled={false}>
+                <meshStandardMaterial color="#2d5a27" metalness={0.4} roughness={0.6} />
+            </instancedMesh>
+            <instancedMesh ref={railRef} args={[RACK_RAIL_GEO, undefined, RACK_RAIL_COUNT]} frustumCulled={false}>
+                <meshStandardMaterial color="#3a7a33" metalness={0.3} roughness={0.7} />
+            </instancedMesh>
+            <instancedMesh ref={beamRef} args={[RACK_BEAM_GEO, undefined, RACK_BEAM_COUNT]} frustumCulled={false}>
+                <meshStandardMaterial color="#2d5a27" metalness={0.4} roughness={0.5} />
+            </instancedMesh>
+        </>
     );
 }
 
@@ -555,8 +597,8 @@ function SceneLabels() {
                 ),
             )}
 
-            {/* Column markers — above the rack, facing camera, every 10 columns */}
-            {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((c) => (
+            {/* Column markers — every 25 columns */}
+            {[25, 50, 75, 100].map((c) => (
                 <Text key={c} position={[colX(c), labelY, SIDE_Z['AI']]} fontSize={0.5} color={lc.dim} anchorX="center" anchorY="bottom">
                     {c}
                 </Text>
@@ -575,6 +617,18 @@ function SceneLabels() {
             </Text>
         </>
     );
+}
+
+// ── SceneInvalidator — schedules a Three.js frame after every React re-render ─
+// Required for frameloop="demand": React re-renders (prop changes) don't automatically
+// trigger a new WebGL frame; this bridge closes that gap.
+function SceneInvalidator() {
+    const { invalidate } = useThree();
+    // ponytail: useLayoutEffect (not useEffect) so invalidate() is called synchronously before
+    // the browser yields — the RAF it schedules can only fire after all sibling useLayoutEffects
+    // (matrix setters) complete, guaranteeing the first frame sees correct geometry.
+    useLayoutEffect(() => { invalidate(); });
+    return null;
 }
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
@@ -629,22 +683,18 @@ function CreelScene({ batches, finishedPositions, onHover, camera, domElement, s
         return s;
     }, [batches]);
 
+    const { invalidate } = useThree();
+
     // Camera target: middle of the creel lengthwise, vertically centred
     const cx = (COLS * COL_PITCH) / 2;
     const cy = ROW_Y['C']; // middle row
 
     return (
         <>
-            {/* Lighting — simulates the industrial overhead lights in the photo */}
-            <ambientLight intensity={0.55} />
-            {/* Main overhead key light */}
+            <SceneInvalidator />
+            <ambientLight intensity={0.65} />
             <directionalLight position={[cx, 30, 0]}  intensity={1.0} />
-            {/* Fill from front (aisle end) */}
-            <directionalLight position={[cx, 10, 40]} intensity={0.7} />
-            {/* Fill from back */}
-            <directionalLight position={[cx, 10, -40]} intensity={0.4} />
-            {/* Slight side fill */}
-            <directionalLight position={[-20, 15, 0]} intensity={0.3} />
+            <directionalLight position={[cx, 10, 40]} intensity={0.6} />
 
             <OrbitControls
                 makeDefault
@@ -653,11 +703,10 @@ function CreelScene({ batches, finishedPositions, onHover, camera, domElement, s
                 dampingFactor={0.07}
                 minDistance={0.5}
                 maxDistance={300}
+                onChange={() => invalidate()}
             />
 
-            {/* Green metal rack frames */}
-            <CreelRackFrame frameZ={RACK_A_Z} />
-            <CreelRackFrame frameZ={RACK_B_Z} />
+            <RackFrames />
 
             {/* Pegs + flanges (filtered by visibleSides) */}
             <AllBobbinFixtures visibleSides={visibleSides} />
@@ -856,8 +905,9 @@ const SceneWrapper = memo(function SceneWrapper({ batches, finishedPositions, on
 
     return (
         <Canvas
+            frameloop="demand"
             camera={{ position: [cx, 22, 80], fov: 52, near: 0.01, far: 2000 }}
-            gl={{ antialias: true, alpha: true }}
+            gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
             style={{ background: '#475569' }}
             onCreated={({ camera, gl }) => {
                 cameraRef.current  = camera;

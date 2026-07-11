@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Permission;
@@ -111,6 +112,33 @@ class UserController extends Controller
             ->event('role_assignment')
             ->withProperties(['old_roles' => $oldRoles, 'new_roles' => $newRoles])
             ->log("Roles updated for user '{$user->name}'");
+
+        return $user->load('roles:id,name');
+    }
+
+    public function updateStatus(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(['active', 'inactive'])],
+        ]);
+
+        if ($user->id === $request->user()->id) {
+            return response()->json(['message' => 'You cannot change your own status.'], 422);
+        }
+
+        $user->status = $validated['status'];
+        $user->save();
+
+        if ($validated['status'] === 'inactive') {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        activity()
+            ->causedBy($request->user())
+            ->performedOn($user)
+            ->event('status_change')
+            ->withProperties(['status' => $validated['status']])
+            ->log("User '{$user->name}' marked {$validated['status']}");
 
         return $user->load('roles:id,name');
     }

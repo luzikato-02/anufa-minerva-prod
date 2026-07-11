@@ -19,7 +19,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function WeavingTensionMain() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Dashboard" />
+            <Head title="Weaving Tension Record" />
             <WeavingTensionPage></WeavingTensionPage>
         </AppLayout>
     );

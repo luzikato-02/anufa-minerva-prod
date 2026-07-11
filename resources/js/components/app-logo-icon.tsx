@@ -1,13 +1,21 @@
-import { SVGAttributes } from 'react';
+import { CSSProperties, SVGAttributes } from 'react';
 
-export default function AppLogoIcon(props: SVGAttributes<SVGElement>) {
+interface Props extends SVGAttributes<SVGElement> {
+    // ponytail: cutouts must match whatever surface the icon sits on; defaults to sidebar-primary (the AppLogo box)
+    cutoutColor?: string;
+}
+
+export default function AppLogoIcon({ cutoutColor = 'var(--color-sidebar-primary)', ...props }: Props) {
+    const cutout: CSSProperties = { fill: cutoutColor };
     return (
-        <svg {...props} viewBox="0 0 40 42" xmlns="http://www.w3.org/2000/svg">
-            <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M17.2 5.63325L8.6 0.855469L0 5.63325V32.1434L16.2 41.1434L32.4 32.1434V23.699L40 19.4767V9.85547L31.4 5.07769L22.8 9.85547V18.2999L17.2 21.411V5.63325ZM38 18.2999L32.4 21.411V15.2545L38 12.1434V18.2999ZM36.9409 10.4439L31.4 13.5221L25.8591 10.4439L31.4 7.36561L36.9409 10.4439ZM24.8 18.2999V12.1434L30.4 15.2545V21.411L24.8 18.2999ZM23.8 20.0323L29.3409 23.1105L16.2 30.411L10.6591 27.3328L23.8 20.0323ZM7.6 27.9212L15.2 32.1434V38.2999L2 30.9666V7.92116L7.6 11.0323V27.9212ZM8.6 9.29991L3.05913 6.22165L8.6 3.14339L14.1409 6.22165L8.6 9.29991ZM30.4 24.8101L17.2 32.1434V38.2999L30.4 30.9666V24.8101ZM9.6 11.0323L15.2 7.92117V22.5221L9.6 25.6333V11.0323Z"
+        <svg {...props} viewBox="128 112 256 306" xmlns="http://www.w3.org/2000/svg">
+            <polygon
+                fill="currentColor"
+                points="179.2,119.5 136.5,221.9 256.0,409.6 375.5,221.9 332.8,119.5 290.1,208.2 256.0,187.7 221.9,208.2"
             />
+            <polygon style={cutout} points="204.8,235.6 230.4,262.8 204.8,290.1 179.2,262.8" />
+            <polygon style={cutout} points="307.2,235.6 332.8,262.8 307.2,290.1 281.6,262.8" />
+            <polygon style={cutout} points="239.0,300.4 273.1,300.4 256.0,338.0" />
         </svg>
     );
 }

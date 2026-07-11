@@ -48,7 +48,7 @@ import {
     getCoreRowModel,
     useReactTable,
 } from '@tanstack/react-table';
-import { MoreHorizontal, PencilIcon, PlusIcon, ShieldIcon, Trash2Icon } from 'lucide-react';
+import { MoreHorizontal, PencilIcon, PlusIcon, PowerIcon, ShieldIcon, Trash2Icon } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
@@ -63,6 +63,7 @@ export interface UserData {
     name: string;
     username: string;
     email: string;
+    status: 'active' | 'inactive';
     roles: RoleRef[];
     created_at?: string;
 }
@@ -463,6 +464,71 @@ function ManageRolesDialog({
     );
 }
 
+function ToggleStatusAlert({ user, onChanged, onCloseMenu }: { user: UserData; onChanged: () => void; onCloseMenu?: () => void }) {
+    const [open, setOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const nextStatus = user.status === 'active' ? 'inactive' : 'active';
+
+    const wasOpenRef = useRef(false);
+    useEffect(() => {
+        if (wasOpenRef.current && !open) {
+            onCloseMenu?.();
+        }
+        wasOpenRef.current = open;
+    }, [open, onCloseMenu]);
+
+    const handleConfirm = async () => {
+        setSaving(true);
+        try {
+            const csrfToken = await getCsrfToken();
+            const baseUrl = window.location.origin;
+            await fetch(`${baseUrl}/api/users/${user.id}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': csrfToken,
+                },
+                credentials: 'include',
+                body: JSON.stringify({ status: nextStatus }),
+            });
+            setOpen(false);
+            onChanged();
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <PowerIcon />
+                    {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                        {user.status === 'active' ? 'Deactivate' : 'Activate'} user "{user.name}"?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {user.status === 'active'
+                            ? 'This will immediately log the user out and block them from logging in again until reactivated.'
+                            : 'This will restore the user\'s ability to log in.'}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirm} disabled={saving}>
+                        {saving ? 'Saving...' : 'Confirm'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
 function DeleteUserAlert({ user, onDeleted, onCloseMenu }: { user: UserData; onDeleted: () => void; onCloseMenu?: () => void }) {
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -551,6 +617,7 @@ function UserActionsCell({ user, meta }: { user: UserData; meta: UserTableMeta }
                 {!isSelf && (
                     <>
                         <DropdownMenuSeparator />
+                        <ToggleStatusAlert user={user} onChanged={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
                         <DeleteUserAlert user={user} onDeleted={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
                     </>
                 )}
@@ -590,6 +657,18 @@ export const columns: ColumnDef<UserData>[] = [
                     <span className="text-sm text-muted-foreground">No role</span>
                 )}
             </div>
+        ),
+    },
+    {
+        id: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+            <Badge
+                variant={row.original.status === 'active' ? 'secondary' : 'destructive'}
+                className="capitalize"
+            >
+                {row.original.status}
+            </Badge>
         ),
     },
     {

@@ -3,12 +3,18 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
+use App\Http\Controllers\Api\MachineMaintenanceController;
+use App\Http\Controllers\Api\EnergyRecordController;
+use App\Http\Controllers\Api\MlModelController;
+use App\Http\Controllers\Api\SpeedOptimizationController;
+use App\Http\Controllers\Api\RuntimeRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeployController;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -45,9 +51,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return redirect()->route('dashboard');
     })->name('home');
 
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('under-construction', function () {
         return Inertia::render('under-construction');
@@ -180,6 +184,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('api/users/{user}', [UserController::class, 'update']);
         Route::delete('api/users/{user}', [UserController::class, 'destroy']);
         Route::put('api/users/{user}/roles', [UserController::class, 'syncRoles']);
+        Route::patch('api/users/{user}/status', [UserController::class, 'updateStatus']);
     });
 
     Route::redirect('role-management', '/user-maintenance');
@@ -243,6 +248,73 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:creel.edit');
     Route::delete('creel-records/{id}', [CreelRecordController::class, 'destroy'])
         ->middleware('permission:creel.delete');
+
+    // ---- MACHINE MAINTENANCE ----
+    Route::middleware('permission:machine-maintenance.view')->group(function () {
+        Route::get('machine-maintenance', fn () => Inertia::render('machine-maintenance'))
+            ->name('machine-maintenance');
+        Route::get('machine-types', [MachineMaintenanceController::class, 'machineTypes']);
+        Route::get('machine-definitions', [MachineMaintenanceController::class, 'machineDefinitions']);
+    });
+    Route::middleware('permission:machine-maintenance.manage')->group(function () {
+        Route::post('machine-types', [MachineMaintenanceController::class, 'storeMachineType']);
+        Route::patch('machine-types/{id}', [MachineMaintenanceController::class, 'updateMachineType']);
+        Route::delete('machine-types/{id}', [MachineMaintenanceController::class, 'destroyMachineType']);
+        Route::post('machine-definitions', [MachineMaintenanceController::class, 'storeMachineDefinition']);
+        Route::patch('machine-definitions/{id}', [MachineMaintenanceController::class, 'updateMachineDefinition']);
+        Route::delete('machine-definitions/{id}', [MachineMaintenanceController::class, 'destroyMachineDefinition']);
+    });
+
+    // ---- RUNTIME RECORDS ----
+    Route::middleware('permission:runtime.view')->group(function () {
+        Route::get('runtime-records-display', fn () => Inertia::render('runtime-records-display'))
+            ->name('runtime-records-display');
+        Route::get('runtime-records', [RuntimeRecordController::class, 'index']);
+        Route::get('runtime-aggregates', [RuntimeRecordController::class, 'aggregates']);
+        Route::get('runtime-batches', [RuntimeRecordController::class, 'batches']);
+    });
+    Route::post('runtime-records/import', [RuntimeRecordController::class, 'store'])
+        ->middleware('permission:runtime.create');
+    Route::post('runtime-records/recalculate', [RuntimeRecordController::class, 'recalculate'])
+        ->middleware('permission:runtime.create');
+    Route::post('runtime-batches/{id}/recalculate', [RuntimeRecordController::class, 'recalculateBatch'])
+        ->middleware('permission:runtime.create');
+    Route::delete('runtime-batches/{id}', [RuntimeRecordController::class, 'destroyBatch'])
+        ->middleware('permission:runtime.delete');
+
+    // ---- ENERGY RECORDS ----
+    Route::middleware('permission:energy.view')->group(function () {
+        Route::get('energy-records-display', fn () => Inertia::render('energy-records-display'))
+            ->name('energy-records-display');
+        Route::get('shift-summary-display', fn () => Inertia::render('shift-summary-display'))
+            ->name('shift-summary-display');
+        Route::get('energy-material-analysis-display', fn () => Inertia::render('energy-material-analysis-display'))
+            ->name('energy-material-analysis-display');
+        Route::get('speed-optimization-display', fn () => Inertia::render('speed-optimization-display'))
+            ->name('speed-optimization-display');
+        Route::get('ml-energy-models-display', fn () => Inertia::render('ml-energy-models'))
+            ->name('ml-energy-models-display');
+        Route::get('energy-records', [EnergyRecordController::class, 'index']);
+        Route::get('energy-batches', [EnergyRecordController::class, 'batches']);
+        Route::get('energy-shift-summary', [EnergyRecordController::class, 'shiftSummary']);
+        Route::get('energy-material-analysis', [EnergyRecordController::class, 'materialEnergy']);
+        Route::post('speed-optimization/check-materials', [SpeedOptimizationController::class, 'checkMaterials']);
+        Route::post('speed-optimization/run', [SpeedOptimizationController::class, 'run']);
+        Route::get('ml-energy-models', [MlModelController::class, 'index']);
+        Route::get('ml-energy-models/benchmark', [MlModelController::class, 'benchmark']);
+        Route::get('ml-energy-models/{id}/progress', [MlModelController::class, 'progress']);
+    });
+    Route::middleware('permission:energy.create')->group(function () {
+        Route::post('ml-energy-models/train', [MlModelController::class, 'train']);
+        Route::patch('ml-energy-models/{id}/set-default', [MlModelController::class, 'setDefault']);
+        Route::delete('ml-energy-models/{id}', [MlModelController::class, 'destroy']);
+    });
+    Route::post('energy-records/import', [EnergyRecordController::class, 'store'])
+        ->middleware('permission:energy.create');
+    Route::post('energy-records/recalculate', [EnergyRecordController::class, 'recalculateEnergy'])
+        ->middleware('permission:energy.create');
+    Route::delete('energy-batches/{id}', [EnergyRecordController::class, 'destroyBatch'])
+        ->middleware('permission:energy.delete');
 
     // ---- ACTIVITY LOG ----
     Route::middleware('permission:activity-log.view')->group(function () {

@@ -58,26 +58,30 @@ upload() {
   (cd "$build_dir" && npm run build)
 
   echo "==> Creating archives"
-  # public/build is included in app.zip (Laravel's Vite helper reads
-  # public/build/manifest.json from the app directory) AND in build.zip
-  # (served as static assets from the docroot).
+  # Patch index.php: docroot and app dir are siblings, so __DIR__/../ points to
+  # the wrong place. Rewrite the two requires to use the real app path.
+  sed -i "s|__DIR__\.'/../|__DIR__\.'/../$CPANEL_SUBDOMAIN_PATH/|g" "$build_dir/public/index.php"
+
+  # app.zip — full Laravel app (extracted into the subdomain app directory)
+  # public.zip — all public/ files including index.php, .htaccess, and built
+  #              assets (extracted into the docroot)
   (cd "$build_dir" && zip -rq app.zip . -x '.git/*' '.github/*' 'node_modules/*' 'tests/*' '.env' '*.zip')
-  (cd "$build_dir/public" && zip -rq ../build.zip build)
+  (cd "$build_dir/public" && zip -rq ../public.zip .)
 
   echo "==> Uploading app.zip to $CPANEL_SUBDOMAIN_PATH/app.zip"
   curl -sS -T "$build_dir/app.zip" --ftp-create-dirs \
     "ftp://$CPANEL_HOST/$CPANEL_SUBDOMAIN_PATH/app.zip" \
     --user "$CPANEL_USERNAME:$CPANEL_PASSWORD"
 
-  echo "==> Uploading build.zip to $CPANEL_DOCROOT_PATH/build.zip"
-  curl -sS -T "$build_dir/build.zip" --ftp-create-dirs \
-    "ftp://$CPANEL_HOST/$CPANEL_DOCROOT_PATH/build.zip" \
+  echo "==> Uploading public.zip to $CPANEL_DOCROOT_PATH/public.zip"
+  curl -sS -T "$build_dir/public.zip" --ftp-create-dirs \
+    "ftp://$CPANEL_HOST/$CPANEL_DOCROOT_PATH/public.zip" \
     --user "$CPANEL_USERNAME:$CPANEL_PASSWORD"
 
   echo
   echo "==> Uploaded. Next steps:"
   echo "    1. In cPanel File Manager, extract app.zip inside $CPANEL_SUBDOMAIN_PATH/"
-  echo "    2. Extract build.zip inside $CPANEL_DOCROOT_PATH/ (replaces public/build)"
+  echo "    2. Extract public.zip inside $CPANEL_DOCROOT_PATH/ (replaces index.php, .htaccess, and assets)"
   echo "    3. Delete both zip files"
   echo "    4. Run: $(basename "$0") $ENVIRONMENT finalize"
 }

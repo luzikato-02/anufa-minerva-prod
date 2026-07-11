@@ -1,6 +1,15 @@
 import AuthenticatedSessionController from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -10,10 +19,36 @@ import AuthLayout from '@/layouts/auth-layout';
 import { request } from '@/routes/password';
 import { Form, Head } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+}
+
+const REVOKED_MESSAGE =
+    'User authorization revoked. Contact your Minerva system administrator to manage your access.';
+
+function RevokedAccessDialog({ message }: { message?: string }) {
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        if (message === REVOKED_MESSAGE) setOpen(true);
+    }, [message]);
+
+    return (
+        <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Authorization Warning</AlertDialogTitle>
+                    <AlertDialogDescription>{REVOKED_MESSAGE}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={() => setOpen(false)}>OK</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
 }
 
 export default function Login({ status, canResetPassword }: LoginProps) {
@@ -44,6 +79,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                     placeholder="Enter username"
                                 />
                                 <InputError message={errors.login} />
+                                <RevokedAccessDialog message={errors.login} />
                             </div>
 
                             <div className="grid gap-2">

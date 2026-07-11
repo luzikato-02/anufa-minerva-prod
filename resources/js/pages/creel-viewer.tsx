@@ -381,6 +381,143 @@ function RangeSelectForm({ onSelect }: {
     );
 }
 
+// ── CountSelectForm ───────────────────────────────────────────────────────────
+// Start position + count: 1A + 9 → 1A,1B,1C,1D,1E,2A,2B,2C,2D
+
+function buildFromCount(
+    sides: SideName[],
+    start: { col: number; row: RowName },
+    countPerSide: number,
+): BatchPosition[] {
+    const positions: BatchPosition[] = [];
+    let col    = start.col;
+    let rowIdx = ROWS_ORDER.indexOf(start.row);
+    for (let n = 0; n < countPerSide && col <= 100; n++) {
+        for (const side of sides) {
+            positions.push({ side, column: col, row: ROWS_ORDER[rowIdx] });
+        }
+        rowIdx++;
+        if (rowIdx >= ROWS_ORDER.length) { rowIdx = 0; col++; }
+    }
+    return positions;
+}
+
+function computeEndPos(
+    start: { col: number; row: RowName },
+    countPerSide: number,
+): { col: number; row: RowName } | null {
+    if (countPerSide <= 0) return null;
+    const linearEnd = (start.col - 1) * 5 + ROWS_ORDER.indexOf(start.row) + countPerSide - 1;
+    const endCol = Math.floor(linearEnd / 5) + 1;
+    if (endCol > 100) return null;
+    return { col: endCol, row: ROWS_ORDER[linearEnd % 5] };
+}
+
+function CountSelectForm({ onSelect }: { onSelect: (positions: BatchPosition[]) => void }) {
+    const [open, setOpen]   = useState(false);
+    const [sides, setSides] = useState<SideName[]>(['AI']);
+    const [from, setFrom]   = useState('');
+    const [count, setCount] = useState('');
+
+    const fromParsed = parsePos(from);
+    const countNum   = count.trim() !== '' ? parseInt(count.trim()) : null;
+    const countValid = countNum !== null && !isNaN(countNum) && countNum > 0 && countNum <= 500;
+    const valid      = fromParsed !== null && countValid;
+    const end        = valid ? computeEndPos(fromParsed!, countNum!) : null;
+
+    const toggleSide = (s: SideName) =>
+        setSides((prev) =>
+            prev.includes(s)
+                ? prev.length > 1 ? prev.filter((x) => x !== s) : prev
+                : [...prev, s],
+        );
+
+    const handleAdd = () => {
+        if (!valid || !end) return;
+        onSelect(buildFromCount(sides, fromParsed!, countNum!));
+        setFrom('');
+        setCount('');
+    };
+
+    return (
+        <div className="border-b border-border">
+            <button
+                onClick={() => setOpen((p) => !p)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/50"
+            >
+                <span>Count Select</span>
+                <span className="text-[9px]">{open ? '▲' : '▼'}</span>
+            </button>
+
+            {open && (
+                <div className="space-y-2 px-3 pb-3">
+                    <div>
+                        <p className="mb-1 text-[10px] text-muted-foreground">Side</p>
+                        <div className="flex gap-1">
+                            {(['AI', 'AO', 'BI', 'BO'] as SideName[]).map((s) => (
+                                <button
+                                    key={s}
+                                    onClick={() => toggleSide(s)}
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                                        sides.includes(s)
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    }`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <p className="mb-1 text-[10px] text-muted-foreground">Start · Count per side</p>
+                        <div className="flex items-center gap-1.5">
+                            <Input
+                                value={from}
+                                onChange={(e) => setFrom(e.target.value.toUpperCase())}
+                                className={`h-7 w-16 px-2 text-center font-mono text-xs ${from && !fromParsed ? 'border-destructive' : ''}`}
+                                placeholder="1A"
+                                maxLength={4}
+                            />
+                            <span className="text-[10px] text-muted-foreground">+</span>
+                            <Input
+                                value={count}
+                                onChange={(e) => setCount(e.target.value.replace(/\D/g, ''))}
+                                className={`h-7 w-16 px-2 text-center font-mono text-xs ${count && !countValid ? 'border-destructive' : ''}`}
+                                placeholder="10"
+                                maxLength={3}
+                            />
+                        </div>
+                        {valid && end && (
+                            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                                {fromParsed!.col}{fromParsed!.row} → {end.col}{end.row}
+                                {sides.length > 1 && (
+                                    <span className="ml-1 text-muted-foreground/60">
+                                        ({countNum} × {sides.length})
+                                    </span>
+                                )}
+                            </p>
+                        )}
+                        {valid && !end && (
+                            <p className="mt-1 text-[10px] text-destructive">Exceeds column 100</p>
+                        )}
+                    </div>
+
+                    <Button
+                        size="sm"
+                        className="h-6 w-full text-xs"
+                        disabled={!valid || !end}
+                        onClick={handleAdd}
+                    >
+                        Add {valid && end ? countNum! * sides.length : ''} to Selection
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── ZigzagSelectForm ──────────────────────────────────────────────────────────
 
 function ZigzagSelectForm({ onSelect }: { onSelect: (positions: BatchPosition[]) => void }) {
@@ -851,6 +988,9 @@ export default function CreelViewer({ record, finishedPositions }: Props) {
             <div className="flex min-h-0 flex-1">
                 {/* Left panel — batch list */}
                 <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-background">
+                    {/* Count select form — start position + total bobbins */}
+                    <CountSelectForm onSelect={handleRangeSelect} />
+
                     {/* Range select form */}
                     <RangeSelectForm onSelect={handleRangeSelect} />
 
