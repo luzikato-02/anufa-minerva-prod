@@ -111,10 +111,9 @@ Shared cPanel hosting rarely puts these on the default terminal `$PATH`:
   mkdir -p ~/bin
   mv composer.phar ~/bin/composer
   chmod +x ~/bin/composer
-  echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-  source ~/.bashrc
-  composer --version
+  ~/bin/composer --version
   ```
+  Set `COMPOSER_BIN=/home/youruser/bin/composer` in `deploy/<environment>.env` - `deploy.sh` calls that path directly, so it works whether or not `~/.bashrc` gets sourced by the shell that runs the script.
 
 ## Permissions Reference
 

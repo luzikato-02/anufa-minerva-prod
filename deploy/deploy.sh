@@ -9,9 +9,8 @@
 #   2. cd ~/anufa-minerva
 #   3. cp deploy/production.env.example deploy/production.env
 #      (or development.env.example / development.env) and fill in the values,
-#      including NODE_VENV_ACTIVATE (see comment in that file) and composer
-#      (install to ~/bin if `composer --version` doesn't already work - see
-#      README "Deployment" section).
+#      including NODE_VENV_ACTIVATE and COMPOSER_BIN (see comments in that
+#      file and the README "Deployment" section).
 #   4. cp .env.production.example .env and fill in the values
 #   5. php artisan key:generate
 #   6. In cPanel > Domains, make sure the subdomain's document root points at
@@ -70,7 +69,7 @@ deploy() {
   git merge --ff-only "origin/$GIT_BRANCH"
 
   echo "==> Installing PHP dependencies (--no-dev)"
-  composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+  "${COMPOSER_BIN:-composer}" install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
   echo "==> Installing Node dependencies"
   npm ci
