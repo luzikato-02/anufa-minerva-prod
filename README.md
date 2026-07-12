@@ -115,6 +115,20 @@ Shared cPanel hosting rarely puts these on the default terminal `$PATH`:
   ```
   Set `COMPOSER_BIN=/home/youruser/bin/composer` in `deploy/<environment>.env` - `deploy.sh` calls that path directly, so it works whether or not `~/.bashrc` gets sourced by the shell that runs the script.
 
+### Queue worker (required for ML model training)
+
+Shared hosting has no persistent worker process, so `QUEUE_CONNECTION=database` jobs (e.g. `App\Jobs\TrainMlEnergyModel`) sit queued until something drains them. In cPanel > Cron Jobs, add a job that runs every minute:
+
+```bash
+php /home/youruser/anufa-minerva/artisan queue:work --stop-when-empty --tries=1 >> /dev/null 2>&1
+```
+
+`--stop-when-empty` exits once the queue is drained instead of running forever, which is what makes this safe to trigger repeatedly from cron rather than needing a long-running process.
+
+### proc_open disabled on shared hosting
+
+If `composer install` fails with `The Process class relies on proc_open, which is not available on your PHP installation`, that's Composer's `post-autoload-dump` hook (`@php artisan package:discover`) trying to spawn a subprocess - many shared hosts disable `proc_open` in `disable_functions`. `deploy.sh` already works around this (`composer install --no-scripts` followed by `php artisan package:discover --ansi` run directly). Avoid reintroducing anything that shells out from within a PHP request (e.g. `Process::start`) for the same reason - use queued jobs instead.
+
 ## Permissions Reference
 
 Each module uses a `<module>.<action>` naming convention:

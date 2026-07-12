@@ -163,8 +163,9 @@ All endpoints require `Authorization: Bearer $ML_SERVICE_TOKEN`.
   ```
   → `{lines, result}` on success, `{lines, error}` on failure, where `result`
   is the metrics object described above plus `model_used`, `hyperparams_used`,
-  `training_samples`, and `model_ref` (the Blob URL). Laravel's `ml:train`
-  command replays `lines` into its local progress log for the UI to poll.
+  `training_samples`, and `model_ref` (the Blob URL). Laravel's
+  `App\Jobs\TrainMlEnergyModel` queued job replays `lines` into its local
+  progress log for the UI to poll.
   (Vercel's Python runtime does support streaming responses; this could become
   a true SSE endpoint later if it's worth the complexity — not done here since
   even with auto-tune and repeated CV, a training run stays within single-digit

@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\TrainMlEnergyModel;
 use App\Models\MlEnergyModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 
 class MlModelController extends Controller
@@ -90,10 +90,11 @@ class MlModelController extends Controller
             ]),
         );
 
-        // Runs `ml:train` in the background, which calls the ml-service (Vercel)
-        // API and replays its progress into the progress log file — the web
-        // request doesn't block on the remote call.
-        Process::start('php ' . escapeshellarg(base_path('artisan')) . ' ml:train ' . escapeshellarg($model->id));
+        // Queues a job that calls the ml-service (Vercel) API and replays its
+        // progress into the progress log file — the web request doesn't block
+        // on the remote call. Requires a queue worker (QUEUE_CONNECTION != sync)
+        // and a cron-driven `queue:work --stop-when-empty` on shared hosting.
+        TrainMlEnergyModel::dispatch($model->id);
 
         return response()->json(['id' => $model->id], 202);
     }

@@ -69,7 +69,13 @@ deploy() {
   git merge --ff-only "origin/$GIT_BRANCH"
 
   echo "==> Installing PHP dependencies (--no-dev)"
-  "${COMPOSER_BIN:-composer}" install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+  # --no-scripts: this host has proc_open disabled, which breaks Composer's
+  # post-autoload-dump hook (it shells out to `php artisan package:discover`
+  # via its own Process-based script runner). Run that step directly instead
+  # - a plain shell invocation doesn't need proc_open, only Composer's
+  # internal subprocess spawning does.
+  "${COMPOSER_BIN:-composer}" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts
+  php artisan package:discover --ansi
 
   echo "==> Installing Node dependencies"
   npm ci

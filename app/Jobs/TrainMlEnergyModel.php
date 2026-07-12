@@ -1,26 +1,35 @@
 <?php
 
-namespace App\Console\Commands;
+namespace App\Jobs;
 
-use Illuminate\Console\Command;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 
-class TrainMlModel extends Command
+class TrainMlEnergyModel implements ShouldQueue
 {
-    protected $signature = 'ml:train {id}';
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $description = 'Runs an ML Energy Model training job against the ml-service Vercel API in the background, replaying progress into the local progress log.';
+    public int $timeout = 120;
 
-    public function handle(): int
+    public int $tries = 1;
+
+    public function __construct(private readonly int|string $modelId)
     {
-        $id           = $this->argument('id');
-        $jobPath      = storage_path('app/private/ml_models/' . $id . '.job.json');
-        $progressPath = storage_path('app/private/ml_models/' . $id . '.progress.log');
+    }
 
-        $job = json_decode((string) file_get_contents($jobPath), true);
-        if (!$job) {
+    public function handle(): void
+    {
+        $jobPath      = storage_path('app/private/ml_models/' . $this->modelId . '.job.json');
+        $progressPath = storage_path('app/private/ml_models/' . $this->modelId . '.progress.log');
+
+        $payload = json_decode((string) file_get_contents($jobPath), true);
+        if (!$payload) {
             $this->appendLine($progressPath, 'ERROR Training job file missing or invalid.');
-            return self::FAILURE;
+            return;
         }
 
         $url   = config('services.energy_ml.url');
@@ -34,18 +43,18 @@ class TrainMlModel extends Command
             $response = Http::withToken($token)
                 ->timeout(60)
                 ->post(rtrim($url, '/') . '/api/train', [
-                    'model_id'    => $id,
-                    'model_type'  => $job['model_type'] ?? 'ridge',
-                    'hyperparams' => $job['hyperparams'] ?? [],
-                    'auto_tune'   => $job['auto_tune'] ?? false,
-                    'training'    => $job['training'] ?? [],
+                    'model_id'    => $this->modelId,
+                    'model_type'  => $payload['model_type'] ?? 'ridge',
+                    'hyperparams' => $payload['hyperparams'] ?? [],
+                    'auto_tune'   => $payload['auto_tune'] ?? false,
+                    'training'    => $payload['training'] ?? [],
                 ]);
 
             $data = $response->json() ?? [];
 
             if ($response->failed() || isset($data['error'])) {
                 $this->appendLine($progressPath, 'ERROR ' . ($data['error'] ?? 'ml-service request failed: ' . $response->status()));
-                return self::FAILURE;
+                return;
             }
 
             foreach ($data['lines'] ?? [] as $line) {
@@ -55,12 +64,9 @@ class TrainMlModel extends Command
             $this->appendLine($progressPath, now()->format('H:i:s') . '  RESULT ' . json_encode($data['result']));
         } catch (\Throwable $e) {
             $this->appendLine($progressPath, now()->format('H:i:s') . '  ERROR ' . $e->getMessage());
-            return self::FAILURE;
         } finally {
             @unlink($jobPath);
         }
-
-        return self::SUCCESS;
     }
 
     private function appendLine(string $path, string $line): void
