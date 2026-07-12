@@ -37,6 +37,7 @@ class TrainMlModel extends Command
                     'model_id'    => $id,
                     'model_type'  => $job['model_type'] ?? 'ridge',
                     'hyperparams' => $job['hyperparams'] ?? [],
+                    'auto_tune'   => $job['auto_tune'] ?? false,
                     'training'    => $job['training'] ?? [],
                 ]);
 

@@ -21,6 +21,7 @@ class handler(BaseHTTPRequestHandler):
                 data.get('hyperparams') or {},
                 data['training'],
                 lines,
+                auto_tune=bool(data.get('auto_tune', False)),
             )
         except Exception as exc:
             return json_response(self, 422, {'lines': lines, 'error': str(exc)})

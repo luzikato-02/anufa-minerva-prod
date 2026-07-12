@@ -5,7 +5,8 @@
   "functions": {
     "api/**/*.py": {
       "includeFiles": "api/_common.py",
-      "excludeFiles": "{README.md,package.json}"
+      "excludeFiles": "{README.md,package.json}",
+      "maxDuration": 15
     }
   }
 }

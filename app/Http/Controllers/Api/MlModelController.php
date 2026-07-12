@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Storage;
 
 class MlModelController extends Controller
 {
+    private const MIN_TRAINING_SAMPLES = 15;
+
     public function index()
     {
         return response()->json(
@@ -36,6 +38,7 @@ class MlModelController extends Controller
         $request->validate([
             'name'                       => 'required|string|max:120',
             'model_type'                 => 'required|string|in:ridge,rf,gbm,svr,mlp',
+            'auto_tune'                  => 'sometimes|boolean',
             // Ridge
             'hyperparams.alpha'          => 'sometimes|numeric|min:0.0001|max:100000',
             // RF / GBM shared
@@ -56,11 +59,12 @@ class MlModelController extends Controller
         ]);
 
         $hyperparams = $request->input('hyperparams', []);
+        $autoTune    = $request->boolean('auto_tune');
 
         $training = $this->fetchTrainingData();
-        if (count($training) < 5) {
+        if (count($training) < self::MIN_TRAINING_SAMPLES) {
             return response()->json([
-                'message' => 'Not enough training data. Need at least 5 grouped (dtex, tpm, speed) data points with energy measurements.',
+                'message' => 'Not enough training data. Need at least ' . self::MIN_TRAINING_SAMPLES . ' historical shift records with energy measurements.',
             ], 422);
         }
 
@@ -69,6 +73,7 @@ class MlModelController extends Controller
             'name'        => $request->input('name'),
             'model_type'  => $request->input('model_type'),
             'hyperparams' => $hyperparams ?: null,
+            'auto_tuned'  => $autoTune,
             'trained_by'  => $request->user()?->id,
         ]);
 
@@ -80,6 +85,7 @@ class MlModelController extends Controller
             json_encode([
                 'model_type'  => $model->model_type,
                 'hyperparams' => $hyperparams,
+                'auto_tune'   => $autoTune,
                 'training'    => $training,
             ]),
         );
@@ -117,9 +123,16 @@ class MlModelController extends Controller
             $decoded = json_decode($resultLine, true);
             $model->update([
                 'r2_score'         => $decoded['r2']               ?? null,
-                'cv_r2_score'      => $decoded['cv_r2']            ?? null,
+                'cv_r2_score'      => $decoded['cv_r2_mean']       ?? null,
+                'cv_r2_std'        => $decoded['cv_r2_std']        ?? null,
+                'test_r2'          => $decoded['test_r2']          ?? null,
+                'test_rmse'        => $decoded['test_rmse']        ?? null,
+                'test_mae'         => $decoded['test_mae']         ?? null,
                 'rmse'             => $decoded['rmse']             ?? null,
                 'mae'              => $decoded['mae']              ?? null,
+                'overfit_gap'      => $decoded['overfit_gap']      ?? null,
+                'auto_tuned'       => $decoded['auto_tuned']       ?? false,
+                'hyperparams'      => $decoded['hyperparams_used'] ?? $model->hyperparams,
                 'training_samples' => $decoded['training_samples'] ?? null,
                 'model_file'       => $decoded['model_ref']        ?? null,
             ]);
@@ -180,27 +193,37 @@ class MlModelController extends Controller
         return response()->json(['message' => 'Model deleted.']);
     }
 
+    // One training row per (machine, date, shift) — no bucketing/aggregation, so the
+    // model sees continuous speed and per-row yarn_type/machine_type identity. Speed
+    // bucketing is only used by the GA optimizer's own sampling, not for training.
     private function fetchTrainingData(): array
     {
         $rows = DB::select("
             SELECT
-                CAST(JSON_UNQUOTE(JSON_EXTRACT(styles_parsed, '\$[0].dtex')) AS UNSIGNED) AS dtex,
-                CAST(JSON_UNQUOTE(JSON_EXTRACT(styles_parsed, '\$[0].tpm'))  AS UNSIGNED) AS tpm,
-                ROUND(avg_rpm / 500) * 500                                                AS speed_bucket,
-                SUM(energy_kwh) / NULLIF(SUM(total_runtime_hours), 0)                    AS energy_per_machine_hour
-            FROM runtime_shift_aggregates
-            WHERE energy_kwh IS NOT NULL
-              AND JSON_LENGTH(styles_parsed) = 1
-              AND has_speed_outlier   = 0
-              AND has_runtime_outlier = 0
-            GROUP BY dtex, tpm, speed_bucket
-            HAVING energy_per_machine_hour IS NOT NULL
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(rsa.styles_parsed, '\$[0].dtex')) AS UNSIGNED) AS dtex,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(rsa.styles_parsed, '\$[0].tpm'))  AS UNSIGNED) AS tpm,
+                JSON_UNQUOTE(JSON_EXTRACT(rsa.styles_parsed, '\$[0].yarn_type'))              AS yarn_type,
+                mt.type_name                                                                  AS machine_type,
+                rsa.avg_rpm                                                                    AS speed,
+                rsa.total_runtime_hours                                                        AS runtime_hours,
+                rsa.energy_kwh / rsa.total_runtime_hours                                       AS energy_per_machine_hour
+            FROM runtime_shift_aggregates rsa
+            LEFT JOIN machine_definitions md ON md.id = rsa.machine_definition_id
+            LEFT JOIN machine_types mt ON mt.id = md.machine_type_id
+            WHERE rsa.energy_kwh IS NOT NULL
+              AND JSON_LENGTH(rsa.styles_parsed) = 1
+              AND rsa.has_speed_outlier   = 0
+              AND rsa.has_runtime_outlier = 0
+              AND rsa.total_runtime_hours > 0
         ");
 
         return array_map(fn ($r) => [
-            'dtex'                   => (int) $r->dtex,
-            'tpm'                    => (int) $r->tpm,
-            'speed_bucket'           => (int) $r->speed_bucket,
+            'dtex'                    => (int) $r->dtex,
+            'tpm'                     => (int) $r->tpm,
+            'yarn_type'               => (string) $r->yarn_type,
+            'machine_type'            => $r->machine_type,
+            'speed'                   => (float) $r->speed,
+            'runtime_hours'           => (float) $r->runtime_hours,
             'energy_per_machine_hour' => (float) $r->energy_per_machine_hour,
         ], $rows);
     }

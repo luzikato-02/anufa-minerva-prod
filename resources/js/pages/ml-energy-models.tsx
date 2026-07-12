@@ -34,13 +34,22 @@ interface MlModel {
     hyperparams: Record<string, string> | null;
     r2_score: number | null;
     cv_r2_score: number | null;
+    cv_r2_std: number | null;
+    test_r2: number | null;
+    test_rmse: number | null;
+    test_mae: number | null;
     rmse: number | null;
     mae: number | null;
+    overfit_gap: number | null;
+    auto_tuned: boolean;
     training_samples: number | null;
     is_active: boolean;
     created_at: string;
     trained_by?: { name: string } | null;
 }
+
+// Above this gap between Train R² and CV R², the UI flags the model as likely overfit.
+const OVERFIT_GAP_THRESHOLD = 0.15;
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
     ridge: 'Ridge Regression',
@@ -169,6 +178,7 @@ export default function MlEnergyModels() {
     const [trainError, setTrainError] = useState<string | null>(null);
     const [name, setName]             = useState('');
     const [modelType, setModelType]   = useState('ridge');
+    const [autoTune, setAutoTune]     = useState(false);
     const [hyperparams, setHyperparams] = useState<Record<string, string>>(defaultHyperparams);
     const [tab, setTab]               = useState<'models' | 'benchmark'>('models');
     const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -202,20 +212,21 @@ export default function MlEnergyModels() {
         setTraining(true);
         setTrainLog([]);
         try {
-            log(`Training "${name.trim()}" (${MODEL_TYPE_LABELS[modelType] ?? modelType})…`);
+            log(`Training "${name.trim()}" (${MODEL_TYPE_LABELS[modelType] ?? modelType})${autoTune ? ' — auto-tuning hyperparameters' : ''}…`);
             const csrf = (await axios.get('/csrf-token')).data.csrfToken;
-            // Only send params relevant to the selected model type
+            // Only send params relevant to the selected model type (ignored server-side when auto-tuning)
             const relevantKeys = MODEL_PARAMS[modelType]?.map((p) => p.key) ?? [];
             const filteredHp: Record<string, string> = {};
             for (const k of relevantKeys) {
                 if (hyperparams[k] !== undefined && hyperparams[k] !== '') filteredHp[k] = hyperparams[k];
             }
-            log(`Params: ${JSON.stringify(filteredHp)}`);
+            if (!autoTune) log(`Params: ${JSON.stringify(filteredHp)}`);
 
             // Kicks off training in the background; poll for live progress below.
             const start = await axios.post('/ml-energy-models/train', {
                 name: name.trim(),
                 model_type: modelType,
+                auto_tune: autoTune,
                 hyperparams: filteredHp,
             }, { headers: { 'X-CSRF-TOKEN': csrf } });
             const id = start.data.id;
@@ -342,8 +353,8 @@ export default function MlEnergyModels() {
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="max-w-56 text-xs">
-                                            Fits the selected algorithm on all historical energy data (grouped by dtex, tpm, speed bucket).
-                                            Takes 2–30 seconds depending on model type and data size.
+                                            Fits the selected algorithm on all historical per-shift energy records (dtex, tpm, yarn type,
+                                            machine type, continuous speed). Takes a few seconds, longer with auto-tune on.
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -353,10 +364,30 @@ export default function MlEnergyModels() {
                                 >
                                     Reset params
                                 </button>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <label className="flex h-8 items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={autoTune}
+                                                    onChange={(e) => setAutoTune(e.target.checked)}
+                                                    className="h-3.5 w-3.5"
+                                                />
+                                                Auto-tune hyperparameters
+                                            </label>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-64 text-xs">
+                                            Runs a randomised hyperparameter search (cross-validated) instead of
+                                            using the values below, and uses whatever it finds. Ignores the manual
+                                            parameter fields.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
 
-                            {/* Hyperparameter controls — change with model type */}
-                            {currentParams.length > 0 && (
+                            {/* Hyperparameter controls — change with model type, hidden while auto-tuning */}
+                            {currentParams.length > 0 && !autoTune && (
                                 <div className="border-t pt-3 space-y-2">
                                     <p className="text-xs text-muted-foreground font-medium">
                                         {MODEL_TYPE_LABELS[modelType]} parameters
@@ -422,6 +453,7 @@ export default function MlEnergyModels() {
                                             <TableHead>Name</TableHead>
                                             <TableHead>Type</TableHead>
                                             <TableHead className="text-right">CV R²</TableHead>
+                                            <TableHead className="text-right">Test R²</TableHead>
                                             <TableHead className="text-right">Train R²</TableHead>
                                             <TableHead className="text-right">RMSE</TableHead>
                                             <TableHead className="text-right">MAE</TableHead>
@@ -434,27 +466,58 @@ export default function MlEnergyModels() {
                                     <TableBody>
                                         {models.map((m) => {
                                             const customLabel = hypLabel(m.hyperparams, m.model_type);
+                                            const isOverfit = (m.overfit_gap ?? 0) > OVERFIT_GAP_THRESHOLD;
                                             return (
                                                 <TableRow key={m.id} className={m.is_active ? 'bg-blue-500/5' : ''}>
                                                     <TableCell className="font-medium">{m.name}</TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
                                                         <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <span className={customLabel ? 'underline decoration-dotted cursor-help' : ''}>
-                                                                        {MODEL_TYPE_LABELS[m.model_type] ?? m.model_type}
-                                                                    </span>
-                                                                </TooltipTrigger>
-                                                                {customLabel && (
-                                                                    <TooltipContent side="right" className="text-xs">
-                                                                        Custom params: {customLabel}
-                                                                    </TooltipContent>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <span className={customLabel ? 'underline decoration-dotted cursor-help' : ''}>
+                                                                            {MODEL_TYPE_LABELS[m.model_type] ?? m.model_type}
+                                                                        </span>
+                                                                    </TooltipTrigger>
+                                                                    {customLabel && (
+                                                                        <TooltipContent side="right" className="text-xs">
+                                                                            Custom params: {customLabel}
+                                                                        </TooltipContent>
+                                                                    )}
+                                                                </Tooltip>
+                                                                {m.auto_tuned && (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary cursor-help">
+                                                                                auto
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="right" className="text-xs">
+                                                                            Hyperparameters were selected by an automated search.
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
                                                                 )}
-                                                            </Tooltip>
+                                                                {isOverfit && (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="right" className="text-xs">
+                                                                            Possible overfitting — Train R² is {fmt(m.overfit_gap, 2)} higher than CV R².
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                )}
+                                                            </div>
                                                         </TooltipProvider>
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums font-medium">
                                                         {fmt(m.cv_r2_score)}
+                                                        {m.cv_r2_std != null && (
+                                                            <span className="text-muted-foreground font-normal"> ±{fmt(m.cv_r2_std, 2)}</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                        {fmt(m.test_r2)}
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums text-muted-foreground">
                                                         {fmt(m.r2_score)}
@@ -514,8 +577,10 @@ export default function MlEnergyModels() {
                             </div>
                         )}
                         <p className="text-xs text-muted-foreground">
-                            CV R² = 5-fold cross-validation R² (generalisation quality). Higher is better (max 1.0). RMSE / MAE in kWh/machine-hour.
-                            Dotted underline on type = custom hyperparameters used. Star (★) = default fallback for the GA.
+                            CV R² = mean repeated cross-validation R² (± std dev), the primary generalisation estimate. Test R² is a
+                            genuine held-out score (only computed with enough training data). Higher is better (max 1.0). RMSE / MAE in
+                            kWh/machine-hour. Dotted underline on type = custom hyperparameters used, "auto" badge = hyperparameters were
+                            auto-tuned, ⚠ = possible overfitting. Star (★) = default fallback for the GA.
                         </p>
                     </div>
                 )}
@@ -562,6 +627,7 @@ export default function MlEnergyModels() {
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>Type</TableHead>
                                                 <TableHead className="text-right">CV R² ↓</TableHead>
+                                                <TableHead className="text-right">Test R²</TableHead>
                                                 <TableHead className="text-right">Train R²</TableHead>
                                                 <TableHead className="text-right">RMSE</TableHead>
                                                 <TableHead className="text-right">MAE</TableHead>
@@ -570,40 +636,69 @@ export default function MlEnergyModels() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {benchmarkModels.map((m, i) => (
-                                                <TableRow key={m.id} className={m.is_active ? 'bg-blue-500/5' : ''}>
-                                                    <TableCell className="tabular-nums text-muted-foreground text-sm">#{i + 1}</TableCell>
-                                                    <TableCell className="font-medium">{m.name}</TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {MODEL_TYPE_LABELS[m.model_type] ?? m.model_type}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums font-semibold">
-                                                        {fmt(m.cv_r2_score)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                                                        {fmt(m.r2_score)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                                                        {fmt(m.rmse)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                                                        {fmt(m.mae)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                                                        {m.training_samples?.toLocaleString() ?? '—'}
-                                                    </TableCell>
-                                                    <TableCell className="text-center">
-                                                        {m.is_active && <CheckCircle2 className="mx-auto h-4 w-4 text-blue-500" />}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {benchmarkModels.map((m, i) => {
+                                                const isOverfit = (m.overfit_gap ?? 0) > OVERFIT_GAP_THRESHOLD;
+                                                return (
+                                                    <TableRow key={m.id} className={m.is_active ? 'bg-blue-500/5' : ''}>
+                                                        <TableCell className="tabular-nums text-muted-foreground text-sm">#{i + 1}</TableCell>
+                                                        <TableCell className="font-medium">{m.name}</TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">
+                                                            <TooltipProvider>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span>{MODEL_TYPE_LABELS[m.model_type] ?? m.model_type}</span>
+                                                                    {m.auto_tuned && (
+                                                                        <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary">
+                                                                            auto
+                                                                        </span>
+                                                                    )}
+                                                                    {isOverfit && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <AlertCircle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent side="right" className="text-xs">
+                                                                                Possible overfitting — Train R² is {fmt(m.overfit_gap, 2)} higher than CV R².
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                </div>
+                                                            </TooltipProvider>
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums font-semibold">
+                                                            {fmt(m.cv_r2_score)}
+                                                            {m.cv_r2_std != null && (
+                                                                <span className="text-muted-foreground font-normal"> ±{fmt(m.cv_r2_std, 2)}</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                            {fmt(m.test_r2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                            {fmt(m.r2_score)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                            {fmt(m.rmse)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                            {fmt(m.mae)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                                                            {m.training_samples?.toLocaleString() ?? '—'}
+                                                        </TableCell>
+                                                        <TableCell className="text-center">
+                                                            {m.is_active && <CheckCircle2 className="mx-auto h-4 w-4 text-blue-500" />}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </div>
                             </>
                         )}
                         <p className="text-xs text-muted-foreground">
-                            ↓ sorted by CV R² descending · a large gap between Train R² and CV R² suggests overfitting
+                            ↓ sorted by mean CV R² descending · Test R² is a genuine held-out score (blank when there wasn't enough data
+                            for a held-out split) · ⚠ flags a large gap between Train R² and CV R² (possible overfitting)
                         </p>
                     </div>
                 )}

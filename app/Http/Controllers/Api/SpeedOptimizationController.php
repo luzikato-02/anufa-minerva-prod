@@ -74,7 +74,7 @@ class SpeedOptimizationController extends Controller
             $isEstimated = false;
 
             if (empty($model) && $mlModelId) {
-                $synthetic = $this->buildModelFromSaved((int) $mlModelId, $dtex, $tpm);
+                $synthetic = $this->buildModelFromSaved((int) $mlModelId, $row['yarn_type'], $dtex, $tpm);
                 if ($synthetic !== null) {
                     $model       = $synthetic;
                     $isEstimated = true;
@@ -88,9 +88,12 @@ class SpeedOptimizationController extends Controller
         return response()->json($results);
     }
 
-    // Builds a synthetic energy model for (dtex, tpm) using a saved sklearn .pkl file.
-    // Generates 9 speed points across the historical speed range and calls Python predict.
-    private function buildModelFromSaved(int $modelId, int $dtex, int $tpm): ?array
+    // Builds a synthetic energy model for (yarn_type, dtex, tpm) using a saved sklearn
+    // .pkl file. Generates 9 speed points across the historical speed range and calls
+    // Python predict. No machine_type is available at this call site (GA reasons about
+    // a yarn spec in the abstract, not a specific machine) — the ML service degrades
+    // gracefully for a missing machine_type, same as an unseen category.
+    private function buildModelFromSaved(int $modelId, string $yarnType, int $dtex, int $tpm): ?array
     {
         $mlModel = MlEnergyModel::find($modelId);
         if (!$mlModel || !$mlModel->model_file) {
@@ -123,7 +126,7 @@ class SpeedOptimizationController extends Controller
                 ->timeout(30)
                 ->post(rtrim(config('services.energy_ml.url'), '/') . '/api/predict', [
                     'model_ref' => $mlModel->model_file,
-                    'query'     => ['dtex' => $dtex, 'tpm' => $tpm, 'speed_points' => $speedPoints],
+                    'query'     => ['dtex' => $dtex, 'tpm' => $tpm, 'yarn_type' => $yarnType, 'speed_points' => $speedPoints],
                 ])
                 ->throw();
         } catch (\Throwable $e) {
