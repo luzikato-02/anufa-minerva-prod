@@ -8,7 +8,10 @@
 #   1. git clone <repo-url> ~/anufa-minerva      # or wherever APP_DIR points
 #   2. cd ~/anufa-minerva
 #   3. cp deploy/production.env.example deploy/production.env
-#      (or development.env.example / development.env) and fill in the values
+#      (or development.env.example / development.env) and fill in the values,
+#      including NODE_VENV_ACTIVATE (see comment in that file) and composer
+#      (install to ~/bin if `composer --version` doesn't already work - see
+#      README "Deployment" section).
 #   4. cp .env.production.example .env and fill in the values
 #   5. php artisan key:generate
 #   6. In cPanel > Domains, make sure the subdomain's document root points at
@@ -53,6 +56,13 @@ deploy() {
   if [[ "$ROOT_DIR" != "$APP_DIR" ]]; then
     echo "This script must be run from inside APP_DIR ($APP_DIR), not $ROOT_DIR." >&2
     exit 1
+  fi
+
+  # cPanel's "Setup Node.js App" puts node/npm in a per-app virtualenv, not on
+  # the default PATH - activate it if configured.
+  if [[ -n "${NODE_VENV_ACTIVATE:-}" ]]; then
+    # shellcheck disable=SC1090
+    source "$NODE_VENV_ACTIVATE"
   fi
 
   echo "==> Pulling latest $GIT_BRANCH"

@@ -99,6 +99,23 @@ deploy/deploy.sh production deploy
 
 This pulls the branch, installs dependencies, builds frontend assets, syncs `public/` into the docroot, and runs `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup).
 
+### Server prerequisites (composer / node / npm)
+
+Shared cPanel hosting rarely puts these on the default terminal `$PATH`:
+
+- **Node/npm** - use cPanel's **Setup Node.js App** (Software section). Create an app with "Application root" pointing at `APP_DIR`; cPanel then shows an "Enter to the virtual environment" command like `source /home/user/nodevenv/anufa-minerva/20/bin/activate`. Put that path in `deploy/<environment>.env` as `NODE_VENV_ACTIVATE` - `deploy.sh` sources it automatically before installing/building.
+- **Composer** - if `composer --version` doesn't already work, install it into your home directory (no root needed):
+  ```bash
+  cd ~
+  curl -sS https://getcomposer.org/installer | php
+  mkdir -p ~/bin
+  mv composer.phar ~/bin/composer
+  chmod +x ~/bin/composer
+  echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+  source ~/.bashrc
+  composer --version
+  ```
+
 ## Permissions Reference
 
 Each module uses a `<module>.<action>` naming convention:
