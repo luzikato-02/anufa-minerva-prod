@@ -60,8 +60,13 @@ deploy() {
   # cPanel's "Setup Node.js App" puts node/npm in a per-app virtualenv, not on
   # the default PATH - activate it if configured.
   if [[ -n "${NODE_VENV_ACTIVATE:-}" ]]; then
+    # The activate script references unset variables (e.g. CL_VIRTUAL_ENV)
+    # without defaults, which is fine normally but fatal under `set -u` -
+    # relax it just for sourcing this one script.
+    set +u
     # shellcheck disable=SC1090
     source "$NODE_VENV_ACTIVATE"
+    set -u
   fi
 
   echo "==> Pulling latest $GIT_BRANCH"
