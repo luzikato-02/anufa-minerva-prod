@@ -87,33 +87,21 @@ MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Ea
 
 ## Deployment
 
-Deploys run on the cPanel server itself via terminal access - see `deploy/deploy.sh` and the environment templates in `deploy/`.
+The app is built locally and shipped to cPanel as zip files for manual upload/extraction via File Manager - nothing installs or builds on the shared host itself (see history for why: server-side builds there hit disabled `proc_open`, an ancient bundled Node.js version, and severely throttled npm registry bandwidth).
 
-One-time setup: `git clone` the repo into a directory outside the webroot, copy `.env.production.example` to `.env` and fill in the values, then point the subdomain's document root (cPanel > Domains) at a separate directory that `deploy/deploy.sh` syncs `public/` into.
+One-time setup: in cPanel File Manager, create the app checkout directory, point the subdomain's document root (cPanel > Domains) directly at `<app checkout>/public` (Apache only serves the docroot and below, so `.env`/`vendor`/`app/` stay inaccessible without needing a separate synced docroot), upload `.env.production.example` as `.env` into the app checkout and fill in the values, then run `php artisan key:generate` via cPanel Terminal.
 
-Every subsequent deploy, from inside the app checkout on the server:
+Every subsequent deploy:
 
-```bash
-deploy/deploy.sh production deploy
+```powershell
+powershell -File deploy/build.ps1
 ```
 
-This pulls the branch, installs dependencies, builds frontend assets, syncs `public/` into the docroot, and runs `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup).
+This exports the committed git `HEAD` (uncommitted changes are NOT included - commit first) to a temp dir, runs `composer install --no-dev`, `npm ci`, and `npm run build`, then writes `deploy/dist/app.zip`. Then:
 
-### Server prerequisites (composer / node / npm)
-
-Shared cPanel hosting rarely puts these on the default terminal `$PATH`:
-
-- **Node/npm** - use cPanel's **Setup Node.js App** (Software section). Create an app with "Application root" pointing at `APP_DIR`; cPanel then shows an "Enter to the virtual environment" command like `source /home/user/nodevenv/anufa-minerva/20/bin/activate`. Put that path in `deploy/<environment>.env` as `NODE_VENV_ACTIVATE` - `deploy.sh` sources it automatically before installing/building.
-- **Composer** - if `composer --version` doesn't already work, install it into your home directory (no root needed):
-  ```bash
-  cd ~
-  curl -sS https://getcomposer.org/installer | php
-  mkdir -p ~/bin
-  mv composer.phar ~/bin/composer
-  chmod +x ~/bin/composer
-  ~/bin/composer --version
-  ```
-  Set `COMPOSER_BIN=/home/youruser/bin/composer` in `deploy/<environment>.env` - `deploy.sh` calls that path directly, so it works whether or not `~/.bashrc` gets sourced by the shell that runs the script.
+1. Upload `app.zip` to the app checkout dir on cPanel and extract it there
+2. Delete the zip file from the server
+3. Via cPanel Terminal, from the app checkout dir: `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup)
 
 ### Queue worker (required for ML model training)
 
@@ -125,9 +113,9 @@ php /home/youruser/anufa-minerva/artisan queue:work --stop-when-empty --tries=1 
 
 `--stop-when-empty` exits once the queue is drained instead of running forever, which is what makes this safe to trigger repeatedly from cron rather than needing a long-running process.
 
-### proc_open disabled on shared hosting
+### proc_open is disabled on this host
 
-If `composer install` fails with `The Process class relies on proc_open, which is not available on your PHP installation`, that's Composer's `post-autoload-dump` hook (`@php artisan package:discover`) trying to spawn a subprocess - many shared hosts disable `proc_open` in `disable_functions`. `deploy.sh` already works around this (`composer install --no-scripts` followed by `php artisan package:discover --ansi` run directly). Avoid reintroducing anything that shells out from within a PHP request (e.g. `Process::start`) for the same reason - use queued jobs instead.
+`disable_functions` blocks `proc_open` on this shared host, so anything using Symfony's `Process` class (e.g. `Process::start`) fails at runtime with `The Process class relies on proc_open, which is not available on your PHP installation`. This is why ML training is dispatched as a queued job instead of shelling out to a console command - keep using queued jobs rather than `Process`/`exec`/`shell_exec` for anything that needs to run in the background.
 
 ## Permissions Reference
 
