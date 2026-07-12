@@ -1,20 +1,29 @@
 #!/usr/bin/env bash
 #
-# Build the app from the current git HEAD and FTP-upload it to cPanel, or
-# trigger the post-deploy finalize step.
+# Deploy the app from git on the server itself, using cPanel terminal access.
+# Run this ON THE SERVER (paste into cPanel > Terminal, or over SSH) from
+# inside the app checkout ($APP_DIR below).
 #
-# Usage:
-#   deploy/deploy.sh <production|development> upload
-#   deploy/deploy.sh <production|development> finalize
+# One-time setup (first deploy only):
+#   1. git clone <repo-url> ~/anufa-minerva      # or wherever APP_DIR points
+#   2. cd ~/anufa-minerva
+#   3. cp deploy/production.env.example deploy/production.env
+#      (or development.env.example / development.env) and fill in the values
+#   4. cp .env.production.example .env and fill in the values
+#   5. php artisan key:generate
+#   6. In cPanel > Domains, make sure the subdomain's document root points at
+#      $DOCROOT_DIR (kept separate from the app checkout, so app code and
+#      .env are never web-accessible).
+#
+# Every deploy after that:
+#   deploy/deploy.sh <production|development> deploy
 #
 # Requires deploy/<environment>.env (copy from deploy/<environment>.env.example).
 
 set -euo pipefail
 
 usage() {
-  echo "Usage: $(basename "$0") <production|development> <upload|finalize>" >&2
-  echo "  upload   - build the app from git HEAD and FTP-upload app.zip / build.zip" >&2
-  echo "  finalize - call POST /deploy/finalize on the server" >&2
+  echo "Usage: $(basename "$0") <production|development> deploy" >&2
   exit 1
 }
 
@@ -23,7 +32,7 @@ ENVIRONMENT=$1
 ACTION=$2
 
 case "$ENVIRONMENT" in production|development) ;; *) usage ;; esac
-case "$ACTION" in upload|finalize) ;; *) usage ;; esac
+case "$ACTION" in deploy) ;; *) usage ;; esac
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="$ROOT_DIR/deploy/$ENVIRONMENT.env"
@@ -36,68 +45,48 @@ fi
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
 
-upload() {
-  for var in CPANEL_HOST CPANEL_USERNAME CPANEL_PASSWORD CPANEL_SUBDOMAIN_PATH CPANEL_DOCROOT_PATH; do
+deploy() {
+  for var in APP_DIR DOCROOT_DIR GIT_BRANCH; do
     [[ -n "${!var:-}" ]] || { echo "Missing $var in $CONFIG_FILE" >&2; exit 1; }
   done
 
-  build_dir=$(mktemp -d)
-  trap 'rm -rf "$build_dir"' EXIT
+  if [[ "$ROOT_DIR" != "$APP_DIR" ]]; then
+    echo "This script must be run from inside APP_DIR ($APP_DIR), not $ROOT_DIR." >&2
+    exit 1
+  fi
 
-  echo "==> Exporting committed tree (git HEAD) to $build_dir"
-  echo "    (uncommitted changes are NOT included - commit first)"
-  git -C "$ROOT_DIR" archive HEAD | tar -x -C "$build_dir"
+  echo "==> Pulling latest $GIT_BRANCH"
+  git fetch origin "$GIT_BRANCH"
+  git merge --ff-only "origin/$GIT_BRANCH"
 
   echo "==> Installing PHP dependencies (--no-dev)"
-  (cd "$build_dir" && composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction)
+  composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
   echo "==> Installing Node dependencies"
-  (cd "$build_dir" && npm ci)
+  npm ci
 
   echo "==> Building frontend assets"
-  (cd "$build_dir" && npm run build)
+  npm run build
 
-  echo "==> Creating archives"
-  # Patch index.php: docroot and app dir are siblings, so __DIR__/../ points to
-  # the wrong place. Rewrite the two requires to use the real app path.
-  sed -i "s|__DIR__\.'/../|__DIR__\.'/../$CPANEL_SUBDOMAIN_PATH/|g" "$build_dir/public/index.php"
+  echo "==> Syncing public/ into docroot ($DOCROOT_DIR)"
+  # App checkout and docroot are separate directories, so public/ is synced
+  # rather than served directly - keeps app code and .env out of the webroot.
+  mkdir -p "$DOCROOT_DIR"
+  rsync -a --delete "$APP_DIR/public/" "$DOCROOT_DIR/"
 
-  # app.zip — full Laravel app (extracted into the subdomain app directory)
-  # public.zip — all public/ files including index.php, .htaccess, and built
-  #              assets (extracted into the docroot)
-  (cd "$build_dir" && zip -rq app.zip . -x '.git/*' '.github/*' 'node_modules/*' 'tests/*' '.env' '*.zip')
-  (cd "$build_dir/public" && zip -rq ../public.zip .)
+  # Patch the copy in DOCROOT_DIR only (never the tracked file in APP_DIR):
+  # docroot and app dir are siblings, so __DIR__/../ in index.php points to
+  # the wrong place from inside DOCROOT_DIR.
+  APP_DIR_NAME="$(basename "$APP_DIR")"
+  sed -i "s|__DIR__\.'/../|__DIR__\.'/../$APP_DIR_NAME/|g" "$DOCROOT_DIR/index.php"
 
-  echo "==> Uploading app.zip to $CPANEL_SUBDOMAIN_PATH/app.zip"
-  curl -sS -T "$build_dir/app.zip" --ftp-create-dirs \
-    "ftp://$CPANEL_HOST/$CPANEL_SUBDOMAIN_PATH/app.zip" \
-    --user "$CPANEL_USERNAME:$CPANEL_PASSWORD"
-
-  echo "==> Uploading public.zip to $CPANEL_DOCROOT_PATH/public.zip"
-  curl -sS -T "$build_dir/public.zip" --ftp-create-dirs \
-    "ftp://$CPANEL_HOST/$CPANEL_DOCROOT_PATH/public.zip" \
-    --user "$CPANEL_USERNAME:$CPANEL_PASSWORD"
+  echo "==> Running migrations, seeding, and cache warmup"
+  php artisan deploy:finalize
 
   echo
-  echo "==> Uploaded. Next steps:"
-  echo "    1. In cPanel File Manager, extract app.zip inside $CPANEL_SUBDOMAIN_PATH/"
-  echo "    2. Extract public.zip inside $CPANEL_DOCROOT_PATH/ (replaces index.php, .htaccess, and assets)"
-  echo "    3. Delete both zip files"
-  echo "    4. Run: $(basename "$0") $ENVIRONMENT finalize"
-}
-
-finalize() {
-  for var in APP_URL DEPLOY_TOKEN; do
-    [[ -n "${!var:-}" ]] || { echo "Missing $var in $CONFIG_FILE" >&2; exit 1; }
-  done
-
-  echo "==> Finalizing deploy at $APP_URL"
-  curl --fail-with-body -sS -X POST "$APP_URL/deploy/finalize" \
-    -H "Authorization: Bearer $DEPLOY_TOKEN"
-  echo
+  echo "==> Deploy complete."
 }
 
 case "$ACTION" in
-  upload) upload ;;
-  finalize) finalize ;;
+  deploy) deploy ;;
 esac

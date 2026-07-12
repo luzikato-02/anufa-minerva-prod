@@ -232,7 +232,7 @@ All endpoints require `Authorization: Bearer $ML_SERVICE_TOKEN`.
    ENERGY_ML_SERVICE_URL=https://<your-deployment>.vercel.app
    ENERGY_ML_SERVICE_TOKEN=<same ML_SERVICE_TOKEN as step 3>
    ```
-   Then `php artisan config:clear` on the server (or just wait for the next deploy, which runs `optimize` anyway per `DeployController::finalize`).
+   Then `php artisan config:clear` on the server (or just wait for the next deploy, which runs `optimize` anyway per `deploy:finalize`).
 
 7. **End-to-end check**: train a model from the "ML Energy Models" page (try
    both a manual-hyperparameter run and an auto-tuned one), confirm the

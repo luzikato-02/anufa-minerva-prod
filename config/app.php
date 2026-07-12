@@ -125,26 +125,13 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Deploy Finalize Token
-    |--------------------------------------------------------------------------
-    |
-    | Shared secret used to authorize POST /deploy/finalize, which runs
-    | migrations, role/permission seeding, and config caching after an
-    | FTP-based deploy. Leave empty to disable the endpoint entirely.
-    |
-    */
-
-    'deploy_token' => env('DEPLOY_TOKEN'),
-
-    /*
-    |--------------------------------------------------------------------------
     | Bootstrap Admin User
     |--------------------------------------------------------------------------
     |
-    | If set, POST /deploy/finalize creates this admin user the first time it
-    | runs (skipped if a user with this email already exists). There is no
-    | public registration route, so this is how the first login gets created
-    | on a fresh production deploy.
+    | If set, `php artisan deploy:finalize` creates this admin user the first
+    | time it runs (skipped if a user with this email already exists). There
+    | is no public registration route, so this is how the first login gets
+    | created on a fresh production deploy.
     |
     */
 

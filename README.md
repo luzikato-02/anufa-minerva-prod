@@ -87,7 +87,17 @@ MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Ea
 
 ## Deployment
 
-See `deploy/deploy.sh` and the environment templates in `deploy/` for production deployment. The `/deploy/finalize` endpoint bootstraps the database on a fresh server and should be called once after each deploy.
+Deploys run on the cPanel server itself via terminal access - see `deploy/deploy.sh` and the environment templates in `deploy/`.
+
+One-time setup: `git clone` the repo into a directory outside the webroot, copy `.env.production.example` to `.env` and fill in the values, then point the subdomain's document root (cPanel > Domains) at a separate directory that `deploy/deploy.sh` syncs `public/` into.
+
+Every subsequent deploy, from inside the app checkout on the server:
+
+```bash
+deploy/deploy.sh production deploy
+```
+
+This pulls the branch, installs dependencies, builds frontend assets, syncs `public/` into the docroot, and runs `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup).
 
 ## Permissions Reference
 
