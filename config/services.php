@@ -35,9 +35,4 @@ return [
         ],
     ],
 
-    'energy_ml' => [
-        'url'   => env('ENERGY_ML_SERVICE_URL'),
-        'token' => env('ENERGY_ML_SERVICE_TOKEN'),
-    ],
-
 ];

@@ -48,16 +48,7 @@ interface OptimizationResult {
     machine_hours_needed: number | null;
     convergence_gen: number;
     speed_range: { min: number; max: number };
-    is_estimated?: boolean;
     error?: string;
-}
-
-interface MlModelOption {
-    id: number;
-    name: string;
-    model_type: string;
-    cv_r2_score: number | null;
-    is_active: boolean;
 }
 
 interface GaParams {
@@ -66,7 +57,6 @@ interface GaParams {
     mutation_rate: string;
     crossover_rate: string;
     early_stop: string;
-    ml_model_id: string;
 }
 
 const DEFAULT_GA: GaParams = {
@@ -75,7 +65,6 @@ const DEFAULT_GA: GaParams = {
     mutation_rate:   '8',
     crossover_rate:  '70',
     early_stop:      '20',
-    ml_model_id:     'none',
 };
 
 const emptyRow = (): InputRow => ({ yarn_type: '', dtex: '', tpm: '', initial_speed: '', target_tonnes: '' });
@@ -95,16 +84,7 @@ export default function SpeedOptimizationDisplay() {
     const [results, setResults]           = useState<OptimizationResult[] | null>(null);
     const [loading, setLoading]           = useState(false);
     const [error, setError]               = useState<string | null>(null);
-    const [mlModels, setMlModels]         = useState<MlModelOption[]>([]);
     const debounceRef                     = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    useEffect(() => {
-        axios.get<MlModelOption[]>('/ml-energy-models').then((res) => {
-            setMlModels(res.data);
-            const active = res.data.find((m) => m.is_active);
-            if (active) setGaParams((p) => ({ ...p, ml_model_id: String(active.id) }));
-        }).catch(() => {});
-    }, []);
 
     const updateGa = (field: keyof GaParams, value: string) =>
         setGaParams((p) => ({ ...p, [field]: value }));
@@ -180,7 +160,6 @@ export default function SpeedOptimizationDisplay() {
                     mutation_rate:   parseFloat(gaParams.mutation_rate) / 100,
                     crossover_rate:  parseFloat(gaParams.crossover_rate) / 100,
                     early_stop:      parseInt(gaParams.early_stop),
-                    ml_model_id:     gaParams.ml_model_id !== 'none' ? parseInt(gaParams.ml_model_id) : null,
                 },
                 rows: inputRows.map((r) => ({
                     yarn_type:     r.yarn_type.trim(),
@@ -301,33 +280,6 @@ export default function SpeedOptimizationDisplay() {
                                 </div>
                                 <Input value={gaParams.early_stop} onChange={(e) => updateGa('early_stop', e.target.value)}
                                     className="h-8 w-full" type="number" min={5} max={200} />
-                            </div>
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-1">
-                                    <Label className="text-xs text-muted-foreground">Fallback model</Label>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-56 text-xs">
-                                            ML model used to estimate energy for materials not yet in the database.
-                                            Train and manage models on the ML Energy Models page.
-                                            "None" means the GA will return an error for unknown materials.
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </div>
-                                <select
-                                    value={gaParams.ml_model_id}
-                                    onChange={(e) => updateGa('ml_model_id', e.target.value)}
-                                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-                                >
-                                    <option value="none">None</option>
-                                    {mlModels.map((m) => (
-                                        <option key={m.id} value={String(m.id)}>
-                                            {m.name}{m.cv_r2_score != null ? ` (CV R²=${m.cv_r2_score.toFixed(3)})` : ''}{m.is_active ? ' ★' : ''}
-                                        </option>
-                                    ))}
-                                </select>
                             </div>
                         </div>
                         </TooltipProvider>
@@ -529,9 +481,7 @@ export default function SpeedOptimizationDisplay() {
                                         }
                                         const isGood = (r.savings_pct ?? 0) > 10;
                                         const speedChanged = Math.abs(r.optimal_speed - r.initial_speed) > 10;
-                                        const rowClass = r.is_estimated
-                                            ? 'bg-amber-500/5'
-                                            : isGood ? 'bg-green-500/5' : '';
+                                        const rowClass = isGood ? 'bg-green-500/5' : '';
                                         return (
                                             <TableRow key={i} className={rowClass}>
                                                 <TableCell className="font-mono text-sm">
@@ -555,18 +505,6 @@ export default function SpeedOptimizationDisplay() {
                                                 <TableCell className={`text-right tabular-nums ${isGood ? 'text-green-700 dark:text-green-400 font-semibold' : ''}`}>
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         {r.savings_pct != null ? `${r.savings_pct}%` : '—'}
-                                                        {r.is_estimated && (
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span className="rounded bg-amber-100 px-1 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 cursor-help">Est.</span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="left" className="max-w-52 text-xs">
-                                                                        Energy estimated by ML regression across all materials — collect real machine data for this material for higher accuracy.
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-right tabular-nums">

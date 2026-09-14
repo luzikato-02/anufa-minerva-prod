@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
 use App\Http\Controllers\Api\MachineMaintenanceController;
 use App\Http\Controllers\Api\EnergyRecordController;
-use App\Http\Controllers\Api\MlModelController;
 use App\Http\Controllers\Api\SpeedOptimizationController;
 use App\Http\Controllers\Api\RuntimeRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
@@ -268,22 +267,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('energy-material-analysis-display');
         Route::get('speed-optimization-display', fn () => Inertia::render('speed-optimization-display'))
             ->name('speed-optimization-display');
-        Route::get('ml-energy-models-display', fn () => Inertia::render('ml-energy-models'))
-            ->name('ml-energy-models-display');
         Route::get('energy-records', [EnergyRecordController::class, 'index']);
         Route::get('energy-batches', [EnergyRecordController::class, 'batches']);
         Route::get('energy-shift-summary', [EnergyRecordController::class, 'shiftSummary']);
         Route::get('energy-material-analysis', [EnergyRecordController::class, 'materialEnergy']);
         Route::post('speed-optimization/check-materials', [SpeedOptimizationController::class, 'checkMaterials']);
         Route::post('speed-optimization/run', [SpeedOptimizationController::class, 'run']);
-        Route::get('ml-energy-models', [MlModelController::class, 'index']);
-        Route::get('ml-energy-models/benchmark', [MlModelController::class, 'benchmark']);
-        Route::get('ml-energy-models/{id}/progress', [MlModelController::class, 'progress']);
-    });
-    Route::middleware('permission:energy.create')->group(function () {
-        Route::post('ml-energy-models/train', [MlModelController::class, 'train']);
-        Route::patch('ml-energy-models/{id}/set-default', [MlModelController::class, 'setDefault']);
-        Route::delete('ml-energy-models/{id}', [MlModelController::class, 'destroy']);
     });
     Route::post('energy-records/import', [EnergyRecordController::class, 'store'])
         ->middleware('permission:energy.create');

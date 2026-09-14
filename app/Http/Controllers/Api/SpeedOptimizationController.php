@@ -3,11 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\MlEnergyModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class SpeedOptimizationController extends Controller
 {
@@ -49,7 +46,6 @@ class SpeedOptimizationController extends Controller
             'ga.mutation_rate'     => 'sometimes|numeric|min:0.01|max:0.5',
             'ga.crossover_rate'    => 'sometimes|numeric|min:0.1|max:0.99',
             'ga.early_stop'        => 'sometimes|integer|min:5|max:200',
-            'ga.ml_model_id'       => 'sometimes|nullable|integer|exists:ml_energy_models,id',
         ]);
 
         $ga = array_merge([
@@ -58,12 +54,7 @@ class SpeedOptimizationController extends Controller
             'mutation_rate'   => 0.08,
             'crossover_rate'  => 0.70,
             'early_stop'      => 20,
-            'ml_model_id'     => null,
         ], $request->input('ga', []));
-
-        // Resolve fallback ML model: use explicit ID, or the active default.
-        $mlModelId = $ga['ml_model_id']
-            ?? MlEnergyModel::where('is_active', true)->value('id');
 
         $results = [];
 
@@ -71,80 +62,10 @@ class SpeedOptimizationController extends Controller
             $dtex  = (int) $row['dtex'];
             $tpm   = (int) $row['tpm'];
             $model = $this->buildEnergyModel($row['yarn_type'], $dtex, $tpm);
-            $isEstimated = false;
-
-            if (empty($model) && $mlModelId) {
-                $synthetic = $this->buildModelFromSaved((int) $mlModelId, $row['yarn_type'], $dtex, $tpm);
-                if ($synthetic !== null) {
-                    $model       = $synthetic;
-                    $isEstimated = true;
-                }
-            }
-
-            $row['is_estimated'] = $isEstimated;
             $results[] = $this->runGA($row, $model, $ga);
         }
 
         return response()->json($results);
-    }
-
-    // Builds a synthetic energy model for (yarn_type, dtex, tpm) using a saved sklearn
-    // .pkl file. Generates 9 speed points across the historical speed range and calls
-    // Python predict. No machine_type is available at this call site (GA reasons about
-    // a yarn spec in the abstract, not a specific machine) — the ML service degrades
-    // gracefully for a missing machine_type, same as an unseen category.
-    private function buildModelFromSaved(int $modelId, string $yarnType, int $dtex, int $tpm): ?array
-    {
-        $mlModel = MlEnergyModel::find($modelId);
-        if (!$mlModel || !$mlModel->model_file) {
-            return null;
-        }
-
-        // Get global speed range from training data.
-        $range = DB::selectOne("
-            SELECT MIN(ROUND(avg_rpm / 500) * 500) AS speed_min,
-                   MAX(ROUND(avg_rpm / 500) * 500) AS speed_max
-            FROM runtime_shift_aggregates
-            WHERE energy_kwh IS NOT NULL
-              AND JSON_LENGTH(styles_parsed) = 1
-              AND has_speed_outlier   = 0
-              AND has_runtime_outlier = 0
-        ");
-
-        if (!$range || $range->speed_min === null) {
-            return null;
-        }
-
-        $speedMin   = (float) $range->speed_min;
-        $speedMax   = (float) $range->speed_max;
-        $nPoints    = 9;
-        $step       = ($speedMax - $speedMin) / ($nPoints - 1);
-        $speedPoints = array_map(fn ($i) => round($speedMin + $i * $step), range(0, $nPoints - 1));
-
-        try {
-            $response = Http::withToken(config('services.energy_ml.token'))
-                ->timeout(30)
-                ->post(rtrim(config('services.energy_ml.url'), '/') . '/api/predict', [
-                    'model_ref' => $mlModel->model_file,
-                    'query'     => ['dtex' => $dtex, 'tpm' => $tpm, 'yarn_type' => $yarnType, 'speed_points' => $speedPoints],
-                ])
-                ->throw();
-        } catch (\Throwable $e) {
-            Log::warning('ML predict failed', ['error' => $e->getMessage()]);
-            return null;
-        }
-
-        $decoded = $response->json();
-        if (!isset($decoded['predictions']) || count($decoded['predictions']) !== count($speedPoints)) {
-            return null;
-        }
-
-        $model = [];
-        foreach ($speedPoints as $i => $speed) {
-            $model[$speed] = max(0.01, (float) $decoded['predictions'][$i]);
-        }
-
-        return $model;
     }
 
     // Returns [(speed_bucket => energy_per_machine_hour)] sorted by speed ascending.
@@ -370,7 +291,6 @@ class SpeedOptimizationController extends Controller
             'machine_hours_needed' => $machineHoursNeeded,
             'convergence_gen'      => $convergenceGen,
             'speed_range'          => ['min' => $speedMin, 'max' => $speedMax],
-            'is_estimated'         => (bool) ($params['is_estimated'] ?? false),
         ];
     }
 }

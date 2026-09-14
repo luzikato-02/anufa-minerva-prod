@@ -22,10 +22,10 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, energyMaterialAnalysisDisplay, energyRecordsDisplay, finishEarlierDisplay, finishEarlierScan, machineMaintenance, mlEnergyModelsDisplay, runtimeRecordsDisplay, shiftSummaryDisplay, speedOptimizationDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
+import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, energyMaterialAnalysisDisplay, energyRecordsDisplay, finishEarlierDisplay, finishEarlierScan, machineMaintenance, runtimeRecordsDisplay, shiftSummaryDisplay, speedOptimizationDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, Zap, BarChart3, BarChart2, Sparkles, BrainCircuit } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, Zap, BarChart3, BarChart2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
@@ -105,12 +105,6 @@ const twistingEnergyNavItems: NavItem[] = [
         title: 'Optimize: Speed (GA)',
         href: speedOptimizationDisplay(),
         icon: Sparkles,
-        permission: 'energy.view',
-    },
-    {
-        title: 'ML Energy Models',
-        href: mlEnergyModelsDisplay(),
-        icon: BrainCircuit,
         permission: 'energy.view',
     },
 ];

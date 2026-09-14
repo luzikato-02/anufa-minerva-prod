@@ -103,9 +103,9 @@ This exports the committed git `HEAD` (uncommitted changes are NOT included - co
 2. Delete the zip file from the server
 3. Via cPanel Terminal, from the app checkout dir: `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup)
 
-### Queue worker (required for ML model training)
+### Queue worker (required for queued jobs)
 
-Shared hosting has no persistent worker process, so `QUEUE_CONNECTION=database` jobs (e.g. `App\Jobs\TrainMlEnergyModel`) sit queued until something drains them. In cPanel > Cron Jobs, add a job that runs every minute:
+Shared hosting has no persistent worker process, so `QUEUE_CONNECTION=database` jobs sit queued until something drains them. In cPanel > Cron Jobs, add a job that runs every minute:
 
 ```bash
 php /home/youruser/anufa-minerva/artisan queue:work --stop-when-empty --tries=1 >> /dev/null 2>&1
@@ -115,7 +115,7 @@ php /home/youruser/anufa-minerva/artisan queue:work --stop-when-empty --tries=1 
 
 ### proc_open is disabled on this host
 
-`disable_functions` blocks `proc_open` on this shared host, so anything using Symfony's `Process` class (e.g. `Process::start`) fails at runtime with `The Process class relies on proc_open, which is not available on your PHP installation`. This is why ML training is dispatched as a queued job instead of shelling out to a console command - keep using queued jobs rather than `Process`/`exec`/`shell_exec` for anything that needs to run in the background.
+`disable_functions` blocks `proc_open` on this shared host, so anything using Symfony's `Process` class (e.g. `Process::start`) fails at runtime with `The Process class relies on proc_open, which is not available on your PHP installation`. Use queued jobs rather than `Process`/`exec`/`shell_exec` for anything that needs to run in the background.
 
 ## Permissions Reference
 
