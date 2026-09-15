@@ -31,34 +31,38 @@ return new class extends Migration
         });
 
         // SQLite's JSON_EXTRACT already returns unquoted scalars for string paths,
-        // while MySQL's JSON_EXTRACT returns a JSON-quoted value that needs JSON_UNQUOTE.
-        $extract = function (string $path): string {
-            return DB::connection()->getDriverName() === 'sqlite'
-                ? "JSON_EXTRACT(metadata, '{$path}')"
-                : "JSON_UNQUOTE(JSON_EXTRACT(metadata, '{$path}'))";
+        // MySQL's JSON_EXTRACT returns a JSON-quoted value that needs JSON_UNQUOTE,
+        // and Postgres has neither function — it uses the ->> operator instead and
+        // requires the generated-column clause to spell out GENERATED ALWAYS.
+        $driver = DB::connection()->getDriverName();
+        $addGeneratedColumn = function (string $column, string $key) use ($driver) {
+            $expr = $driver === 'pgsql'
+                ? "metadata->>'{$key}'"
+                : $this->jsonExtractLegacy($driver, 'metadata', "\$.{$key}");
+
+            $clause = $driver === 'pgsql'
+                ? "GENERATED ALWAYS AS ({$expr}) STORED"
+                : "AS ({$expr}) STORED";
+
+            DB::statement("ALTER TABLE tension_records ADD COLUMN {$column} VARCHAR(255) {$clause}");
         };
 
         // Add generated columns + indexes
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN operator_generated VARCHAR(255)
-            AS ({$extract('$.operator')}) STORED
-        ");
+        $addGeneratedColumn('operator_generated', 'operator');
         DB::statement("CREATE INDEX idx_operator ON tension_records (operator_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN machine_number_generated VARCHAR(255)
-            AS ({$extract('$.machine_number')}) STORED
-        ");
+        $addGeneratedColumn('machine_number_generated', 'machine_number');
         DB::statement("CREATE INDEX idx_machine ON tension_records (machine_number_generated)");
 
-        DB::statement("
-            ALTER TABLE tension_records
-            ADD COLUMN item_number_generated VARCHAR(255)
-            AS ({$extract('$.item_number')}) STORED
-        ");
+        $addGeneratedColumn('item_number_generated', 'item_number');
         DB::statement("CREATE INDEX idx_item ON tension_records (item_number_generated)");
+    }
+
+    private function jsonExtractLegacy(string $driver, string $column, string $path): string
+    {
+        return $driver === 'sqlite'
+            ? "JSON_EXTRACT({$column}, '{$path}')"
+            : "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
     }
 
     /**

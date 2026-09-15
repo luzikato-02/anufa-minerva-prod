@@ -38,9 +38,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'runtime.view',
             'runtime.create',
             'runtime.delete',
-            'energy.view',
-            'energy.create',
-            'energy.delete',
             'users.view',
             'users.manage',
             'roles.manage',
@@ -75,9 +72,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'runtime.view',
                 'runtime.create',
                 'runtime.delete',
-                'energy.view',
-                'energy.create',
-                'energy.delete',
                 'activity-log.view',
             ],
             'analyst' => [
@@ -87,7 +81,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'creel.view',
                 'machine-maintenance.view',
                 'runtime.view',
-                'energy.view',
                 'activity-log.view',
             ],
             'operator' => [
@@ -105,7 +98,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'machine-maintenance.view',
                 'runtime.view',
                 'runtime.create',
-                'energy.view',
             ],
         ];
 

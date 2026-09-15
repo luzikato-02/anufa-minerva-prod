@@ -17,7 +17,7 @@ Minerva is an internal web application built by **Anufa Technologies** to manage
 
 ## Tech Stack
 
-- **Backend** — Laravel 11 (PHP 8.2+), SQLite (dev) / MySQL (prod)
+- **Backend** — Laravel 11 (PHP 8.2+), PostgreSQL
 - **Frontend** — React 19 + TypeScript + Inertia.js (SSR-ready)
 - **UI** — Tailwind CSS v4 + shadcn/ui components
 - **Auth** — Laravel Fortify (2FA, password reset) + Sanctum (API tokens)
@@ -80,7 +80,12 @@ APP_NAME=Minerva
 APP_ENV=local
 APP_URL=http://localhost:8000
 
-DB_CONNECTION=sqlite          # or mysql for production
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=laravel
+DB_USERNAME=root
+DB_PASSWORD=
 
 MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Earlier Scan
 ```

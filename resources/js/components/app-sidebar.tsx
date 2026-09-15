@@ -22,10 +22,10 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, energyMaterialAnalysisDisplay, energyRecordsDisplay, finishEarlierDisplay, finishEarlierScan, machineMaintenance, runtimeRecordsDisplay, shiftSummaryDisplay, speedOptimizationDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
+import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, runtimeRecordsDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, Zap, BarChart3, BarChart2, Sparkles } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
@@ -82,30 +82,6 @@ const twistingEnergyNavItems: NavItem[] = [
         href: runtimeRecordsDisplay(),
         icon: Gauge,
         permission: 'runtime.view',
-    },
-    {
-        title: 'Display: Energy Records',
-        href: energyRecordsDisplay(),
-        icon: Zap,
-        permission: 'energy.view',
-    },
-    {
-        title: 'Display: Shift Summary',
-        href: shiftSummaryDisplay(),
-        icon: BarChart3,
-        permission: 'energy.view',
-    },
-    {
-        title: 'Analysis: Material Energy',
-        href: energyMaterialAnalysisDisplay(),
-        icon: BarChart2,
-        permission: 'energy.view',
-    },
-    {
-        title: 'Optimize: Speed (GA)',
-        href: speedOptimizationDisplay(),
-        icon: Sparkles,
-        permission: 'energy.view',
     },
 ];
 const inventoryNavItems: NavItem[] = [

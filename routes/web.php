@@ -4,8 +4,6 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
 use App\Http\Controllers\Api\MachineMaintenanceController;
-use App\Http\Controllers\Api\EnergyRecordController;
-use App\Http\Controllers\Api\SpeedOptimizationController;
 use App\Http\Controllers\Api\RuntimeRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
@@ -256,30 +254,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:runtime.create');
     Route::delete('runtime-batches/{id}', [RuntimeRecordController::class, 'destroyBatch'])
         ->middleware('permission:runtime.delete');
-
-    // ---- ENERGY RECORDS ----
-    Route::middleware('permission:energy.view')->group(function () {
-        Route::get('energy-records-display', fn () => Inertia::render('energy-records-display'))
-            ->name('energy-records-display');
-        Route::get('shift-summary-display', fn () => Inertia::render('shift-summary-display'))
-            ->name('shift-summary-display');
-        Route::get('energy-material-analysis-display', fn () => Inertia::render('energy-material-analysis-display'))
-            ->name('energy-material-analysis-display');
-        Route::get('speed-optimization-display', fn () => Inertia::render('speed-optimization-display'))
-            ->name('speed-optimization-display');
-        Route::get('energy-records', [EnergyRecordController::class, 'index']);
-        Route::get('energy-batches', [EnergyRecordController::class, 'batches']);
-        Route::get('energy-shift-summary', [EnergyRecordController::class, 'shiftSummary']);
-        Route::get('energy-material-analysis', [EnergyRecordController::class, 'materialEnergy']);
-        Route::post('speed-optimization/check-materials', [SpeedOptimizationController::class, 'checkMaterials']);
-        Route::post('speed-optimization/run', [SpeedOptimizationController::class, 'run']);
-    });
-    Route::post('energy-records/import', [EnergyRecordController::class, 'store'])
-        ->middleware('permission:energy.create');
-    Route::post('energy-records/recalculate', [EnergyRecordController::class, 'recalculateEnergy'])
-        ->middleware('permission:energy.create');
-    Route::delete('energy-batches/{id}', [EnergyRecordController::class, 'destroyBatch'])
-        ->middleware('permission:energy.delete');
 
     // ---- ACTIVITY LOG ----
     Route::middleware('permission:activity-log.view')->group(function () {

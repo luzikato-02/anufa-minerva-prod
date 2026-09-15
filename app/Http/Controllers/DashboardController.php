@@ -2,26 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesJsonColumns;
 use App\Models\RuntimeShiftAggregate;
 use App\Models\RuntimeUploadBatch;
 use App\Models\StockTakingRecord;
 use App\Models\TensionRecord;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
+    use HandlesJsonColumns;
+
     public function index()
     {
         $user = auth()->user();
 
         $tension = null;
         if ($user->can('tension-records.view')) {
-            $probLen = DB::connection()->getDriverName() === 'sqlite'
-                ? 'JSON_ARRAY_LENGTH(problems)'
-                : 'JSON_LENGTH(problems)';
-            $openProblems = TensionRecord::whereRaw("{$probLen} > 0")
+            $openProblems = TensionRecord::whereRaw("{$this->jsonArrayLength('problems')} > 0")
                 ->get(['problems'])
                 ->sum(fn ($r) => collect($r->problems ?? [])
                     ->filter(fn ($p) => ($p['status'] ?? 'open') === 'open')

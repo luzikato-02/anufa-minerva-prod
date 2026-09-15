@@ -2,36 +2,16 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\HandlesJsonColumns;
 use App\Http\Controllers\Controller;
 use App\Models\TensionRecord;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class TensionRecordController extends Controller
 {
-    /**
-     * Build a SQL fragment that extracts an unquoted scalar value from a JSON column.
-     * SQLite's JSON_EXTRACT already returns unquoted scalars; MySQL needs JSON_UNQUOTE.
-     */
-    private function jsonExtract(string $column, string $path): string
-    {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "JSON_EXTRACT({$column}, '{$path}')"
-            : "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
-    }
-
-    /**
-     * Build a SQL fragment that returns the length of a JSON array column.
-     * SQLite uses JSON_ARRAY_LENGTH; MySQL uses JSON_LENGTH.
-     */
-    private function jsonArrayLength(string $column): string
-    {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "JSON_ARRAY_LENGTH({$column})"
-            : "JSON_LENGTH({$column})";
-    }
+    use HandlesJsonColumns;
 
     /**
      * Display a listing of tension records

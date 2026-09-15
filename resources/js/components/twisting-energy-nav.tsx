@@ -12,7 +12,7 @@ export function TwistingEnergyNav({ items = [] }: { items: NavItem[] }) {
     const page = usePage();
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>Twisting Energy and Runtime</SidebarGroupLabel>
+            <SidebarGroupLabel>Twisting Runtime</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
