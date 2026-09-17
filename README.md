@@ -90,22 +90,15 @@ MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Ea
 
 ## Deployment
 
-Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments run side by side on the box:
-
-| Env | Directory | Branch | URL | php-fpm pool |
-|---|---|---|---|---|
-| Production | `/home/anufaroot/deploy/minerva-prod` | `main` | https://minerva.anufa.my.id | `minerva-prod` |
-| Staging | `/home/anufaroot/deploy/minerva-dev` | `develop` | https://minerva-dev.anufa.my.id | `minerva-dev` |
-
-Each is a real git clone of this repo, checked out to its branch. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
+Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload, no separate staging environment. Production is a real git clone of this repo, checked out to `main`, at `/home/anufaroot/deploy/minerva-prod`. Caddy reverse-proxies `minerva.anufa.my.id` straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-prod.sock`), config in `/etc/caddy/Caddyfile`.
 
 **Every deploy:**
 
 ```bash
-./deploy/deploy.sh prod   # or: ./deploy/deploy.sh dev
+./deploy/deploy.sh
 ```
 
-Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match its branch on origin (`main` for prod, `develop` for dev), reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
+Run from anywhere (it cd's to the right checkout itself). Resets `minerva-prod` to match `main` on origin, reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
 
 `QUEUE_CONNECTION=database` in `.env` is unused scaffolding — nothing in the app dispatches a queued job (no `Jobs/` directory, no `ShouldQueue` classes), so there's no queue worker to run.
 
