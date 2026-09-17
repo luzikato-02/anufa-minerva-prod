@@ -52,53 +52,40 @@ database/
   seeders/          # RolesAndPermissionsSeeder bootstraps RBAC on fresh installs
 ```
 
-## Quick Start
+## Working on Minerva
+
+This repo checkout is for editing code only — there's no local dev server or local database. `composer install` / `npm install` here are just for editor tooling (autocomplete, static analysis), not for running the app.
+
+All actual testing happens on the deployed `minerva-dev` environment: commit, push to `main`, deploy to dev, test on the live subdomain, then deploy the same commit to prod once it looks right.
 
 ```bash
-# Install dependencies
 composer install
 npm install
-
-# Configure environment
-cp .env.example .env
-php artisan key:generate
-
-# Migrate and seed (creates default roles + admin user)
-php artisan migrate --seed
-
-# Start development servers
-php artisan serve
-npm run dev
-```
-
-### Required Environment Variables
-
-```env
-APP_NAME=Minerva
-APP_ENV=local
-APP_URL=http://localhost:8000
-
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=laravel
-DB_USERNAME=root
-DB_PASSWORD=
-
-MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Earlier Scan
 ```
 
 ## Deployment
 
-Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload, no separate staging environment. Production is a real git clone of this repo, checked out to `main`, at `/home/anufaroot/deploy/minerva-prod`. Caddy reverse-proxies `minerva.anufa.my.id` straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-prod.sock`), config in `/etc/caddy/Caddyfile`.
+Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments, both deployed from `main`:
+
+| Env | Directory | URL | php-fpm pool |
+|---|---|---|---|
+| Dev/test | `/home/anufaroot/deploy/minerva-dev` | https://minerva-dev.anufa.my.id | `minerva-dev` |
+| Production | `/home/anufaroot/deploy/minerva-prod` | https://minerva.anufa.my.id | `minerva-prod` |
+
+Each is a real git clone of this repo. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
 
 **Every deploy:**
 
 ```bash
-./deploy/deploy.sh
+./deploy/deploy.sh dev    # test here first
+./deploy/deploy.sh prod   # then ship it
 ```
 
-Run from anywhere (it cd's to the right checkout itself). Resets `minerva-prod` to match `main` on origin, reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
+Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match `main` on origin, reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
+
+`minerva-dev` logs in with the seeded test accounts from `DatabaseSeeder` (`admin@example.com` / `password`, plus `test@example.com`, `engineer@example.com`, `analyst@example.com`) — it's not loaded with real production data.
+
+`MISTRAL_API_KEY` (in each environment's `.env`, not this repo) is required for Document Intelligence and Finish Earlier Scan OCR to work — check it's set if those features seem inert.
 
 `QUEUE_CONNECTION=database` in `.env` is unused scaffolding — nothing in the app dispatches a queued job (no `Jobs/` directory, no `ShouldQueue` classes), so there's no queue worker to run.
 

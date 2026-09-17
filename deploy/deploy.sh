@@ -1,17 +1,27 @@
 #!/bin/bash
-# Rebuild and redeploy Minerva to production.
+# Rebuild and redeploy Minerva to prod or dev.
 #
-# Usage: ./deploy/deploy.sh
+# Usage: ./deploy/deploy.sh <prod|dev>
 #
-# Resets /home/anufaroot/deploy/minerva-prod to match main on origin,
-# rebuilds everything, migrates, and reloads php-fpm. Run from anywhere —
-# it cd's to the right directory itself.
+# There's no local dev server for this app — minerva-dev is where changes
+# get tested (deploy there first, verify on minerva-dev.anufa.my.id, then
+# deploy the same commit to prod). Both environments deploy from main.
+#
+# Resets the target's live checkout to match main on origin, rebuilds
+# everything, migrates, and reloads php-fpm. Run from anywhere — it cd's to
+# the right directory itself.
 set -euo pipefail
 
-DIR="/home/anufaroot/deploy/minerva-prod"
+ENV="${1:-}"
+case "$ENV" in
+    prod|dev) ;;
+    *) echo "Usage: $0 <prod|dev>" >&2; exit 1 ;;
+esac
+
+DIR="/home/anufaroot/deploy/minerva-$ENV"
 cd "$DIR"
 
-echo "==> Deploying minerva-prod (main)"
+echo "==> Deploying minerva-$ENV (main)"
 
 git fetch origin main
 git reset --hard origin/main
@@ -31,4 +41,4 @@ php artisan optimize
 echo "==> Reloading php-fpm"
 sudo systemctl reload php8.3-fpm
 
-echo "==> Deployed minerva-prod at $(git rev-parse --short HEAD)"
+echo "==> Deployed minerva-$ENV at $(git rev-parse --short HEAD)"
