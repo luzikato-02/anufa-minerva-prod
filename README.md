@@ -99,7 +99,13 @@ Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) 
 
 Each is a real git clone of this repo, checked out to its branch. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
 
-There is currently no deploy script — the previous one (`deploy/deploy.sh`, plus the `deploy:finalize` Artisan command and the `minerva-queue@` systemd unit it relied on) was removed pending a redesign. Until it's replaced, deploying means manually, in the target checkout: `git fetch && git reset --hard origin/<branch>`, `composer install --no-dev`, `npm ci && npm run build`, `php artisan migrate --force`, `php artisan storage:link`, `php artisan optimize`, then `sudo systemctl reload php8.3-fpm`. Queued jobs currently have no worker draining them.
+**Every deploy:**
+
+```bash
+./deploy/deploy.sh prod   # or: ./deploy/deploy.sh dev
+```
+
+Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match its branch on origin (`main` for prod, `develop` for dev), reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, reloads php-fpm, and restarts that environment's queue worker.
 
 ### proc_open
 
