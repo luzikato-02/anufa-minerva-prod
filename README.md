@@ -105,7 +105,9 @@ Each is a real git clone of this repo, checked out to its branch. Caddy reverse-
 ./deploy/deploy.sh prod   # or: ./deploy/deploy.sh dev
 ```
 
-Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match its branch on origin (`main` for prod, `develop` for dev), reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, reloads php-fpm, and restarts that environment's queue worker.
+Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match its branch on origin (`main` for prod, `develop` for dev), reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
+
+`QUEUE_CONNECTION=database` in `.env` is unused scaffolding — nothing in the app dispatches a queued job (no `Jobs/` directory, no `ShouldQueue` classes), so there's no queue worker to run.
 
 ### proc_open
 

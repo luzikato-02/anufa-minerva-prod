@@ -38,9 +38,4 @@ php artisan optimize
 echo "==> Reloading php-fpm"
 sudo systemctl reload php8.3-fpm
 
-# Best-effort: queue:work keeps one PHP process warm across jobs, so it
-# won't pick up new code on its own. Doesn't fail the deploy if the unit
-# isn't installed.
-sudo systemctl restart "minerva-queue@$ENV" 2>/dev/null || true
-
 echo "==> Deployed minerva-$ENV at $(git rev-parse --short HEAD)"
