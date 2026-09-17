@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesJsonColumns;
-use App\Models\RuntimeShiftAggregate;
-use App\Models\RuntimeUploadBatch;
 use App\Models\StockTakingRecord;
 use App\Models\TensionRecord;
 use App\Models\User;
@@ -46,16 +44,6 @@ class DashboardController extends Controller
             ];
         }
 
-        $runtime = null;
-        if ($user->can('runtime.view')) {
-            $runtime = [
-                'batches'  => RuntimeUploadBatch::count(),
-                'outliers' => RuntimeShiftAggregate::where(function ($q) {
-                    $q->where('has_speed_outlier', true)->orWhere('has_runtime_outlier', true);
-                })->select('machine_number')->distinct()->count(),
-            ];
-        }
-
         $users = null;
         if ($user->can('users.view')) {
             $users = [
@@ -64,6 +52,6 @@ class DashboardController extends Controller
             ];
         }
 
-        return Inertia::render('dashboard', compact('tension', 'stockTake', 'runtime', 'users'));
+        return Inertia::render('dashboard', compact('tension', 'stockTake', 'users'));
     }
 }

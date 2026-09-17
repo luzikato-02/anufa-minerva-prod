@@ -35,9 +35,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'creel.delete',
             'machine-maintenance.view',
             'machine-maintenance.manage',
-            'runtime.view',
-            'runtime.create',
-            'runtime.delete',
             'users.view',
             'users.manage',
             'roles.manage',
@@ -69,9 +66,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'creel.delete',
                 'machine-maintenance.view',
                 'machine-maintenance.manage',
-                'runtime.view',
-                'runtime.create',
-                'runtime.delete',
                 'activity-log.view',
             ],
             'analyst' => [
@@ -80,7 +74,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'finish-earlier.view',
                 'creel.view',
                 'machine-maintenance.view',
-                'runtime.view',
                 'activity-log.view',
             ],
             'operator' => [
@@ -96,8 +89,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'creel.view',
                 'creel.create',
                 'machine-maintenance.view',
-                'runtime.view',
-                'runtime.create',
             ],
         ];
 

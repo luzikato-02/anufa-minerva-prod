@@ -12,12 +12,10 @@ import { usePermissions } from '@/lib/permissions';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
-    ActivityIcon,
     AlertTriangleIcon,
     ClipboardListIcon,
     GaugeIcon,
     ScanBarcodeIcon,
-    ServerIcon,
     UsersIcon,
     ZapIcon,
 } from 'lucide-react';
@@ -34,10 +32,6 @@ interface StockTakeStats {
     completed: number;
     completion: number;
 }
-interface RuntimeStats {
-    batches: number;
-    outliers: number;
-}
 interface UserStats {
     total: number;
     unassigned: number;
@@ -46,7 +40,6 @@ interface UserStats {
 interface Props {
     tension: TensionStats | null;
     stockTake: StockTakeStats | null;
-    runtime: RuntimeStats | null;
     users: UserStats | null;
 }
 
@@ -57,13 +50,12 @@ const QUICK_ACTIONS = [
     { label: 'Record Weaving Tension', href: '/weaving-tension-main', permission: 'tension-records.create', icon: GaugeIcon },
     { label: 'Start Stock Take', href: '/batch-stock-taking-main', permission: 'stock-take.create', icon: ClipboardListIcon },
     { label: 'Scan Finish Earlier', href: '/finish-earlier-scan', permission: 'finish-earlier.create', icon: ScanBarcodeIcon },
-    { label: 'Upload Runtime Data', href: '/runtime-records-display', permission: 'runtime.create', icon: ActivityIcon },
 ] as const;
 
-export default function Dashboard({ tension, stockTake, runtime, users }: Props) {
+export default function Dashboard({ tension, stockTake, users }: Props) {
     const { can } = usePermissions();
     const actions = QUICK_ACTIONS.filter((a) => can(a.permission));
-    const hasStats = tension || stockTake || runtime || users;
+    const hasStats = tension || stockTake || users;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -162,25 +154,6 @@ export default function Dashboard({ tension, stockTake, runtime, users }: Props)
                                             <span>
                                                 Done <strong className="text-foreground">{stockTake.completion}%</strong>
                                             </span>
-                                        </CardFooter>
-                                    </Card>
-                                </Link>
-                            )}
-
-                            {runtime && (
-                                <Link href="/runtime-records-display" className="block">
-                                    <Card className="@container/card hover:bg-muted/40 h-full transition-colors">
-                                        <CardHeader>
-                                            <CardDescription>Runtime Uploads</CardDescription>
-                                            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                                {runtime.batches}
-                                            </CardTitle>
-                                            <CardAction>
-                                                <ServerIcon className="text-muted-foreground size-4" />
-                                            </CardAction>
-                                        </CardHeader>
-                                        <CardFooter className="text-muted-foreground text-sm">
-                                            Machines w/ outliers <strong className="text-foreground">{runtime.outliers}</strong>
                                         </CardFooter>
                                     </Card>
                                 </Link>

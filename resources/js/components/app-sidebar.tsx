@@ -22,17 +22,16 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, runtimeRecordsDisplay, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
+import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { LoomNav } from './loom-nav';
 import { ProcessParams } from './process-parameters';
-import { TwistingEnergyNav } from './twisting-energy-nav';
 
 const mainNavItems: NavItem[] = [
     {
@@ -76,14 +75,6 @@ const processParamsNavItems: NavItem[] = [
     },
 ];
 
-const twistingEnergyNavItems: NavItem[] = [
-    {
-        title: 'Display: Runtime Records',
-        href: runtimeRecordsDisplay(),
-        icon: Gauge,
-        permission: 'runtime.view',
-    },
-];
 const inventoryNavItems: NavItem[] = [
    {
         title: 'Record: Batch Stock Taking',
@@ -194,7 +185,6 @@ export function AppSidebar() {
                 <SidebarContent>
                     <NavMain items={filterByPermission(mainNavItems)} />
                     <ProcessParams items={filterByPermission(processParamsNavItems)} />
-                    <TwistingEnergyNav items={filterByPermission(twistingEnergyNavItems)} />
                     <InventoryNav items={filterByPermission(inventoryNavItems)} />
                     <LoomNav items={filterByPermission(loomNavItems)} />
                     {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}

@@ -4,7 +4,6 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
 use App\Http\Controllers\Api\MachineMaintenanceController;
-use App\Http\Controllers\Api\RuntimeRecordController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
 use App\Http\Controllers\Api\RoleController;
@@ -237,23 +236,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('machine-definitions/{id}', [MachineMaintenanceController::class, 'updateMachineDefinition']);
         Route::delete('machine-definitions/{id}', [MachineMaintenanceController::class, 'destroyMachineDefinition']);
     });
-
-    // ---- RUNTIME RECORDS ----
-    Route::middleware('permission:runtime.view')->group(function () {
-        Route::get('runtime-records-display', fn () => Inertia::render('runtime-records-display'))
-            ->name('runtime-records-display');
-        Route::get('runtime-records', [RuntimeRecordController::class, 'index']);
-        Route::get('runtime-aggregates', [RuntimeRecordController::class, 'aggregates']);
-        Route::get('runtime-batches', [RuntimeRecordController::class, 'batches']);
-    });
-    Route::post('runtime-records/import', [RuntimeRecordController::class, 'store'])
-        ->middleware('permission:runtime.create');
-    Route::post('runtime-records/recalculate', [RuntimeRecordController::class, 'recalculate'])
-        ->middleware('permission:runtime.create');
-    Route::post('runtime-batches/{id}/recalculate', [RuntimeRecordController::class, 'recalculateBatch'])
-        ->middleware('permission:runtime.create');
-    Route::delete('runtime-batches/{id}', [RuntimeRecordController::class, 'destroyBatch'])
-        ->middleware('permission:runtime.delete');
 
     // ---- ACTIVITY LOG ----
     Route::middleware('permission:activity-log.view')->group(function () {
