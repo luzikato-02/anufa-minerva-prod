@@ -29,7 +29,7 @@ class FinishEarlierScanController extends Controller
                 'Content-Type'  => 'application/json',
             ],
             'json' => [
-                'model'    => 'mistral-ocr-latest',
+                'model'    => 'mistral-ocr-4-0',
                 'document' => ['type' => $type, $type => $dataUrl],
             ],
         ]);
