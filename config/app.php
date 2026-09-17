@@ -123,21 +123,4 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Bootstrap Admin User
-    |--------------------------------------------------------------------------
-    |
-    | If set, `php artisan deploy:finalize` creates this admin user the first
-    | time it runs (skipped if a user with this email already exists). There
-    | is no public registration route, so this is how the first login gets
-    | created on a fresh production deploy.
-    |
-    */
-
-    'admin_name' => env('ADMIN_NAME', 'Admin'),
-    'admin_username' => env('ADMIN_USERNAME', 'admin'),
-    'admin_email' => env('ADMIN_EMAIL'),
-    'admin_password' => env('ADMIN_PASSWORD'),
-
 ];

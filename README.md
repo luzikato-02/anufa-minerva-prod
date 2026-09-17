@@ -50,8 +50,6 @@ resources/js/
 database/
   migrations/       # All schema migrations in timestamp order
   seeders/          # RolesAndPermissionsSeeder bootstraps RBAC on fresh installs
-
-deploy/             # Deployment scripts and environment templates
 ```
 
 ## Quick Start
@@ -94,31 +92,14 @@ MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Ea
 
 Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments run side by side on the box:
 
-| Env | Directory | Branch | URL | php-fpm pool | Queue worker |
-|---|---|---|---|---|---|
-| Production | `/home/anufaroot/deploy/minerva-prod` | `main` | https://minerva.anufa.my.id | `minerva-prod` | `minerva-queue@prod` |
-| Staging | `/home/anufaroot/deploy/minerva-dev` | `develop` | https://minerva-dev.anufa.my.id | `minerva-dev` | `minerva-queue@dev` |
+| Env | Directory | Branch | URL | php-fpm pool |
+|---|---|---|---|---|
+| Production | `/home/anufaroot/deploy/minerva-prod` | `main` | https://minerva.anufa.my.id | `minerva-prod` |
+| Staging | `/home/anufaroot/deploy/minerva-dev` | `develop` | https://minerva-dev.anufa.my.id | `minerva-dev` |
 
 Each is a real git clone of this repo, checked out to its branch. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
 
-**Every deploy:**
-
-```bash
-# push your changes to develop (staging) or main (prod) first, then:
-ssh anufa-dev
-cd /home/anufaroot/deploy/minerva-prod   # or minerva-dev
-./deploy/deploy.sh
-```
-
-`deploy/deploy.sh` hard-resets the checkout to `origin/<current branch>`, runs `composer install --no-dev`, `npm ci && npm run build`, `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, `storage:link`, cache warmup), reloads php-fpm, restarts the matching queue worker, and smoke-tests the URL. It only ever touches the directory it's run from — deploy staging and prod independently, in whichever order you want (staging first is recommended, as a live smoke test before shipping the same commit to prod).
-
-One-time environment setup (already done for prod/staging on the current VPS; needed again only when standing up a new environment):
-
-1. `git clone -b <branch> <repo-url> /home/anufaroot/deploy/minerva-<env>`
-2. Copy `.env.production.example` to `.env` in that directory and fill in the real values (`APP_KEY` via `php artisan key:generate --show`, DB credentials, `ADMIN_*`)
-3. Add a php-fpm pool at `/etc/php/8.3/fpm/pool.d/minerva-<env>.conf` listening on `/run/php/minerva-<env>.sock`, and a matching `minerva-<env>.<domain>` block in `/etc/caddy/Caddyfile` proxying to it
-4. Install the queue worker: `sudo cp deploy/systemd/minerva-queue@.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now minerva-queue@<env>`
-5. Run `./deploy/deploy.sh` once to build and finalize
+There is currently no deploy script — the previous one (`deploy/deploy.sh`, plus the `deploy:finalize` Artisan command and the `minerva-queue@` systemd unit it relied on) was removed pending a redesign. Until it's replaced, deploying means manually, in the target checkout: `git fetch && git reset --hard origin/<branch>`, `composer install --no-dev`, `npm ci && npm run build`, `php artisan migrate --force`, `php artisan storage:link`, `php artisan optimize`, then `sudo systemctl reload php8.3-fpm`. Queued jobs currently have no worker draining them.
 
 ### proc_open
 
