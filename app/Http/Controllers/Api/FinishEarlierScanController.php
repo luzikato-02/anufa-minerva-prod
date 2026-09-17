@@ -20,7 +20,7 @@ class FinishEarlierScanController extends Controller
         $type    = str_contains($mime, 'pdf') ? 'document_url' : 'image_url';
 
         $client = new \GuzzleHttp\Client(['timeout' => 120]);
-        $apiKey = env('MISTRAL_API_KEY');
+        $apiKey = config('services.mistral.key');
 
         // Step 1: OCR
         $ocrResponse = $client->post('https://api.mistral.ai/v1/ocr', [

@@ -25,7 +25,7 @@ class DocumentIntelligenceController extends Controller
             $client   = new \GuzzleHttp\Client(['timeout' => 120]);
             $response = $client->post('https://api.mistral.ai/v1/ocr', [
                 'headers' => [
-                    'Authorization' => 'Bearer ' . env('MISTRAL_API_KEY'),
+                    'Authorization' => 'Bearer ' . config('services.mistral.key'),
                     'Content-Type'  => 'application/json',
                 ],
                 'json' => [
