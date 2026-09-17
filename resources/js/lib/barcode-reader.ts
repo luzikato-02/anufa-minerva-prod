@@ -1,4 +1,13 @@
 import 'barcode-detector/polyfill';
+import { setZXingModuleOverrides } from 'barcode-detector';
+import zxingReaderWasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
+
+// Self-host the ZXing WASM binary as a bundled Vite asset instead of the
+// library's default of fetching it from jsDelivr's CDN at runtime. This app
+// runs on factory-floor networks — barcode scanning shouldn't depend on an
+// external CDN being reachable, and self-hosting also removes the ~600ms
+// cold-fetch latency from the first scan of a session.
+setZXingModuleOverrides({ locateFile: () => zxingReaderWasmUrl });
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API#supported_barcode_formats
 // Mirrors the format whitelist used by georapbox/barcode-scanner.
@@ -53,4 +62,17 @@ export class BarcodeReader {
         const first = results[0];
         return first ? { rawValue: first.rawValue, format: first.format } : null;
     }
+}
+
+// WASM module instantiation is the expensive part of BarcodeReader.create()
+// (measured ~600ms cold). Call this as soon as a scan screen mounts — well
+// before the user taps "Scan" — so the module is already warm by the time
+// they open the scanner. Cached: later calls (including the scanner dialog
+// itself) reuse the same instance instead of re-initializing.
+let warmReaderPromise: Promise<BarcodeReader> | null = null;
+export function preloadBarcodeReader(): Promise<BarcodeReader> {
+    if (!warmReaderPromise) {
+        warmReaderPromise = BarcodeReader.create();
+    }
+    return warmReaderPromise;
 }

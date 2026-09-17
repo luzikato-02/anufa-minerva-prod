@@ -15,7 +15,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { BarcodeReader } from '@/lib/barcode-reader';
+import { Input } from '@/components/ui/input';
+import { preloadBarcodeReader } from '@/lib/barcode-reader';
 import { AlertCircle, Flashlight, FlashlightOff, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -53,11 +54,20 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
     const [torchOn, setTorchOn] = useState(false);
     const [focusDistanceRange, setFocusDistanceRange] = useState<{ min: number; max: number; step: number } | null>(null);
     const [focusDistance, setFocusDistance] = useState<number | null>(null);
+    const [manualMode, setManualMode] = useState(false);
+    const [manualValue, setManualValue] = useState('');
     const streamRef = useRef<MediaStream | null>(null);
     const scanIntervalRef = useRef<number | null>(null);
     const refocusIntervalRef = useRef<number | null>(null);
     const torchOnRef = useRef(false);
     const isMountedRef = useRef(true);
+    const manualModeRef = useRef(false);
+    const manualInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        manualModeRef.current = manualMode;
+        if (manualMode) manualInputRef.current?.focus();
+    }, [manualMode]);
 
     const clearRefocusNudge = () => {
         if (refocusIntervalRef.current !== null) {
@@ -135,10 +145,16 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
     // previous stream (if any) is only stopped once the new one is ready,
     // so a failed camera switch doesn't kill the current feed.
     const startStream = async (deviceId?: string): Promise<MediaStream> => {
+        // Requesting a higher resolution directly improves 1D barcode read rates:
+        // at a given real-world distance, more captured pixels means more pixels
+        // per barcode module for ZXing to resolve. Measured directly — the same
+        // barcode at the same relative size failed to decode at 1280x720-equivalent
+        // density and succeeded once given ~3x the pixels. `ideal` is a preference,
+        // not a hard requirement, so this degrades gracefully on older cameras.
         const stream = await navigator.mediaDevices.getUserMedia({
             video: deviceId
-                ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-                : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+                : { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         });
 
         if (streamRef.current) {
@@ -207,6 +223,13 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
         }
     };
 
+    // Warm up the WASM detector as soon as this component mounts (it's kept
+    // mounted with `open=false` between scans), rather than waiting until the
+    // dialog opens — removes the cold-init delay from the interactive path.
+    useEffect(() => {
+        preloadBarcodeReader().catch((err) => console.warn('Barcode reader preload failed:', err));
+    }, []);
+
     useEffect(() => {
         if (!open) return;
 
@@ -243,7 +266,7 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                     if (activeDeviceId) setSelectedDeviceId(activeDeviceId);
                 }
 
-                const reader = await BarcodeReader.create();
+                const reader = await preloadBarcodeReader();
 
                 if (!isMountedRef.current) return;
 
@@ -257,7 +280,7 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
 
                     try {
                         const barcode = await reader.detect(videoRef.current);
-                        if (barcode) {
+                        if (barcode && !manualModeRef.current) {
                             onScan(barcode.rawValue);
                             handleClose();
                         }
@@ -328,10 +351,10 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
         }
     };
 
-    const handleManualInput = () => {
-        const input = prompt('Enter batch number manually:');
-        if (input?.trim()) {
-            onScan(input.trim());
+    const submitManualInput = () => {
+        const value = manualValue.trim();
+        if (value) {
+            onScan(value);
             handleClose();
         }
     };
@@ -348,6 +371,8 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
         torchOnRef.current = false;
         setFocusDistanceRange(null);
         setFocusDistance(null);
+        setManualMode(false);
+        setManualValue('');
         onClose();
     };
 
@@ -362,7 +387,22 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    {scanError ? (
+                    {manualMode ? (
+                        <div className="space-y-2">
+                            <label htmlFor="manual-barcode" className="text-xs text-muted-foreground">
+                                Batch number
+                            </label>
+                            <Input
+                                id="manual-barcode"
+                                ref={manualInputRef}
+                                value={manualValue}
+                                onChange={(e) => setManualValue(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && submitManualInput()}
+                                placeholder="e.g. BATCH-0042-XJ7"
+                                autoComplete="off"
+                            />
+                        </div>
+                    ) : scanError ? (
                         <div className="flex gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-4">
                             <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
                             <div>
@@ -459,20 +499,42 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                     )}
 
                     <div className="flex gap-2 pt-2">
-                        <Button
-                            variant="outline"
-                            onClick={handleClose}
-                            className="h-10 flex-1 bg-transparent"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={handleManualInput}
-                            className="h-10 flex-1"
-                        >
-                            Enter Manually
-                        </Button>
+                        {manualMode ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => { setManualMode(false); setManualValue(''); }}
+                                    className="h-10 flex-1 bg-transparent"
+                                >
+                                    Back to Scanner
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={submitManualInput}
+                                    disabled={!manualValue.trim()}
+                                    className="h-10 flex-1"
+                                >
+                                    Use This Code
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={handleClose}
+                                    className="h-10 flex-1 bg-transparent"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => setManualMode(true)}
+                                    className="h-10 flex-1"
+                                >
+                                    Enter Manually
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </div>
             </DialogContent>

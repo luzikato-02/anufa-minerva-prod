@@ -195,7 +195,7 @@ export default function DocumentIntelligence() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Document Intelligence" />
-            <div className="flex flex-col gap-6 p-6">
+            <div className="mx-auto flex w-full flex-col gap-6 p-6 lg:w-1/2">
                 <div>
                     <h1 className="text-2xl font-semibold">Document Intelligence</h1>
                     <p className="text-muted-foreground mt-1 text-sm">
