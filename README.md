@@ -56,7 +56,7 @@ database/
 
 This repo checkout is for editing code only — there's no local dev server or local database. `composer install` / `npm install` here are just for editor tooling (autocomplete, static analysis), not for running the app.
 
-All actual testing happens on the deployed `minerva-dev` environment: commit, push to `main`, deploy to dev, test on the live subdomain, then deploy the same commit to prod once it looks right.
+All actual testing happens on the deployed `minerva-dev` environment: commit, push to `develop`, deploy to dev, test on the live subdomain, then merge `develop` into `main` and deploy prod.
 
 ```bash
 composer install
@@ -65,23 +65,23 @@ npm install
 
 ## Deployment
 
-Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments, both deployed from `main`:
+Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments:
 
-| Env | Directory | URL | php-fpm pool |
-|---|---|---|---|
-| Dev/test | `/home/anufaroot/deploy/minerva-dev` | https://minerva-dev.anufa.my.id | `minerva-dev` |
-| Production | `/home/anufaroot/deploy/minerva-prod` | https://minerva.anufa.my.id | `minerva-prod` |
+| Env | Directory | Branch | URL | php-fpm pool |
+|---|---|---|---|---|
+| Dev/test | `/home/anufaroot/deploy/minerva-dev` | `develop` | https://minerva-dev.anufa.my.id | `minerva-dev` |
+| Production | `/home/anufaroot/deploy/minerva-prod` | `main` | https://minerva.anufa.my.id | `minerva-prod` |
 
-Each is a real git clone of this repo. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
+Each is a real git clone of this repo, checked out to its branch. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
 
 **Every deploy:**
 
 ```bash
 ./deploy/deploy.sh dev    # test here first
-./deploy/deploy.sh prod   # then ship it
+./deploy/deploy.sh prod   # then ship it (merge develop into main first)
 ```
 
-Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match `main` on origin, reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
+Run from anywhere (it cd's to the right checkout itself). Resets `minerva-<env>` to match its branch on origin (`develop` for dev, `main` for prod), reinstalls PHP/Node dependencies, rebuilds frontend assets, runs `migrate --force` + `storage:link` + `optimize`, and reloads php-fpm.
 
 `minerva-dev` logs in with the seeded test accounts from `DatabaseSeeder` (`admin@example.com` / `password`, plus `test@example.com`, `engineer@example.com`, `analyst@example.com`) — it's not loaded with real production data.
 
