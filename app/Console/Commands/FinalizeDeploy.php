@@ -12,7 +12,7 @@ class FinalizeDeploy extends Command
 {
     protected $signature = 'deploy:finalize';
 
-    protected $description = 'Run post-deploy tasks (migrations, role/permission sync, admin bootstrap, caching). Run this via cPanel terminal after every deploy.';
+    protected $description = 'Run post-deploy tasks (migrations, role/permission sync, admin bootstrap, caching). Called by deploy/deploy.sh after every deploy.';
 
     public function handle(): int
     {

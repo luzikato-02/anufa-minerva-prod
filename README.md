@@ -92,35 +92,37 @@ MISTRAL_API_KEY=              # Required for Document Intelligence and Finish Ea
 
 ## Deployment
 
-The app is built locally and shipped to cPanel as zip files for manual upload/extraction via File Manager - nothing installs or builds on the shared host itself (see history for why: server-side builds there hit disabled `proc_open`, an ancient bundled Node.js version, and severely throttled npm registry bandwidth).
+Minerva is self-hosted directly on our own VPS (Ubuntu, native PHP-FPM + Caddy) — no shared hosting, no manual zip upload. Two environments run side by side on the box:
 
-One-time setup: in cPanel File Manager, create the app checkout directory, point the subdomain's document root (cPanel > Domains) directly at `<app checkout>/public` (Apache only serves the docroot and below, so `.env`/`vendor`/`app/` stay inaccessible without needing a separate synced docroot), upload `.env.production.example` as `.env` into the app checkout and fill in the values, then run `php artisan key:generate` via cPanel Terminal.
+| Env | Directory | Branch | URL | php-fpm pool | Queue worker |
+|---|---|---|---|---|---|
+| Production | `/home/anufaroot/deploy/minerva-prod` | `main` | https://minerva.anufa.my.id | `minerva-prod` | `minerva-queue@prod` |
+| Staging | `/home/anufaroot/deploy/minerva-dev` | `develop` | https://minerva-dev.anufa.my.id | `minerva-dev` | `minerva-queue@dev` |
 
-Every subsequent deploy:
+Each is a real git clone of this repo, checked out to its branch. Caddy reverse-proxies each domain straight to its php-fpm pool's unix socket (`php_fastcgi unix//run/php/minerva-<env>.sock`), config in `/etc/caddy/Caddyfile`.
 
-```powershell
-powershell -File deploy/build.ps1
-```
-
-This exports the committed git `HEAD` (uncommitted changes are NOT included - commit first) to a temp dir, runs `composer install --no-dev`, `npm ci`, and `npm run build`, then writes `deploy/dist/app.zip`. Then:
-
-1. Upload `app.zip` to the app checkout dir on cPanel and extract it there
-2. Delete the zip file from the server
-3. Via cPanel Terminal, from the app checkout dir: `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, cache warmup)
-
-### Queue worker (required for queued jobs)
-
-Shared hosting has no persistent worker process, so `QUEUE_CONNECTION=database` jobs sit queued until something drains them. In cPanel > Cron Jobs, add a job that runs every minute:
+**Every deploy:**
 
 ```bash
-php /home/youruser/anufa-minerva/artisan queue:work --stop-when-empty --tries=1 >> /dev/null 2>&1
+# push your changes to develop (staging) or main (prod) first, then:
+ssh anufa-dev
+cd /home/anufaroot/deploy/minerva-prod   # or minerva-dev
+./deploy/deploy.sh
 ```
 
-`--stop-when-empty` exits once the queue is drained instead of running forever, which is what makes this safe to trigger repeatedly from cron rather than needing a long-running process.
+`deploy/deploy.sh` hard-resets the checkout to `origin/<current branch>`, runs `composer install --no-dev`, `npm ci && npm run build`, `php artisan deploy:finalize` (migrations, role/permission seeding, admin bootstrap, `storage:link`, cache warmup), reloads php-fpm, restarts the matching queue worker, and smoke-tests the URL. It only ever touches the directory it's run from — deploy staging and prod independently, in whichever order you want (staging first is recommended, as a live smoke test before shipping the same commit to prod).
 
-### proc_open is disabled on this host
+One-time environment setup (already done for prod/staging on the current VPS; needed again only when standing up a new environment):
 
-`disable_functions` blocks `proc_open` on this shared host, so anything using Symfony's `Process` class (e.g. `Process::start`) fails at runtime with `The Process class relies on proc_open, which is not available on your PHP installation`. Use queued jobs rather than `Process`/`exec`/`shell_exec` for anything that needs to run in the background.
+1. `git clone -b <branch> <repo-url> /home/anufaroot/deploy/minerva-<env>`
+2. Copy `.env.production.example` to `.env` in that directory and fill in the real values (`APP_KEY` via `php artisan key:generate --show`, DB credentials, `ADMIN_*`)
+3. Add a php-fpm pool at `/etc/php/8.3/fpm/pool.d/minerva-<env>.conf` listening on `/run/php/minerva-<env>.sock`, and a matching `minerva-<env>.<domain>` block in `/etc/caddy/Caddyfile` proxying to it
+4. Install the queue worker: `sudo cp deploy/systemd/minerva-queue@.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now minerva-queue@<env>`
+5. Run `./deploy/deploy.sh` once to build and finalize
+
+### proc_open
+
+Previously blocked on shared cPanel hosting (see git history for the workarounds that forced), but this is our own VPS, so `disable_functions` doesn't apply — Symfony's `Process` class works normally here. Queued jobs are still the right call for anything long-running or retryable, `Process`/`exec` for short-lived synchronous work is fine.
 
 ## Permissions Reference
 
