@@ -36,7 +36,8 @@ final dismissedNoticeProvider = NotifierProvider<DismissedNotice, String?>(
   DismissedNotice.new,
 );
 
-const _heroContentHeight = 212.0; // leaves room for the pills wrapping at 1.4x text scale
+const _heroContentHeight =
+    212.0; // leaves room for the pills wrapping at 1.4x text scale
 const _cardOverlap = 40.0;
 
 class DashboardScreen extends ConsumerWidget {
@@ -50,7 +51,7 @@ class DashboardScreen extends ConsumerWidget {
     final failed = ref.watch(syncQueueProvider).failed;
     final dismissed = ref.watch(dismissedNoticeProvider);
     final notice = failed > 0
-        ? '$failed ${failed == 1 ? 'upload was' : 'uploads were'} rejected by the server'
+        ? '${failed == 1 ? '1 upload was' : '$failed uploads were'} rejected by the server. Open the Sync queue to retry or discard.'
         : null;
     final topInset = MediaQuery.paddingOf(context).top;
     final heroHeight = topInset + _heroContentHeight;
@@ -128,7 +129,7 @@ class DashboardScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: NoticeBanner(
-                      title: 'Needs attention',
+                      title: 'Uploads need attention',
                       message: notice,
                       onTap: () => context.push('/sync'),
                       onDismiss: () => ref

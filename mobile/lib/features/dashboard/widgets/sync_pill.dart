@@ -14,13 +14,18 @@ class SyncPill extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.tokens;
     final s = ref.watch(syncQueueProvider);
-    final waiting = s.ops.length;
-    final label = waiting == 0 ? 'Synced' : '$waiting waiting';
+    final waiting = s.ops.length - s.failed;
+    final synced = s.ops.isEmpty;
+    final label = synced
+        ? 'Synced'
+        : (s.failed > 0 ? '${s.failed} rejected' : '$waiting waiting');
     return Semantics(
       button: true,
-      label: waiting == 0
+      label: synced
           ? 'Everything is synced'
-          : '$waiting uploads waiting, open sync queue',
+          : (s.failed > 0
+                ? '${uploadsLabel(s.failed)} rejected by the server, open sync queue'
+                : '${uploadsLabel(waiting)} waiting, open sync queue'),
       child: Material(
         color: t.primaryForeground.withValues(alpha: 0.16),
         shape: const StadiumBorder(),
@@ -35,7 +40,7 @@ class SyncPill extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    waiting == 0
+                    synced
                         ? LucideIcons.cloudCheck
                         : (s.failed > 0
                               ? LucideIcons.cloudAlert

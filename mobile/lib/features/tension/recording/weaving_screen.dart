@@ -85,10 +85,10 @@ class _SelectViewState extends ConsumerState<_SelectView> {
     final summary = await ref.read(weavingControllerProvider.notifier).resume(po);
     if (!mounted) return;
     if (summary == null) {
-      setState(() => _error = 'No in-progress session found for "$po".');
+      setState(() => _error = 'No session in progress for $po. Check the production order or create a new session.');
       return;
     }
-    if (summary.any) showToast(context, 'Session merged · local newer ${summary.localWon}, server newer ${summary.serverWon}, synced ${summary.localOnly + summary.serverOnly}');
+    if (summary.any) showToast(context, weavingMergeMessage(summary.localWon, summary.serverWon, summary.localOnly + summary.serverOnly));
     widget.onContinue();
   }
 
@@ -97,7 +97,7 @@ class _SelectViewState extends ConsumerState<_SelectView> {
     if (await c.sessionExists(po)) {
       if (!mounted) return;
       setState(() => _busy = false); // no spinner behind the dialog
-      final cont = await confirmDialog(context, title: 'Session already exists', message: 'An in-progress session for $po already exists. Continue it instead of creating a new one.', confirmLabel: 'Continue session');
+      final cont = await confirmDialog(context, title: 'Continue existing session?', message: 'An in-progress session for $po already exists. Continue it instead of creating a new one.', confirmLabel: 'Continue session');
       if (cont && mounted) await _continue(po);
       return;
     }
@@ -122,17 +122,17 @@ class _SelectViewState extends ConsumerState<_SelectView> {
             ),
           ),
         AppCard(
-          title: 'Weaving Tension Session',
+          title: 'Weaving tension session',
           description: 'Enter the production order to start or continue a session',
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (_error != null) ...[AppAlert(message: _error!), const SizedBox(height: 12)],
-            AppTextField(label: 'Production order', controller: _po, hint: 'Enter production order…', onSubmitted: (_) => _run(_create)),
+            AppTextField(label: 'Production order', controller: _po, hint: 'e.g. PO-1042', onSubmitted: (_) => _run(_create)),
             const SizedBox(height: 16),
-            AppButton(label: 'Create New Session', loading: _busy, onPressed: () => _run(_create)),
+            AppButton(label: 'Create new session', loading: _busy, onPressed: () => _run(_create)),
             const SizedBox(height: 8),
-            AppButton(label: 'Continue Session', variant: AppButtonVariant.outline, onPressed: _busy ? null : () => _run(_continue)),
+            AppButton(label: 'Continue session', variant: AppButtonVariant.outline, onPressed: _busy ? null : () => _run(_continue)),
             const SizedBox(height: 12),
-            Text('Continue picks up where you or a colleague left off on any device. Create New starts a fresh session for this production order.', style: TextStyle(fontSize: 12, color: t.mutedForeground)),
+            Text('Continue opens the existing session, including readings from other devices. Create new starts a fresh session for this production order.', style: TextStyle(fontSize: 12, color: t.mutedForeground)),
           ]),
         ),
       ]),
@@ -155,6 +155,7 @@ class _ParamsView extends ConsumerStatefulWidget {
 class _ParamsViewState extends ConsumerState<_ParamsView> {
   final _controllers = <String, TextEditingController>{};
   bool _busy = false;
+  String? _poError;
 
   TextEditingController _c(String key) => _controllers.putIfAbsent(key, () => TextEditingController(text: ref.read(weavingControllerProvider).field(key)));
 
@@ -169,14 +170,7 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
   Future<void> _start() async {
     final ctrl = ref.read(weavingControllerProvider.notifier);
     if (ref.read(weavingControllerProvider).field('productionOrder').trim().isEmpty) {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Production Order Required', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-          content: const Text('Enter a production order number before starting to record.'),
-          actions: [AppButton(label: 'OK', onPressed: () => Navigator.pop(ctx))],
-        ),
-      );
+      setState(() => _poError = 'Enter a production order to start recording.');
       return;
     }
     setState(() => _busy = true);
@@ -206,8 +200,8 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
       title: 'Weaving Tension',
       body: ListView(padding: const EdgeInsets.all(16), children: [
         AppCard(
-          title: 'Weaving Tension Recorder',
-          description: 'Configure recording parameters',
+          title: 'Recording parameters',
+          description: 'Enter the details for this session',
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final f in weavingFormFields)
               Padding(
@@ -216,15 +210,19 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
                   label: f.$2,
                   controller: _c(f.$1),
                   keyboardType: f.$3 ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-                  onChanged: (v) => ctrl.setField(f.$1, v),
+                  error: f.$1 == 'productionOrder' ? _poError : null,
+                  onChanged: (v) {
+                    ctrl.setField(f.$1, v);
+                    if (f.$1 == 'productionOrder' && _poError != null && v.trim().isNotEmpty) setState(() => _poError = null);
+                  },
                 ),
               ),
             const SizedBox(height: 4),
-            AppButton(label: hasData ? 'Resume Recording' : 'Start Recording', size: AppButtonSize.lg, loading: _busy, onPressed: _start),
+            AppButton(label: hasData ? 'Resume recording' : 'Start recording', size: AppButtonSize.lg, loading: _busy, onPressed: _start),
             const SizedBox(height: 8),
             Row(children: [
               Expanded(
-                child: AppButton(label: 'Clear Form', variant: AppButtonVariant.outline, onPressed: () {
+                child: AppButton(label: 'Clear form fields', variant: AppButtonVariant.outline, onPressed: () {
                   ctrl.clearForm();
                   for (final c in _controllers.values) {
                     c.clear();
@@ -232,14 +230,14 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
                 }),
               ),
               const SizedBox(width: 8),
-              Expanded(child: AppButton(label: 'Sessions', variant: AppButtonVariant.outline, onPressed: widget.onBack)),
+              Expanded(child: AppButton(label: 'Change session', variant: AppButtonVariant.outline, onPressed: widget.onBack)),
             ]),
             const SizedBox(height: 8),
             AppButton(
-              label: 'Clear All Data',
+              label: 'Delete all data',
               variant: AppButtonVariant.ghost,
               onPressed: () async {
-                if (await confirmDialog(context, title: 'Clear all saved data?', message: 'This removes the form, measurements and problem reports on this device. It cannot be undone.', confirmLabel: 'Clear all data', destructive: true)) {
+                if (await confirmDialog(context, title: 'Delete all recorded data?', message: 'This removes the form, readings and problem reports on this device. It cannot be undone.', confirmLabel: 'Delete recorded data', destructive: true)) {
                   await ctrl.reset();
                   for (final c in _controllers.values) {
                     c.clear();
@@ -266,7 +264,7 @@ class _NumpadView extends ConsumerWidget {
   Future<void> _finish(BuildContext context, WidgetRef ref) async {
     final ctrl = ref.read(weavingControllerProvider.notifier);
     if (!ref.read(weavingControllerProvider).hasReadings) {
-      showToast(context, 'Record at least one measurement first.');
+      showToast(context, 'Submit at least one reading before you finish.');
       return;
     }
     final clear = await askFinishChoice(context);
@@ -298,12 +296,12 @@ class _NumpadView extends ConsumerWidget {
         NumberStepper(label: 'Row', value: d.row, onPrev: c.previousRow, onNext: c.nextRow),
         const SizedBox(height: 8),
         NumberStepper(
-          label: 'Col',
+          label: 'Column',
           value: '${d.col}',
           onPrev: d.col > 1 ? c.previousCol : null,
           onNext: d.col < kCreelColumns ? c.nextCol : null,
           onTap: () async {
-            final n = await askNumber(context, title: 'Go to column', current: d.col, max: kCreelColumns);
+            final n = await askNumber(context, title: 'Go to column', confirmLabel: 'Go to column', current: d.col, max: kCreelColumns);
             if (n != null) c.goToCol(n);
           },
         ),
@@ -319,12 +317,12 @@ class _NumpadView extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: AppButton(label: 'Proc. Parameters', variant: AppButtonVariant.outline, onPressed: onParams)),
+          Expanded(child: AppButton(label: 'Parameters', variant: AppButtonVariant.outline, onPressed: onParams)),
           const SizedBox(width: 8),
           Expanded(child: AppButton(label: 'Delete ${d.isMax ? 'Max' : 'Min'}', variant: AppButtonVariant.outline, icon: LucideIcons.delete, onPressed: c.deleteStored)),
         ]),
         const SizedBox(height: 8),
-        AppButton(label: 'Report problem for ${d.position}${problems == 0 ? '' : ' ($problems)'}', variant: AppButtonVariant.outline, expand: true, icon: LucideIcons.triangleAlert, onPressed: onProblem),
+        AppButton(label: 'Report problem for ${d.position}${problems == 0 ? '' : ' ($problems reported)'}', variant: AppButtonVariant.outline, expand: true, icon: LucideIcons.triangleAlert, onPressed: onProblem),
       ]),
     );
   }
@@ -372,7 +370,7 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
                   IconButton(tooltip: 'Delete problem', icon: Icon(LucideIcons.trash2, size: 18, color: t.destructive), onPressed: () => c.removeProblem(p.id)),
                 ]),
               ),
-            AppTextField(controller: _text, maxLines: 4, hint: 'Enter problem description for ${d.position}…'),
+            AppTextField(label: 'Problem description', controller: _text, maxLines: 4, hint: 'For example: loose thread near the guide'),
             const SizedBox(height: 12),
             AppButton(
               label: 'Submit problem',
@@ -386,10 +384,22 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
               },
             ),
             const SizedBox(height: 8),
-            AppButton(label: 'Back', variant: AppButtonVariant.outline, onPressed: widget.onBack),
+            AppButton(label: 'Cancel', variant: AppButtonVariant.outline, onPressed: widget.onBack),
           ]),
         ),
       ]),
     );
   }
+}
+
+String _readings(int n, {bool newer = false}) => '${n == 1 ? '1' : '$n'} ${newer ? 'newer ' : ''}${n == 1 ? 'reading' : 'readings'}';
+
+/// Toast after continuing a session whose readings were merged from this device and the server.
+String weavingMergeMessage(int localNewer, int serverNewer, int added) {
+  final parts = [
+    if (localNewer > 0) 'kept ${_readings(localNewer, newer: true)} from this device',
+    if (serverNewer > 0) 'used ${_readings(serverNewer, newer: true)} from the server',
+    if (added > 0) 'added ${_readings(added)} missing on one side',
+  ];
+  return 'Session loaded: ${parts.join(', ')}.';
 }

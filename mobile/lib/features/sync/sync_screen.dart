@@ -26,7 +26,7 @@ class SyncScreen extends ConsumerWidget {
         IconButton(tooltip: 'Sync now', icon: s.flushing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(LucideIcons.refreshCw), onPressed: s.flushing ? null : q.flush),
       ],
       body: s.ops.isEmpty
-          ? const EmptyState('Everything is synced.')
+          ? const EmptyState('Nothing waiting to upload. Recordings saved offline appear here.')
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: s.ops.length,
@@ -36,10 +36,14 @@ class SyncScreen extends ConsumerWidget {
                 final t = ctx.tokens;
                 return AppCard(
                   title: o.label,
-                  description: 'Saved ${DateFormat('d MMM, HH:mm').format(o.createdAt)} · ${o.attempts} attempt${o.attempts == 1 ? '' : 's'}',
+                  description: 'Saved ${DateFormat('d MMM, HH:mm').format(o.createdAt)}${o.attempts == 0 ? '' : o.attempts == 1 ? ' · tried once' : ' · tried ${o.attempts} times'}',
                   action: AppBadge(o.failed ? 'Rejected' : 'Waiting', variant: o.failed ? AppBadgeVariant.destructive : AppBadgeVariant.warning),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (o.error != null) Text(o.error!, style: TextStyle(fontSize: 13, color: t.destructive)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(o.failed ? 'The server rejected this upload. Retry it once the problem is fixed, or discard it.' : 'Uploads automatically when you are back online.', style: TextStyle(fontSize: 13, color: t.mutedForeground)),
+                    ),
                     const SizedBox(height: 8),
                     Row(children: [
                       if (o.failed) ...[
@@ -51,7 +55,7 @@ class SyncScreen extends ConsumerWidget {
                         size: AppButtonSize.sm,
                         variant: AppButtonVariant.ghost,
                         onPressed: () async {
-                          if (await confirmDialog(ctx, title: 'Discard this upload?', message: 'The recorded data on this device will be deleted and never reach the server.', confirmLabel: 'Discard', destructive: true)) {
+                          if (await confirmDialog(ctx, title: 'Discard this upload?', message: 'This deletes the saved recording from this device. It will not be sent to the server.', confirmLabel: 'Discard upload', destructive: true)) {
                             await q.discard(o.id);
                           }
                         },

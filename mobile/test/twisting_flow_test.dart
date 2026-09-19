@@ -19,7 +19,7 @@ Future<void> _startRecording(WidgetTester t) async {
   await t.enterText(find.byType(TextField).at(3), 'T-07');
   await t.enterText(find.byType(TextField).at(7), '40'); // spec
   await t.enterText(find.byType(TextField).at(8), '5'); // ±
-  await t.tap(find.text('Start Recording'));
+  await t.tap(find.text('Start recording'));
   await t.pumpAndSettle();
 }
 
@@ -39,7 +39,7 @@ void main() {
     await _keys(tester, '38');
     await tester.tap(find.text('Submit Min'));
     await tester.pump();
-    expect(find.text('Spd No.'), findsOneWidget);
+    expect(find.text('Spindle'), findsOneWidget);
     expect(find.text('2'), findsWidgets); // moved on to spindle 2
   });
 
@@ -56,7 +56,7 @@ void main() {
 
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('No, keep data'));
+    await tester.tap(find.text('Save and keep device data'));
     await tester.pumpAndSettle();
 
     expect(find.text('Saved'), findsOneWidget);
@@ -80,7 +80,7 @@ void main() {
 
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Yes, clear all'));
+    await tester.tap(find.text('Save and clear device data'));
     await tester.pumpAndSettle();
 
     expect(find.text('Saved on this device'), findsOneWidget);
@@ -88,13 +88,13 @@ void main() {
     expect(container.read(syncQueueProvider).pending, 1);
 
     adapter.offline = false;
-    await tester.tap(find.text('OK'));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.runAsync(() => container.read(syncQueueProvider.notifier).flush());
     await tester.pump();
     expect(container.read(syncQueueProvider).ops, isEmpty);
     expect(adapter.requests.where((r) => r.method == 'POST' && !r.path.contains('auth')).length, 2); // failed attempt + retry
-    expect(find.text('Start Recording'), findsOneWidget); // cleared and back at the form
+    expect(find.text('Start recording'), findsOneWidget); // cleared and back at the form
   });
 
   testWidgets('finish refuses an empty session; a server rejection is shown with retry', (tester) async {
@@ -104,14 +104,14 @@ void main() {
     await _startRecording(tester);
     await tester.tap(find.text('Finish'));
     await tester.pump();
-    expect(find.text('Record at least one measurement first.'), findsOneWidget);
+    expect(find.text('Submit at least one reading before you finish.'), findsOneWidget);
 
     await _keys(tester, '44');
     await tester.tap(find.text('Submit Max'));
     await tester.pump();
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('No, keep data'));
+    await tester.tap(find.text('Save and keep device data'));
     await tester.pumpAndSettle();
     expect(find.text('Could not save'), findsOneWidget);
     expect(find.text('The operator is invalid.'), findsOneWidget);
@@ -123,7 +123,7 @@ void main() {
       'twisting-draft-v1': '{"form":{"operator":"Ana","specTens":"40"},"readings":{"3":{"max":41.0,"min":null}},"problems":[],"display":"0","spindle":3,"isMax":false}',
     });
     await pumpSignedIn(tester, permissions: ['tension-records.create'], path: '/twisting-tension', routes: {});
-    expect(find.text('Resume Recording'), findsOneWidget);
+    expect(find.text('Resume recording'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Ana'), findsOneWidget);
   });
 }

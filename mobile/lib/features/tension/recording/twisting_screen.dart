@@ -75,8 +75,8 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
       title: 'Twisting Tension',
       body: ListView(padding: const EdgeInsets.all(16), children: [
         AppCard(
-          title: 'Twisting Tension Recorder',
-          description: 'Configure recording parameters',
+          title: 'Recording parameters',
+          description: 'Enter the details for this session',
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final f in twistingFormFields)
               Padding(
@@ -89,11 +89,11 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
                 ),
               ),
             const SizedBox(height: 4),
-            AppButton(label: hasData ? 'Resume Recording' : 'Start Recording', size: AppButtonSize.lg, onPressed: widget.onStart),
+            AppButton(label: hasData ? 'Resume recording' : 'Start recording', size: AppButtonSize.lg, onPressed: widget.onStart),
             const SizedBox(height: 8),
             Row(children: [
               Expanded(
-                child: AppButton(label: 'Clear Form', variant: AppButtonVariant.outline, onPressed: () {
+                child: AppButton(label: 'Clear form fields', variant: AppButtonVariant.outline, onPressed: () {
                   ctrl.clearForm();
                   for (final c in _controllers.values) {
                     c.clear();
@@ -103,10 +103,10 @@ class _ParamsViewState extends ConsumerState<_ParamsView> {
               const SizedBox(width: 8),
               Expanded(
                 child: AppButton(
-                  label: 'Clear All Data',
+                  label: 'Delete all data',
                   variant: AppButtonVariant.outline,
                   onPressed: () async {
-                    if (await confirmDialog(context, title: 'Clear all saved data?', message: 'This removes the form, measurements and problem reports on this device. It cannot be undone.', confirmLabel: 'Clear all data', destructive: true)) {
+                    if (await confirmDialog(context, title: 'Delete all recorded data?', message: 'This removes the form, readings and problem reports on this device. It cannot be undone.', confirmLabel: 'Delete recorded data', destructive: true)) {
                       await ctrl.reset();
                     }
                   },
@@ -132,7 +132,7 @@ class _NumpadView extends ConsumerWidget {
   Future<void> _finish(BuildContext context, WidgetRef ref) async {
     final ctrl = ref.read(twistingControllerProvider.notifier);
     if (!ref.read(twistingControllerProvider).hasReadings) {
-      showToast(context, 'Record at least one measurement first.');
+      showToast(context, 'Submit at least one reading before you finish.');
       return;
     }
     final clear = await askFinishChoice(context);
@@ -158,12 +158,12 @@ class _NumpadView extends ConsumerWidget {
         SpecBanner(spec: d.spec, tolerance: d.tolerance),
         const SizedBox(height: 12),
         NumberStepper(
-          label: 'Spd No.',
+          label: 'Spindle',
           value: '${d.spindle}',
           onPrev: d.spindle > 1 ? c.previous : null,
           onNext: d.spindle < kTwistingSpindles ? c.next : null,
           onTap: () async {
-            final n = await askNumber(context, title: 'Go to spindle', current: d.spindle, max: kTwistingSpindles);
+            final n = await askNumber(context, title: 'Go to spindle', confirmLabel: 'Go to spindle', current: d.spindle, max: kTwistingSpindles);
             if (n != null) c.goTo(n);
           },
         ),
@@ -179,12 +179,12 @@ class _NumpadView extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: AppButton(label: 'Proc. Parameters', variant: AppButtonVariant.outline, onPressed: onParams)),
+          Expanded(child: AppButton(label: 'Parameters', variant: AppButtonVariant.outline, onPressed: onParams)),
           const SizedBox(width: 8),
           Expanded(child: AppButton(label: 'Delete ${d.isMax ? 'Max' : 'Min'}', variant: AppButtonVariant.outline, icon: LucideIcons.delete, onPressed: c.deleteStored)),
         ]),
         const SizedBox(height: 8),
-        AppButton(label: 'Report problem for Spd #${d.spindle}${problems == 0 ? '' : ' ($problems)'}', variant: AppButtonVariant.outline, expand: true, icon: LucideIcons.triangleAlert, onPressed: onProblem),
+        AppButton(label: 'Report problem for spindle ${d.spindle}${problems == 0 ? '' : ' ($problems reported)'}', variant: AppButtonVariant.outline, expand: true, icon: LucideIcons.triangleAlert, onPressed: onProblem),
       ]),
     );
   }
@@ -233,7 +233,7 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
                   IconButton(tooltip: 'Delete problem', icon: Icon(LucideIcons.trash2, size: 18, color: t.destructive), onPressed: () => c.removeProblem(p.id)),
                 ]),
               ),
-            AppTextField(controller: _text, maxLines: 4, hint: 'Enter problem description for Spindle ${d.spindle}…'),
+            AppTextField(label: 'Problem description', controller: _text, maxLines: 4, hint: 'For example: loose thread near the guide'),
             const SizedBox(height: 4),
             Text('${_text.text.length}/500', textAlign: TextAlign.end, style: TextStyle(fontSize: 12, color: t.mutedForeground)),
             const SizedBox(height: 8),
@@ -249,7 +249,7 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
               },
             ),
             const SizedBox(height: 8),
-            AppButton(label: 'Back', variant: AppButtonVariant.outline, onPressed: widget.onBack),
+            AppButton(label: 'Cancel', variant: AppButtonVariant.outline, onPressed: widget.onBack),
           ]),
         ),
       ]),

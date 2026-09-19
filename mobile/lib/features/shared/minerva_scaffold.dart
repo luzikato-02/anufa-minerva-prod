@@ -154,7 +154,7 @@ class _SyncChip extends ConsumerWidget {
     final s = ref.watch(syncQueueProvider);
     if (s.ops.isEmpty) return const SizedBox.shrink();
     return IconButton(
-      tooltip: '${s.ops.length} upload${s.ops.length == 1 ? '' : 's'} waiting',
+      tooltip: s.failed > 0 ? '${uploadsLabel(s.failed)} rejected by the server' : '${uploadsLabel(s.ops.length)} waiting',
       onPressed: () => context.push('/sync'),
       icon: Badge.count(
         count: s.ops.length,

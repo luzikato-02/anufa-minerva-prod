@@ -8,7 +8,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_alert.dart';
 import '../../../core/ui/app_button.dart';
 import '../../../core/ui/app_text_field.dart';
-import '../../settings/settings_shell.dart' show showToast;
 import '../tension_models.dart';
 
 /// Max / Min reading box that turns red with the allowed range when out of spec.
@@ -175,7 +174,7 @@ class NumberStepper extends StatelessWidget {
     return Row(children: [
       Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
       const Spacer(),
-      IconButton.outlined(tooltip: 'Previous $label', onPressed: onPrev, icon: const Icon(LucideIcons.chevronLeft)),
+      IconButton.outlined(tooltip: 'Previous ${label.toLowerCase()}', onPressed: onPrev, icon: const Icon(LucideIcons.chevronLeft)),
       InkWell(
         onTap: onTap,
         child: Container(
@@ -186,30 +185,33 @@ class NumberStepper extends StatelessWidget {
           child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
       ),
-      IconButton.outlined(tooltip: 'Next $label', onPressed: onNext, icon: const Icon(LucideIcons.chevronRight)),
+      IconButton.outlined(tooltip: 'Next ${label.toLowerCase()}', onPressed: onNext, icon: const Icon(LucideIcons.chevronRight)),
     ]);
   }
 }
 
 /// Asks for a number in `1..max`; returns null if cancelled.
-Future<int?> askNumber(BuildContext context, {required String title, required int current, required int max}) {
+Future<int?> askNumber(BuildContext context, {required String title, required int current, required int max, String confirmLabel = 'Go'}) {
   final c = TextEditingController(text: '$current');
+  String? error;
   return showDialog<int>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-      content: AppTextField(controller: c, autofocus: true, keyboardType: TextInputType.number, hint: '1 – $max', inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-      actions: [
-        AppButton(label: 'Cancel', variant: AppButtonVariant.outline, onPressed: () => Navigator.pop(ctx)),
-        AppButton(label: 'Go', onPressed: () {
-          final v = int.tryParse(c.text);
-          if (v == null || v < 1 || v > max) {
-            showToast(ctx, 'Please enter a number between 1 and $max');
-            return;
-          }
-          Navigator.pop(ctx, v);
-        }),
-      ],
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        content: AppTextField(controller: c, autofocus: true, keyboardType: TextInputType.number, hint: '1–$max', error: error, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+        actions: [
+          AppButton(label: 'Cancel', variant: AppButtonVariant.outline, onPressed: () => Navigator.pop(ctx)),
+          AppButton(label: confirmLabel, onPressed: () {
+            final v = int.tryParse(c.text);
+            if (v == null || v < 1 || v > max) {
+              setState(() => error = 'Enter a number from 1 to $max');
+              return;
+            }
+            Navigator.pop(ctx, v);
+          }),
+        ],
+      ),
     ),
   );
 }
@@ -218,12 +220,12 @@ Future<int?> askNumber(BuildContext context, {required String title, required in
 Future<bool?> askFinishChoice(BuildContext context) => showDialog<bool?>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Finish measurement session', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-        content: const Text('Save this session to Minerva. Would you like to clear the data on this device afterwards?'),
+        title: const Text('Finish session', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        content: const Text('Save this session to Minerva. Clear the data on this device afterwards?'),
         actionsOverflowButtonSpacing: 8,
         actions: [
-          AppButton(label: 'Yes, clear all', variant: AppButtonVariant.destructive, onPressed: () => Navigator.pop(ctx, true)),
-          AppButton(label: 'No, keep data', onPressed: () => Navigator.pop(ctx, false)),
+          AppButton(label: 'Save and clear device data', variant: AppButtonVariant.destructive, onPressed: () => Navigator.pop(ctx, true)),
+          AppButton(label: 'Save and keep device data', onPressed: () => Navigator.pop(ctx, false)),
           AppButton(label: 'Cancel', variant: AppButtonVariant.outline, onPressed: () => Navigator.pop(ctx)),
         ],
       ),
@@ -242,8 +244,8 @@ Future<void> runUpload(BuildContext context, {required String what, required Fut
         title: Text(result == SubmitResult.sent ? 'Saved' : 'Saved on this device', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         content: Text(result == SubmitResult.sent
             ? 'The $what was saved to Minerva.'
-            : 'No connection right now. The $what is stored safely and will upload automatically when you are back online. You can check it under the cloud icon.'),
-        actions: [AppButton(label: 'OK', onPressed: () => Navigator.pop(ctx))],
+            : 'No connection right now. The $what is stored safely and will upload automatically when you are back online. Check it in the Sync queue (cloud icon).'),
+        actions: [AppButton(label: 'Done', onPressed: () => Navigator.pop(ctx))],
       ),
     );
     onDone();

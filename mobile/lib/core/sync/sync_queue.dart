@@ -184,3 +184,6 @@ class SyncQueue extends Notifier<SyncState> {
 }
 
 final syncQueueProvider = NotifierProvider<SyncQueue, SyncState>(SyncQueue.new);
+
+/// "1 upload" / "3 uploads", for messages that count queued uploads.
+String uploadsLabel(int n) => n == 1 ? '1 upload' : '$n uploads';

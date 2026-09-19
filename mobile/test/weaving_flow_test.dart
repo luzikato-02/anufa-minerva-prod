@@ -20,7 +20,7 @@ Future<FakeAdapter> _openSelect(WidgetTester t, Map<String, Handler> routes, {Li
 
 Future<void> _create(WidgetTester t, String po) async {
   await t.enterText(find.byType(TextField).first, po);
-  await t.tap(find.text('Create New Session'));
+  await t.tap(find.text('Create new session'));
   await t.pumpAndSettle();
 }
 
@@ -29,7 +29,7 @@ Future<void> _fillParamsAndStart(WidgetTester t) async {
   await t.enterText(find.byType(TextField).at(6), '30'); // spec
   await t.enterText(find.byType(TextField).at(7), '3'); // ±
   await t.enterText(find.byType(TextField).at(8), 'W-3'); // machine
-  await t.tap(find.text('Start Recording'));
+  await t.tap(find.text('Start recording'));
   await t.pumpAndSettle();
 }
 
@@ -47,7 +47,7 @@ void main() {
 
   testWidgets('a production order is required', (tester) async {
     await _openSelect(tester, {});
-    await tester.tap(find.text('Create New Session'));
+    await tester.tap(find.text('Create new session'));
     await tester.pump();
     expect(find.text('Enter a production order number first.'), findsOneWidget);
   });
@@ -57,14 +57,28 @@ void main() {
       'GET /tension-records/session/PO5': (_) => (status: 200, body: {'status': 'success', 'data': _session}),
     });
     await _create(tester, 'PO5');
-    expect(find.text('Session already exists'), findsOneWidget);
+    expect(find.text('Continue existing session?'), findsOneWidget);
 
-    await tester.tap(find.text('Continue session'));
+    await tester.tap(find.text('Continue session').last); // the dialog's button, on top of the screen's
     await tester.pumpAndSettle();
 
-    expect(find.text('Weaving Tension Recorder'), findsOneWidget);
+    expect(find.text('Recording parameters'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'FAB-9'), findsOneWidget); // form came from the server
-    expect(find.text('Resume Recording'), findsOneWidget); // grid has readings
+    expect(find.text('Resume recording'), findsOneWidget); // grid has readings
+  });
+
+  testWidgets('starting without a production order shows the error under the field, not in a dialog', (tester) async {
+    await _openSelect(tester, {'GET /tension-records/session/PO9': (_) => (status: 404, body: {})});
+    await _create(tester, 'PO9');
+    await tester.enterText(find.byType(TextField).at(2), '');
+    await tester.tap(find.text('Start recording'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a production order to start recording.'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+
+    await tester.enterText(find.byType(TextField).at(2), 'PO9');
+    await tester.pump();
+    expect(find.text('Enter a production order to start recording.'), findsNothing);
   });
 
   testWidgets('Continue with no session shows an error', (tester) async {
@@ -72,9 +86,9 @@ void main() {
       'GET /tension-records/session/NOPE': (_) => (status: 404, body: {'status': 'error', 'message': 'No in-progress session found'}),
     });
     await tester.enterText(find.byType(TextField).first, 'NOPE');
-    await tester.tap(find.text('Continue Session'));
+    await tester.tap(find.text('Continue session'));
     await tester.pumpAndSettle();
-    expect(find.text('No in-progress session found for "NOPE".'), findsOneWidget);
+    expect(find.text('No session in progress for NOPE. Check the production order or create a new session.'), findsOneWidget);
   });
 
   testWidgets('new session: starts on the server, autosaves after entries, finishes with PUT status completed', (tester) async {
@@ -102,7 +116,7 @@ void main() {
 
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('No, keep data'));
+    await tester.tap(find.text('Save and keep device data'));
     await tester.pumpAndSettle();
 
     expect(find.text('Saved'), findsOneWidget);
@@ -120,8 +134,8 @@ void main() {
     await _create(tester, 'PO8');
     await _fillParamsAndStart(tester);
 
-    await tester.tap(find.byTooltip('Next Side'));
-    await tester.tap(find.byTooltip('Next Row'));
+    await tester.tap(find.byTooltip('Next side'));
+    await tester.tap(find.byTooltip('Next row'));
     await tester.pump();
     expect(find.text('BI-B-Col1'), findsOneWidget);
 
@@ -150,7 +164,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Yes, clear all'));
+    await tester.tap(find.text('Save and clear device data'));
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsOneWidget);
 
