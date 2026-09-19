@@ -10,6 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../shared/minerva_scaffold.dart';
 import 'widgets/home_config.dart';
 import 'widgets/home_header.dart';
+import 'widgets/module_stat.dart';
 import 'widgets/module_tile.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/summary_card.dart';
@@ -104,9 +105,9 @@ class DashboardScreen extends ConsumerWidget {
                         0,
                       ),
                       child: SummaryCard(
-                        stat: data.value == null
-                            ? null
-                            : SummaryStat.from(data.value!),
+                        stats: data.value == null
+                            ? const []
+                            : ModuleStat.listFrom(data.value!),
                         loading: data.isLoading && !data.hasValue,
                         error: data.hasError && !data.hasValue
                             ? ApiException.from(data.error!).message

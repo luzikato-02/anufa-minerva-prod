@@ -1,76 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/auth/auth_controller.dart';
 import '../../../core/sync/sync_queue.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.g.dart';
 import 'home_config.dart';
-
-/// The headline number of the card, derived from the /dashboard payload.
-class SummaryStat {
-  const SummaryStat({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.secondary,
-    required this.path,
-  });
-  final IconData icon;
-  final String title;
-  final String value;
-  final String secondary;
-  final String path;
-
-  /// First section the user's role can see: tension, then stock taking, then users.
-  static SummaryStat? from(Map<String, dynamic> d) {
-    final tension = d['tension'];
-    if (tension is Map) {
-      return SummaryStat(
-        icon: LucideIcons.activity,
-        title: 'Tension records',
-        value: '${tension['total']}',
-        secondary: '${tension['open_problems']} open problems',
-        path: '/tension-records',
-      );
-    }
-    final stock = d['stockTake'];
-    if (stock is Map) {
-      return SummaryStat(
-        icon: LucideIcons.scanBarcode,
-        title: 'Stock sessions',
-        value: '${stock['total']}',
-        secondary: '${stock['in_progress']} in progress',
-        path: '/stock-take-records',
-      );
-    }
-    final users = d['users'];
-    if (users is Map) {
-      return SummaryStat(
-        icon: LucideIcons.users,
-        title: 'Users',
-        value: '${users['total']}',
-        secondary: '${users['unassigned']} without a role',
-        path: '/users',
-      );
-    }
-    return null;
-  }
-}
+import 'module_stat.dart';
+import 'stat_pager.dart';
 
 /// White card overlapping the hero: headline value on the left, quick actions on the right.
 class SummaryCard extends ConsumerWidget {
   const SummaryCard({
     super.key,
-    required this.stat,
+    required this.stats,
     required this.loading,
     this.error,
     this.onRetry,
   });
 
-  final SummaryStat? stat;
+  final List<ModuleStat> stats;
   final bool loading;
   final String? error;
   final VoidCallback? onRetry;
@@ -147,54 +97,13 @@ class SummaryCard extends ConsumerWidget {
         ],
       );
     }
-    final s = stat;
-    if (s == null) {
+    if (stats.isEmpty) {
       return Text(
         'No summary for your role.',
         style: TextStyle(fontSize: 13, color: t.mutedForeground),
       );
     }
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => context.go(s.path),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(s.icon, size: 16, color: t.mutedForeground),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    s.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: t.mutedForeground,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              s.value,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              s.secondary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, color: t.mutedForeground),
-            ),
-          ],
-        ),
-      ),
-    );
+    return StatPager(stats: stats);
   }
 }
 
