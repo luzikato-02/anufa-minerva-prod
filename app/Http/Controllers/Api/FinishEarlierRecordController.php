@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Concerns\HandlesJsonColumns;
 use App\Models\FinishEarlierRecord;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class FinishEarlierRecordController extends Controller
 {
+    use HandlesJsonColumns;
+
     
     /**
      * List all recorded sessions.
@@ -18,8 +21,19 @@ class FinishEarlierRecordController extends Controller
         // Default: 10 rows per page, but frontend can override using ?per_page=
         $perPage = min((int) $request->get('per_page', 10), 200);
 
-        $records = FinishEarlierRecord::orderBy('created_at', 'desc')
-        ->paginate($perPage);
+        $query = FinishEarlierRecord::query();
+
+        // The display page has always sent `search`; it used to be ignored.
+        if ($search = strtolower(trim((string) $request->get('search', '')))) {
+            $fields = array_map(fn ($f) => $this->jsonExtract('metadata', "$.{$f}"), ['production_order', 'style', 'machine_number', 'shift_group']);
+            $query->where(function ($q) use ($fields, $search) {
+                foreach ($fields as $expr) {
+                    $q->orWhereRaw("LOWER({$expr}) LIKE ?", ["%{$search}%"]);
+                }
+            });
+        }
+
+        $records = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json($records);
     }
@@ -106,6 +120,10 @@ class FinishEarlierRecordController extends Controller
 
         // Find the session by production_order inside metadata
         $record = FinishEarlierRecord::where('metadata->production_order', $productionOrder)->first();
+
+        if (! $record) {
+            return response()->json(['message' => 'Session not found'], 404);
+        }
 
         $record->addEntry($data);
 

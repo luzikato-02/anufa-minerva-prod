@@ -14,6 +14,17 @@ class DashboardController extends Controller
 
     public function index()
     {
+        return Inertia::render('dashboard', $this->stats());
+    }
+
+    /** Same numbers as the web dashboard, for the mobile API. */
+    public function apiIndex()
+    {
+        return response()->json($this->stats());
+    }
+
+    private function stats(): array
+    {
         $user = auth()->user();
 
         $tension = null;
@@ -35,10 +46,12 @@ class DashboardController extends Controller
         if ($user->can('stock-take.view')) {
             $sessions  = StockTakingRecord::all(['id', 'metadata']);
             $total     = $sessions->count();
-            $completed = $sessions->filter(fn ($s) => ($s->metadata['session_status'] ?? '') === 'completed')->count();
+            // Sessions store "In Progress" / "Completed"; compare case- and separator-insensitively.
+            $status = fn ($s) => strtolower(str_replace('_', ' ', $s->metadata['session_status'] ?? ''));
+            $completed = $sessions->filter(fn ($s) => $status($s) === 'completed')->count();
             $stockTake = [
                 'total'       => $total,
-                'in_progress' => $sessions->filter(fn ($s) => ($s->metadata['session_status'] ?? '') === 'in_progress')->count(),
+                'in_progress' => $sessions->filter(fn ($s) => $status($s) === 'in progress')->count(),
                 'completed'   => $completed,
                 'completion'  => $total > 0 ? round($completed / $total * 100) : 0,
             ];
@@ -52,6 +65,6 @@ class DashboardController extends Controller
             ];
         }
 
-        return Inertia::render('dashboard', compact('tension', 'stockTake', 'users'));
+        return compact('tension', 'stockTake', 'users');
     }
 }
