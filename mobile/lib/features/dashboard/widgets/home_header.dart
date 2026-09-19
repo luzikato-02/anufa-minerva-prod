@@ -6,6 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/auth/auth_controller.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_alert.dart';
+import 'home_config.dart';
+import 'scan_sheet.dart';
 import 'sync_pill.dart';
 
 /// Content of the hero block: sync pill, scan shortcut, profile menu and greeting.
@@ -28,16 +30,16 @@ class HomeHeader extends ConsumerWidget {
                 runSpacing: 8,
                 children: [
                   const SyncPill(),
-                  if (session.can('stock-take.create'))
+                  if (scanOptionsFor(session).isNotEmpty)
                     Semantics(
                       button: true,
-                      label: 'Scan stock',
+                      label: 'Scan, choose a document or form',
                       child: Material(
                         color: t.primaryForeground,
                         shape: const StadiumBorder(),
                         child: InkWell(
                           customBorder: const StadiumBorder(),
-                          onTap: () => context.go('/stock-taking'),
+                          onTap: () => showScanOptions(context, session),
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(minHeight: 44),
                             child: Padding(

@@ -128,3 +128,25 @@ List<NavItem> itemsFor(NavSection section, Session session) => [
 /// Short tile label: drops the "Record:" / "Display:" / "Scan:" prefix the drawer uses.
 String tileLabel(String title) =>
     title.contains(': ') ? title.split(': ').last : title;
+
+/// What the Home "Scan" button offers. Each option opens the screen that reads a photo or file.
+class ScanOption {
+  const ScanOption(this.title, this.description, this.icon, this.path, this.category, {this.permission});
+  final String title;
+  final String description;
+  final IconData icon;
+  final String path;
+  final ModuleCategory category;
+  final String? permission;
+}
+
+const scanOptions = [
+  ScanOption('Document Intelligence', 'Extract text and tables from a PDF or photo', LucideIcons.fileSearch, '/document-intelligence', ModuleCategory.general),
+  ScanOption('Finish Earlier Form', 'Extract data from a finish earlier form', LucideIcons.scanLine, '/finish-earlier/scan', ModuleCategory.loom, permission: 'finish-earlier.create'),
+];
+
+/// The scan options this user may open.
+List<ScanOption> scanOptionsFor(Session session) => [
+      for (final o in scanOptions)
+        if (o.permission == null || session.can(o.permission!)) o,
+    ];

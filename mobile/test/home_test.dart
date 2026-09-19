@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anufa_minerva_mobile/core/sync/sync_queue.dart';
-import 'package:flutter/material.dart' show Badge, MaterialApp, Text;
+import 'package:flutter/material.dart' show Badge, InkWell, MaterialApp, Text;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 
 import 'support/pump.dart';
@@ -96,5 +96,39 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('Weaving, 1 waiting to upload')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('Twisting, \\d+ waiting')), findsNothing);
     semantics.dispose();
+  });
+
+  testWidgets('the Scan button offers document intelligence and the finish earlier form, and opens the one you choose', (tester) async {
+    await pumpSignedIn(
+      tester,
+      permissions: [..._perms, 'finish-earlier.create'],
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+
+    await tester.tap(find.widgetWithText(InkWell, 'Scan').first); // the header button; the summary card has a stock "Scan" action too
+    await tester.pumpAndSettle();
+    expect(find.text('Choose what to scan'), findsOneWidget);
+    expect(find.text('Document Intelligence'), findsWidgets); // the option (and its tile behind the sheet)
+    expect(find.text('Finish Earlier Form'), findsWidgets); // the option (and the tile behind the sheet)
+
+    await tester.tap(find.text('Extract data from a finish earlier form'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan Finish Earlier Form'), findsOneWidget);
+    expect(find.text('Choose what to scan'), findsNothing);
+  });
+
+  testWidgets('without permission for the finish earlier form, Scan goes straight to document intelligence', (tester) async {
+    await pumpSignedIn(
+      tester,
+      permissions: _perms,
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+
+    await tester.tap(find.widgetWithText(InkWell, 'Scan').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose what to scan'), findsNothing);
+    expect(find.text('Extract text from a document'), findsOneWidget);
   });
 }
