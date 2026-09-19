@@ -20,6 +20,7 @@ class TensionRecord extends Model
         'problems',
         'metadata',
         'user_id', // if you have user authentication
+        'client_uuid', // mobile idempotency key
     ];
 
     protected $casts = [

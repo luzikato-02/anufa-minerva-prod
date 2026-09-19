@@ -15,6 +15,18 @@ Minerva is an internal web application built by **Anufa Technologies** to manage
 | **User & Role Management** | RBAC with fine-grained permissions per module (view / create / edit / delete) |
 | **Activity Log** | Audit trail of all user actions |
 
+## Repository layout
+
+This is a monorepo:
+
+| Path | What |
+|---|---|
+| `/` (`app/`, `resources/`, `routes/`, …) | Laravel + Inertia/React web app and the JSON API |
+| `routes/api.php`, `app/Http/Controllers/Api/` | Mobile token API (`/api/v1`, Sanctum) |
+| [`mobile/`](mobile/README.md) | Flutter mobile app (Android-first) that consumes `/api/v1` |
+
+The mobile theme is generated from `resources/css/app.css`; see `mobile/README.md`.
+
 ## Tech Stack
 
 - **Backend** — Laravel 11 (PHP 8.2+), PostgreSQL

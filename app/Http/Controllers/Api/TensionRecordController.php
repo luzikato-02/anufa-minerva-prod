@@ -71,6 +71,7 @@ class TensionRecordController extends Controller
             'form_data' => 'required|array',
             'measurement_data' => 'required|array',
             'problems' => 'array',
+            'client_uuid' => 'nullable|uuid',
             'metadata' => 'required|array',
             'metadata.total_measurements' => 'required|integer|min:0',
             'metadata.completed_measurements' => 'required|integer|min:0',
@@ -80,9 +81,21 @@ class TensionRecordController extends Controller
             'metadata.item_number' => 'nullable|string',
             'metadata.item_description' => 'nullable|string',
             'metadata.yarn_code' => 'nullable|string',
+            // Without this rule validated() drops the key and a finished record stays resumable.
+            'metadata.status' => 'nullable|in:in_progress,completed',
         ]);
 
         // Add user_id if authenticated
+        // A retried offline upload returns the record it already created.
+        if (! empty($validated['client_uuid'])
+            && $existing = TensionRecord::where('client_uuid', $validated['client_uuid'])->first()) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Tension record already saved',
+                'data' => $existing,
+            ]);
+        }
+
         if (auth()->check()) {
             $validated['user_id'] = auth()->id();
         }

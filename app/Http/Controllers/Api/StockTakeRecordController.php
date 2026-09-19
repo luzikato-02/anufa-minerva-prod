@@ -107,7 +107,9 @@ class StockTakeRecordController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Session loaded successfully'
+                'message' => 'Session loaded successfully',
+                // Lets the mobile app cache the batch list for offline scanning.
+                'data' => $record,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -254,6 +256,7 @@ class StockTakeRecordController extends Controller
             'timestamp'            => $data['timestamp'] ?? $data['found_at'] ?? null,
             'user_found'           => $data['user_found'] ?? $data['found_by'] ?? null,
             'explanation'          => $data['explanation'] ?? null,     // ✅ added
+            'client_uuid'          => $data['client_uuid'] ?? null,
         ];
 
         // Step 2️⃣: Validate normalized fields
@@ -269,6 +272,7 @@ class StockTakeRecordController extends Controller
             'timestamp'            => 'required|date',
             'user_found'           => 'required|string',
             'explanation'          => 'nullable|string',
+            'client_uuid'          => 'nullable|uuid',
         ])->validate();
 
         // Step 3️⃣: Find session
@@ -297,6 +301,16 @@ class StockTakeRecordController extends Controller
         ];
 
         $recordedBatches = $record->recorded_batches ?? [];
+
+        // A retried offline upload must not record (and count) the same batch twice.
+        if (! empty($validated['client_uuid'])) {
+            $already = collect($recordedBatches)->firstWhere('client_uuid', $validated['client_uuid']);
+            if ($already) {
+                return response()->json(['success' => true, 'message' => 'Batch already recorded', 'data' => $already]);
+            }
+            $batchRecording['client_uuid'] = $validated['client_uuid'];
+        }
+
         $recordedBatches[] = $batchRecording;
         $record->recorded_batches = $recordedBatches;
 
