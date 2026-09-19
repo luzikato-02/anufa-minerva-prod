@@ -294,7 +294,7 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                 console.error('Scanner error:', err);
                 if (err.name === 'NotAllowedError') {
                     setScanError(
-                        'Camera access denied. Please allow camera permission.',
+                        'Camera access denied. Check the site permissions for this page (tap the lock icon next to the address bar) and allow Camera, or enable camera access for this browser in your device\'s system settings, then reload the page.',
                     );
                 } else if (err.name === 'NotFoundError') {
                     setScanError('No camera device found.');
