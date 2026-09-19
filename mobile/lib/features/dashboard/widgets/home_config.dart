@@ -3,33 +3,23 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/nav.dart';
 import '../../../core/auth/session.dart';
+import '../../../core/sync/sync_queue.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Base hues for the module tiles. Backgrounds and icon colours are derived per
-/// theme in [TileTint], so nothing here is a literal pastel.
-const _tintHues = [
-  Color(0xFF3B82F6),
-  Color(0xFF10B981),
-  Color(0xFFF59E0B),
-  Color(0xFF8B5CF6),
-  Color(0xFFEC4899),
-  Color(0xFF06B6D4),
-];
-
+/// Fill and icon colours for a module tile, taken from the theme tokens by category.
+/// `general` modules (documents, admin, "All modules") stay neutral.
 class TileTint {
   const TileTint._(this.background, this.icon);
 
-  factory TileTint.of(BuildContext context, int index) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final hue = _tintHues[index % _tintHues.length];
-    final background = Color.alphaBlend(
-      hue.withValues(alpha: dark ? 0.2 : 0.14),
-      context.tokens.card,
-    );
-    final icon = HSLColor.fromColor(hue)
-        .withLightness(dark ? 0.75 : 0.3)
-        .toColor();
-    return TileTint._(background, icon);
+  factory TileTint.of(BuildContext context, ModuleCategory category) {
+    final semantic = context.semantic;
+    final tint = switch (category) {
+      ModuleCategory.process => semantic.moduleProcess,
+      ModuleCategory.inventory => semantic.moduleInventory,
+      ModuleCategory.loom => semantic.moduleLoom,
+      ModuleCategory.general => ModuleTint(fill: context.tokens.muted, icon: context.tokens.foreground),
+    };
+    return TileTint._(tint.fill, tint.icon);
   }
 
   final Color background;
@@ -58,8 +48,9 @@ class QuickActionConfig {
     this.icon,
     this.path,
     this.permission,
-    this.syncPathContains,
-  );
+    this.syncPathContains, {
+    this.syncLabelStartsWith,
+  });
   final String label;
   final IconData icon;
   final String path;
@@ -67,6 +58,15 @@ class QuickActionConfig {
 
   /// Queued offline uploads whose API path contains this show as the action's badge.
   final String syncPathContains;
+
+  /// Twisting and weaving both upload to `/tension-records`, so the path alone can't tell them apart;
+  /// the queue label ("Twisting · …", "Weaving · …") does.
+  final String? syncLabelStartsWith;
+
+  bool matches(SyncOp op) =>
+      op.path.contains(syncPathContains) &&
+      (syncLabelStartsWith == null ||
+          op.label.startsWith(syncLabelStartsWith!));
 }
 
 const quickActions = [
@@ -76,6 +76,7 @@ const quickActions = [
     '/twisting-tension',
     'tension-records.create',
     'tension-records',
+    syncLabelStartsWith: 'Twisting',
   ),
   QuickActionConfig(
     'Weaving',
@@ -83,6 +84,7 @@ const quickActions = [
     '/weaving-tension',
     'tension-records.create',
     'tension-records',
+    syncLabelStartsWith: 'Weaving',
   ),
   QuickActionConfig(
     'Scan',

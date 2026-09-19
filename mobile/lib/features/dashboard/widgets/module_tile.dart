@@ -11,21 +11,21 @@ class ModuleTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.label,
-    required this.tintIndex,
+    required this.category,
     required this.onTap,
     this.badge,
   });
 
   final IconData icon;
   final String label;
-  final int tintIndex;
+  final ModuleCategory category;
   final VoidCallback onTap;
   final String? badge;
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final tint = TileTint.of(context, tintIndex);
+    final tint = TileTint.of(context, category);
     return Semantics(
       button: true,
       label: badge == null ? label : '$label, $badge',
@@ -114,7 +114,7 @@ class ModuleGrid extends StatelessWidget {
         ModuleTile(
           icon: shown[i].icon,
           label: tileLabel(shown[i].title),
-          tintIndex: i,
+          category: shown[i].category,
           badge: homeTileBadges[shown[i].path],
           onTap: () => context.go(shown[i].path),
         ),
@@ -122,7 +122,7 @@ class ModuleGrid extends StatelessWidget {
         ModuleTile(
           icon: LucideIcons.layoutGrid,
           label: 'All modules',
-          tintIndex: shown.length,
+          category: ModuleCategory.general,
           onTap: () => Scaffold.of(context).openDrawer(),
         ),
     ];

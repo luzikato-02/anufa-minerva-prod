@@ -114,9 +114,7 @@ class SummaryCard extends ConsumerWidget {
                     Expanded(
                       child: _QuickAction(
                         config: a,
-                        badge: ops
-                            .where((o) => o.path.contains(a.syncPathContains))
-                            .length,
+                        badge: ops.where(a.matches).length,
                       ),
                     ),
                 ],

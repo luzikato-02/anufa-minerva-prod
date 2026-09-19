@@ -6,8 +6,15 @@ const String kFontFamily = 'Instrument Sans';
 
 /// Design tokens mirrored from the web app (shadcn/ui new-york, neutral).
 /// Read with `context.tokens` so widgets never hardcode colours.
+/// A category colour for the Home module tiles: a pale (light) or deep (dark) [fill] and the [icon] drawn on it.
+class ModuleTint {
+  const ModuleTint({required this.fill, required this.icon});
+  final Color fill;
+  final Color icon;
+}
+
 class AppTokens extends ThemeExtension<AppTokens> {
-  const AppTokens(this.t, {required this.success, required this.warning});
+  const AppTokens(this.t, {required this.success, required this.warning, required this.moduleProcess, required this.moduleInventory, required this.moduleLoom});
 
   final TokenSet t;
 
@@ -16,12 +23,38 @@ class AppTokens extends ThemeExtension<AppTokens> {
   final Color success;
   final Color warning;
 
-  static const light = AppTokens(lightTokens, success: Color(0xFF16A34A), warning: Color(0xFFD97706));
-  static const dark = AppTokens(darkTokens, success: Color(0xFF4ADE80), warning: Color(0xFFFBBF24));
+  /// Module category colours (Home tiles). Hues are 51°+ (OKLCH) from success, warning and destructive so they never read as status;
+  /// fill/icon are held at one perceived lightness per theme, giving 6.6-7.3:1 (light) and 8.5-8.9:1 (dark) icon-on-fill contrast.
+  final ModuleTint moduleProcess;
+  final ModuleTint moduleInventory;
+  final ModuleTint moduleLoom;
+
+  static const light = AppTokens(
+    lightTokens,
+    success: Color(0xFF16A34A),
+    warning: Color(0xFFD97706),
+    moduleProcess: ModuleTint(fill: Color(0xFFE7F1FE), icon: Color(0xFF07519D)),
+    moduleInventory: ModuleTint(fill: Color(0xFFD8F7FA), icon: Color(0xFF045E66)),
+    moduleLoom: ModuleTint(fill: Color(0xFFF2EDFE), icon: Color(0xFF603B93)),
+  );
+  static const dark = AppTokens(
+    darkTokens,
+    success: Color(0xFF4ADE80),
+    warning: Color(0xFFFBBF24),
+    moduleProcess: ModuleTint(fill: Color(0xFF132741), icon: Color(0xFF9DC7FE)),
+    moduleInventory: ModuleTint(fill: Color(0xFF012D31), icon: Color(0xFF4DDAE9)),
+    moduleLoom: ModuleTint(fill: Color(0xFF2B203D), icon: Color(0xFFCEB5FF)),
+  );
 
   @override
-  AppTokens copyWith({TokenSet? t, Color? success, Color? warning}) =>
-      AppTokens(t ?? this.t, success: success ?? this.success, warning: warning ?? this.warning);
+  AppTokens copyWith({TokenSet? t, Color? success, Color? warning, ModuleTint? moduleProcess, ModuleTint? moduleInventory, ModuleTint? moduleLoom}) => AppTokens(
+        t ?? this.t,
+        success: success ?? this.success,
+        warning: warning ?? this.warning,
+        moduleProcess: moduleProcess ?? this.moduleProcess,
+        moduleInventory: moduleInventory ?? this.moduleInventory,
+        moduleLoom: moduleLoom ?? this.moduleLoom,
+      );
 
   @override
   AppTokens lerp(ThemeExtension<AppTokens>? other, double amount) => amount < 0.5 ? this : (other as AppTokens);

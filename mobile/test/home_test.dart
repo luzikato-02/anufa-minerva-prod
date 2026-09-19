@@ -1,6 +1,11 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:anufa_minerva_mobile/core/sync/sync_queue.dart';
+import 'package:flutter/material.dart' show Badge, MaterialApp, Text;
+import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 
 import 'support/pump.dart';
 
@@ -13,6 +18,8 @@ const _dashboard = {
 };
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('home shows the summary, permitted modules, quick actions and bottom nav', (tester) async {
     await pumpSignedIn(
       tester,
@@ -69,5 +76,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('All modules'), findsOneWidget);
+  });
+
+  testWidgets('a queued weaving upload badges Weaving only, not Twisting (both post to /tension-records)', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final adapter = await pumpSignedIn(
+      tester,
+      permissions: _perms,
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+    adapter.offline = true; // an offline submit is what lands in the queue
+    final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+    await tester.runAsync(() => container.read(syncQueueProvider.notifier).submit(method: 'POST', path: '/tension-records', data: {}, label: 'Weaving · PO 5 · machine W-3'));
+    await tester.pumpAndSettle();
+
+    final visible = [for (final b in tester.widgetList<Badge>(find.byType(Badge))) if (b.isLabelVisible && b.label is Text) (b.label! as Text).data];
+    expect(visible.where((t) => t == '1'), hasLength(1)); // the Weaving action; Twisting and Scan show none
+    expect(find.bySemanticsLabel(RegExp('Weaving, 1 waiting to upload')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Twisting, \\d+ waiting')), findsNothing);
+    semantics.dispose();
   });
 }
