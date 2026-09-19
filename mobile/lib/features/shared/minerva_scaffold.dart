@@ -47,13 +47,7 @@ class _MinervaDrawer extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(color: t.primary, borderRadius: BorderRadius.circular(Radii.md)),
-                alignment: Alignment.center,
-                child: Text('M', style: TextStyle(color: t.primaryForeground, fontWeight: FontWeight.w600)),
-              ),
+              ClipRRect(borderRadius: BorderRadius.circular(Radii.md), child: Image.asset('assets/images/logo.png', width: 32, height: 32)),
               const SizedBox(width: 10),
               const Text('Minerva', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             ]),

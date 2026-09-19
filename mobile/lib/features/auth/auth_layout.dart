@@ -22,13 +22,7 @@ class AuthLayout extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Center(
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: t.primary, borderRadius: BorderRadius.circular(Radii.lg)),
-                    alignment: Alignment.center,
-                    child: Text('M', style: TextStyle(color: t.primaryForeground, fontSize: 22, fontWeight: FontWeight.w600)),
-                  ),
+                  child: ClipRRect(borderRadius: BorderRadius.circular(Radii.lg), child: Image.asset('assets/images/logo.png', width: 48, height: 48)),
                 ),
                 const SizedBox(height: 20),
                 Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
