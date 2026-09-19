@@ -30,8 +30,8 @@ const navGroups = <NavGroup>[
   NavGroup('Inventory', [
     NavItem('Record: Batch Stock Taking', '/stock-taking', LucideIcons.scanBarcode, permission: 'stock-take.create'),
     NavItem('Display: Stock Take Records', '/stock-take-records', LucideIcons.clipboardList, permission: 'stock-take.view'),
-    NavItem('Record: Liner Material I/O', '/under-construction', LucideIcons.construction),
-    NavItem('Display: Liner Material I/O', '/under-construction', LucideIcons.construction),
+    NavItem('Record: Liner Material I/O', '/liner-material-io/record', LucideIcons.construction),
+    NavItem('Display: Liner Material I/O', '/liner-material-io/display', LucideIcons.construction),
   ]),
   NavGroup('Loom', [
     NavItem('Display: Finish Earlier Records', '/finish-earlier', LucideIcons.listChecks, permission: 'finish-earlier.view'),

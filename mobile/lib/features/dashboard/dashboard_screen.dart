@@ -39,7 +39,7 @@ class DashboardScreen extends ConsumerWidget {
           data.when(
             loading: () => const Column(children: [AppSkeleton(height: 110), SizedBox(height: 12), AppSkeleton(height: 110)]),
             error: (e, _) => Column(children: [
-              AppAlert(message: e.toString()),
+              AppAlert(message: ApiException.from(e).message),
               const SizedBox(height: 12),
               AppButton(label: 'Retry', variant: AppButtonVariant.outline, onPressed: () => ref.invalidate(dashboardProvider)),
             ]),

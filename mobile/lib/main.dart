@@ -18,5 +18,7 @@ class MinervaApp extends ConsumerWidget {
         darkTheme: buildTheme(Brightness.dark),
         themeMode: ref.watch(themeModeProvider),
         routerConfig: ref.watch(routerProvider),
+        // Honour large-text settings but cap them so fixed-height controls and tables don't break.
+        builder: (context, child) => MediaQuery.withClampedTextScaling(maxScaleFactor: 1.4, child: child!),
       );
 }

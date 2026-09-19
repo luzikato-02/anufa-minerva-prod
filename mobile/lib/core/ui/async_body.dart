@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../api/api_exception.dart';
 import '../theme/app_theme.dart';
 import 'app_alert.dart';
 import 'app_button.dart';
@@ -23,7 +24,7 @@ class AsyncBody<T> extends StatelessWidget {
       skipLoadingOnRefresh: true,
       loading: () => ListView(padding: const EdgeInsets.all(16), children: [for (var i = 0; i < 4; i++) const Padding(padding: EdgeInsets.only(bottom: 12), child: AppSkeleton(height: 72))]),
       error: (e, _) => ListView(padding: const EdgeInsets.all(16), children: [
-        AppAlert(message: e.toString()),
+        AppAlert(message: ApiException.from(e).message),
         const SizedBox(height: 12),
         AppButton(label: 'Retry', variant: AppButtonVariant.outline, onPressed: onRetry),
       ]),

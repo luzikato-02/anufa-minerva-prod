@@ -40,10 +40,10 @@ class AppButton extends StatelessWidget {
       AppButtonVariant.ghost => (Colors.transparent, t.foreground, BorderSide.none),
       AppButtonVariant.link => (Colors.transparent, t.primary, BorderSide.none),
     };
-    // Web heights are 36/32/40; floor targets to 44+ for gloved factory use except `sm`.
+    // Web heights are 36/32/40; floor every size to 44+ for gloved factory use.
     final (double h, double px, double fs) = switch (size) {
       AppButtonSize.defaultSize => (44, 16, 14),
-      AppButtonSize.sm => (36, 12, 13),
+      AppButtonSize.sm => (44, 12, 13),
       AppButtonSize.lg => (52, 24, 15),
       AppButtonSize.icon => (44, 0, 14),
     };
