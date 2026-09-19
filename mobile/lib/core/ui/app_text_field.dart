@@ -46,6 +46,7 @@ class AppTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null)

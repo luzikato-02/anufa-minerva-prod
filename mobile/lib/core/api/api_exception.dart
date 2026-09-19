@@ -32,6 +32,9 @@ class ApiException implements Exception {
           if (fields.isNotEmpty) message = fields.values.first;
         }
       }
+      // Laravel's bare "Server Error" and proxy errors (no JSON body) say nothing the reader can act on.
+      final generic = message == null || message.trim().toLowerCase() == 'server error';
+      if (code >= 500 && generic) message = 'The server had a problem. Try again in a few minutes.';
       return ApiException(message ?? 'Request failed ($code)', status: code, fieldErrors: fields);
     }
     return ApiException(error.toString());
