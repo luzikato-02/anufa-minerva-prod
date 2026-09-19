@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesJsonColumns;
+use App\Models\FinishEarlierRecord;
 use App\Models\StockTakingRecord;
 use App\Models\TensionRecord;
 use App\Models\User;
@@ -17,10 +18,21 @@ class DashboardController extends Controller
         return Inertia::render('dashboard', $this->stats());
     }
 
-    /** Same numbers as the web dashboard, for the mobile API. */
+    /**
+     * The web dashboard's numbers plus finish-earlier counts for the mobile home screen.
+     * The finish-earlier block is added here, not in stats(), so the web dashboard's props stay as they are.
+     */
     public function apiIndex()
     {
-        return response()->json($this->stats());
+        $stats = $this->stats();
+
+        // Plain aggregate counts, gated by the same permission as the finish-earlier list. Weeks start on Monday.
+        $stats['finishEarlier'] = auth()->user()->can('finish-earlier.view') ? [
+            'total'     => FinishEarlierRecord::count(),
+            'this_week' => FinishEarlierRecord::where('created_at', '>=', now()->startOfWeek())->count(),
+        ] : null;
+
+        return response()->json($stats);
     }
 
     private function stats(): array
