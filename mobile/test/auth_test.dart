@@ -72,11 +72,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.token, 'tok');
-    expect(find.text('Welcome back, Ana'), findsOneWidget);
+    expect(find.text('Welcome back,'), findsOneWidget);
+    expect(find.text('Ana'), findsOneWidget);
     expect(find.text('Tension records'), findsOneWidget);
     expect(find.text('Stock taking'), findsNothing);
 
-    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.tap(find.text('All modules'));
     await tester.pumpAndSettle();
     expect(find.text('Display: Tension Records'), findsOneWidget);
     expect(find.text('Record: Twisting Tension'), findsNothing); // needs tension-records.create
@@ -89,8 +90,9 @@ void main() {
       'GET /dashboard': (_) => (status: 200, body: {'tension': null, 'stockTake': null, 'users': null}),
     });
     await pumpApp(tester, ok, MemoryTokenStore('good'));
-    expect(find.text('Welcome back, Ana'), findsOneWidget);
-    expect(find.text('No dashboard sections are available for your role.'), findsOneWidget);
+    expect(find.text('Welcome back,'), findsOneWidget);
+    expect(find.text('Ana'), findsOneWidget);
+    expect(find.text('No summary for your role.'), findsOneWidget);
   });
 
   testWidgets('revoked token is cleared and user is sent to login', (tester) async {

@@ -1,0 +1,73 @@
+import 'dart:ui' show Size;
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'support/pump.dart';
+
+const _perms = ['tension-records.create', 'tension-records.view', 'stock-take.create', 'stock-take.view'];
+
+const _dashboard = {
+  'tension': {'total': 12, 'twisting': 7, 'weaving': 5, 'open_problems': 3},
+  'stockTake': null,
+  'users': null,
+};
+
+void main() {
+  testWidgets('home shows the summary, permitted modules, quick actions and bottom nav', (tester) async {
+    await pumpSignedIn(
+      tester,
+      permissions: _perms,
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+
+    expect(find.text('Ana'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('3 open problems'), findsOneWidget);
+    expect(find.text('Twisting Tension'), findsOneWidget); // module tile, "Record:" prefix dropped
+    expect(find.text('All modules'), findsOneWidget);
+    expect(find.text('Machine Maintenance'), findsNothing); // no permission
+    for (final tab in ['Home', 'Record', 'Records', 'More']) {
+      expect(find.text(tab), findsOneWidget);
+    }
+  });
+
+  testWidgets('bottom nav switches landings and is absent on recording screens', (tester) async {
+    await pumpSignedIn(
+      tester,
+      permissions: _perms,
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+
+    await tester.tap(find.text('Records'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tension Records'), findsOneWidget);
+    expect(find.text('Twisting Tension'), findsNothing); // a Record item, not on this landing
+
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    expect(find.text('Log out'), findsOneWidget);
+  });
+
+  testWidgets('a role with no summary section still renders the home screen', (tester) async {
+    await pumpSignedIn(tester, permissions: const [], routes: const {}, path: '/dashboard');
+    expect(find.text('No summary for your role.'), findsOneWidget);
+    expect(find.text('All modules'), findsOneWidget);
+  });
+
+  testWidgets('home does not overflow at the maximum text scale on a narrow phone', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+    await pumpSignedIn(
+      tester,
+      permissions: _perms,
+      routes: {'GET /dashboard': (_) => (status: 200, body: _dashboard)},
+      path: '/dashboard',
+    );
+    tester.view.physicalSize = const Size(720, 4800); // 360dp wide
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('All modules'), findsOneWidget);
+  });
+}

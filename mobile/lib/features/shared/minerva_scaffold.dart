@@ -10,10 +10,11 @@ import '../../core/config/env.dart';
 import '../../core/sync/sync_queue.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/ui/app_alert.dart';
+import '../dashboard/widgets/minerva_bottom_nav.dart';
 
 /// Page frame with the permission-filtered drawer (the web sidebar).
 class MinervaScaffold extends ConsumerWidget {
-  const MinervaScaffold({super.key, required this.title, required this.body, this.actions, this.fab, this.showDrawer = true});
+  const MinervaScaffold({super.key, required this.title, required this.body, this.actions, this.fab, this.showDrawer = true, this.hideAppBar = false, this.bottomNav = false});
 
   final String title;
   final Widget body;
@@ -21,13 +22,20 @@ class MinervaScaffold extends ConsumerWidget {
   final Widget? fab;
   final bool showDrawer;
 
+  /// Home draws its own header, so it drops the app bar (the drawer stays reachable via "All modules").
+  final bool hideAppBar;
+
+  /// Only the four top-level screens show the bottom bar; recording and edit screens keep the full height.
+  final bool bottomNav;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), actions: [const _SyncChip(), ...?actions]),
+      appBar: hideAppBar ? null : AppBar(title: Text(title), actions: [const _SyncChip(), ...?actions]),
       drawer: showDrawer ? const _MinervaDrawer() : null,
       floatingActionButton: fab,
-      body: SafeArea(child: body),
+      bottomNavigationBar: bottomNav ? const MinervaBottomNav() : null,
+      body: SafeArea(top: !hideAppBar, child: body),
     );
   }
 }

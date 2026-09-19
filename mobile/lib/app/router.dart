@@ -8,6 +8,7 @@ import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/two_factor_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/dashboard/module_list_screen.dart';
 import '../features/machines/machine_screen.dart';
 import '../features/settings/appearance_page.dart';
 import '../features/sync/sync_screen.dart';
@@ -77,6 +78,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/forgot-password', builder: (_, _) => const ForgotPasswordScreen()),
       GoRoute(path: '/forbidden', builder: (_, _) => const ModulePlaceholder('Access denied', message: "You don't have permission to view this page.")),
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+      GoRoute(path: '/record', builder: (_, _) => const ModuleListScreen(title: 'Record', section: NavSection.record)),
+      GoRoute(path: '/records', builder: (_, _) => const ModuleListScreen(title: 'Records', section: NavSection.records)),
+      GoRoute(path: '/more', builder: (_, _) => const ModuleListScreen(title: 'More', section: NavSection.more, showAccount: true)),
       GoRoute(path: '/settings', redirect: (_, _) => '/settings/profile'),
       GoRoute(path: '/settings/profile', builder: (_, _) => const ProfilePage()),
       GoRoute(path: '/settings/password', builder: (_, _) => const PasswordPage()),
