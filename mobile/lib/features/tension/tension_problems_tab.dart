@@ -41,7 +41,7 @@ class _TensionProblemsTabState extends ConsumerState<TensionProblemsTab> with Au
       query: PagedQuery('/tension-problems', {'status': _status, if (_search.isNotEmpty) 'search': _search}),
       emptyMessage: _status == 'open' ? 'No open problems 🎉' : 'No problems found.',
       header: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
         child: Column(children: [
           SearchField(hint: 'Search description, machine, item', onChanged: (v) => setState(() => _search = v)),
           const SizedBox(height: 8),

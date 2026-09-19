@@ -93,7 +93,7 @@ class _RecordListState extends State<_RecordList> with AutomaticKeepAliveClientM
       query: PagedQuery('/tension-records', {'type': widget.type, if (_search.isNotEmpty) 'search': _search}),
       emptyMessage: 'No ${widget.type} records yet.',
       header: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
         child: SearchField(hint: 'Search item, machine, operator', onChanged: (v) => setState(() => _search = v)),
       ),
       itemBuilder: (ctx, r) => _RecordCard(TensionRecord(r)),
