@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'press_scale.dart';
+import 'swap_icon.dart';
 
 enum AppButtonVariant { primary, destructive, outline, secondary, ghost, link }
 
@@ -52,7 +54,7 @@ class AppButton extends StatelessWidget {
         ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: fg))
         : child ??
             Row(mainAxisSize: MainAxisSize.min, children: [
-              if (icon != null) Icon(icon, size: 18),
+              if (icon != null) SwapIcon(icon!),
               if (icon != null && label != null) const SizedBox(width: 8),
               if (label != null)
                 Flexible(
@@ -65,7 +67,9 @@ class AppButton extends StatelessWidget {
                       )),
                 ),
             ]);
-    final button = Opacity(
+    final button = PressScale(
+      enabled: !disabled,
+      child: Opacity(
       opacity: disabled && !loading ? .5 : 1,
       child: Material(
         color: bg,
@@ -81,6 +85,7 @@ class AppButton extends StatelessWidget {
             child: DefaultTextStyle.merge(style: TextStyle(color: fg), child: IconTheme.merge(data: IconThemeData(color: fg), child: content)),
           ),
         ),
+      ),
       ),
     );
     return expand ? SizedBox(width: double.infinity, child: button) : button;

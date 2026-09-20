@@ -86,6 +86,31 @@ class _EditFormState extends ConsumerState<_EditForm> {
   late final List<TextEditingController> _problemText = [for (final p in widget.record.problems) TextEditingController(text: '${p['description'] ?? ''}')];
   bool _busy = false;
   ApiException? _error;
+  bool _saved = false;
+  late final List<String> _initial;
+
+  Iterable<TextEditingController> get _all => [..._header.values, ..._problemText, for (final v in _values) ...[v.$1, v.$2]];
+  List<TextEditingController> get _controllers => _all.toList();
+
+  bool get _dirty {
+    if (_saved) return false;
+    final now = _controllers;
+    for (var i = 0; i < now.length; i++) {
+      if (now[i].text != _initial[i]) return true;
+    }
+    return false;
+  }
+
+  Future<void> _confirmLeave() async {
+    final leave = await confirmDialog(context, title: 'Discard changes?', message: 'You have edits on this record that are not saved.', confirmLabel: 'Discard', destructive: true);
+    if (leave && mounted) context.pop();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _controllers.map((c) => c.text).toList(); // before any typing; late fields are lazy
+  }
 
   @override
   void dispose() {
@@ -131,6 +156,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
       await ref.read(dioProvider).patch('/tension-records/${r.id}', data: {'metadata': metadata, 'form_data': form, 'measurement_data': measurement, 'problems': problems});
       ref.invalidate(pagedProvider);
       ref.invalidate(tensionRecordProvider(r.id));
+      _saved = true;
       if (mounted) context.pop();
     } catch (e) {
       if (mounted) setState(() => _error = ApiException.from(e));
@@ -141,6 +167,22 @@ class _EditFormState extends ConsumerState<_EditForm> {
 
   @override
   Widget build(BuildContext context) {
+    // Dirtiness is read when Back is pressed, so no rebuild is needed as the user types.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_dirty) {
+          _confirmLeave();
+        } else {
+          context.pop();
+        }
+      },
+      child: _form(),
+    );
+  }
+
+  Widget _form() {
     return ListView(padding: const EdgeInsets.all(16), children: [
       if (_error != null) ...[AppAlert(message: _error!.message), const SizedBox(height: 12)],
       AppCard(

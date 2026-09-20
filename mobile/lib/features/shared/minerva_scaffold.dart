@@ -30,12 +30,23 @@ class MinervaScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
+    // Screens opened with `go` replace the stack, so Back would close the app. Send them Home instead;
+    // pushed pages (details, edit, sync) pop normally, and Home itself exits.
+    final router = GoRouter.maybeOf(context);
+    final canLeave = router == null || router.canPop() || router.routerDelegate.currentConfiguration.uri.path == '/dashboard';
+    return PopScope(
+      canPop: canLeave,
+      onPopInvokedWithResult: (didPop, _) {
+        // Every PopScope on the route is told about a blocked Back, so only act when this one was the blocker.
+        if (!didPop && !canLeave) context.go('/dashboard');
+      },
+      child: Scaffold(
       appBar: hideAppBar ? null : AppBar(title: Text(title), actions: [const _SyncChip(), ...?actions]),
       drawer: showDrawer ? const _MinervaDrawer() : null,
       floatingActionButton: fab,
       bottomNavigationBar: bottomNav ? const MinervaBottomNav() : null,
       body: SafeArea(top: !hideAppBar, child: body),
+      ),
     );
   }
 }

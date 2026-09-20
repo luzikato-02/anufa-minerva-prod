@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/auth/auth_controller.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_alert.dart';
+import '../shifts.dart';
 import 'home_config.dart';
 import 'scan_sheet.dart';
 import 'sync_pill.dart';
@@ -13,12 +13,16 @@ import 'sync_pill.dart';
 /// Content of the hero block: sync pill, scan shortcut, profile menu and greeting.
 /// Sits on a `primary` surface, so it only uses `primaryForeground` for text and icons.
 class HomeHeader extends ConsumerWidget {
-  const HomeHeader({super.key});
+  const HomeHeader({super.key, required this.kpis});
+
+  /// The three values under the greeting; "–" while a number is not available.
+  final List<HeroKpi> kpis;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.tokens;
     final session = ref.watch(sessionProvider);
+    final now = ref.watch(clockProvider).value ?? DateTime.now();
+    final shift = shiftAt(now);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -35,7 +39,7 @@ class HomeHeader extends ConsumerWidget {
                       button: true,
                       label: 'Scan, choose a document or form',
                       child: Material(
-                        color: t.primaryForeground,
+                        color: HeroColors.foreground,
                         shape: const StadiumBorder(),
                         child: InkWell(
                           customBorder: const StadiumBorder(),
@@ -52,7 +56,7 @@ class HomeHeader extends ConsumerWidget {
                                   Icon(
                                     LucideIcons.scanBarcode,
                                     size: 18,
-                                    color: t.primary,
+                                    color: HeroColors.background,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
@@ -60,7 +64,7 @@ class HomeHeader extends ConsumerWidget {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: t.primary,
+                                      color: HeroColors.background,
                                     ),
                                   ),
                                 ],
@@ -79,23 +83,25 @@ class HomeHeader extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          'Welcome back,',
-          style: TextStyle(
-            fontSize: 14,
-            color: t.primaryForeground.withValues(alpha: 0.8),
-          ),
+          contextLine(now, shift),
+          style: TextStyle(fontSize: 12, color: HeroColors.muted),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
-          session.name.split(' ').first,
-          maxLines: 1,
+          greetingFor(now, session.name.split(' ').first),
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: t.primaryForeground,
+            fontSize: 24,
+            height: 1.2,
+            fontWeight: FontWeight.w500,
+            color: HeroColors.foreground,
           ),
         ),
+        const SizedBox(height: 12),
+        _ShiftBar(shift: shift, progress: shiftProgress(now, shift)),
+        const SizedBox(height: 16),
+        _KpiStrip(kpis: kpis),
       ],
     );
   }
@@ -107,7 +113,6 @@ class _ProfileMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.tokens;
     return PopupMenuButton<String>(
       tooltip: 'Profile menu',
       onSelected: (v) async {
@@ -134,17 +139,103 @@ class _ProfileMenu extends ConsumerWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: t.primaryForeground.withValues(alpha: 0.16),
+          color: HeroColors.foreground.withValues(alpha: 0.16),
         ),
         child: Text(
           initials,
           style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
-            color: t.primaryForeground,
+            color: HeroColors.foreground,
           ),
         ),
       ),
+    );
+  }
+}
+
+class HeroKpi {
+  const HeroKpi(this.value, this.label);
+  final String value;
+  final String label;
+}
+
+/// A 4px bar showing how far through the current shift it is.
+class _ShiftBar extends StatelessWidget {
+  const _ShiftBar({required this.shift, required this.progress});
+  final Shift shift;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Shift ${shift.name} progress',
+      value: '${(progress * 100).round()} percent',
+      child: ExcludeSemantics(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          // Explicit widths: a Stack would shrink to its only in-flow child and collapse the track to the fill's width.
+          child: LayoutBuilder(
+            builder: (context, box) => Stack(
+              children: [
+                SizedBox(
+                  width: box.maxWidth,
+                  height: 4,
+                  child: ColoredBox(color: HeroColors.track),
+                ),
+                SizedBox(
+                  key: const Key('shift-bar-fill'),
+                  width: box.maxWidth * progress,
+                  height: 4,
+                  child: const ColoredBox(color: kHeroAccent),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three equal columns: a value over its label.
+class _KpiStrip extends StatelessWidget {
+  const _KpiStrip({required this.kpis});
+  final List<HeroKpi> kpis;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final k in kpis)
+          Expanded(
+            child: MergeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    k.value,
+                    style: TextStyle(
+                      fontSize: 18,
+                      height: 1.2,
+                      fontWeight: FontWeight.w500,
+                      color: HeroColors.foreground,
+                    ),
+                  ),
+                  Text(
+                    k.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.3,
+                      color: HeroColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

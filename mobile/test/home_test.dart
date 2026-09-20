@@ -28,8 +28,8 @@ void main() {
       path: '/dashboard',
     );
 
-    expect(find.text('Ana'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
+    expect(find.textContaining(', Ana'), findsOneWidget); // "Good <part of day>, Ana"
+    expect(find.text('12'), findsNWidgets(2)); // the hero's "records" KPI and the summary card
     expect(find.text('3 open problems'), findsOneWidget);
     expect(find.text('Twisting Tension'), findsOneWidget); // module tile, "Record:" prefix dropped
     expect(find.text('All modules'), findsOneWidget);

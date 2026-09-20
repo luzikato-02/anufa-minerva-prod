@@ -31,7 +31,11 @@ class _StatPagerState extends State<StatPager> {
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.jumpToPage(target);
     } else {
-      _controller.animateToPage(target, duration: const Duration(milliseconds: 150), curve: const Cubic(0.2, 0, 0, 1));
+      _controller.animateToPage(
+        target,
+        duration: const Duration(milliseconds: 150),
+        curve: const Cubic(0.2, 0, 0, 1),
+      );
     }
   }
 
@@ -46,8 +50,10 @@ class _StatPagerState extends State<StatPager> {
       container: true,
       customSemanticsActions: many
           ? {
-              const CustomSemanticsAction(label: 'Next stat'): () => _goTo(_page + 1),
-              const CustomSemanticsAction(label: 'Previous stat'): () => _goTo(_page - 1),
+              const CustomSemanticsAction(label: 'Next stat'): () =>
+                  _goTo(_page + 1),
+              const CustomSemanticsAction(label: 'Previous stat'): () =>
+                  _goTo(_page - 1),
             }
           : null,
       child: Column(
@@ -60,14 +66,20 @@ class _StatPagerState extends State<StatPager> {
               controller: _controller,
               itemCount: stats.length,
               onPageChanged: (i) => setState(() => _page = i),
-              itemBuilder: (context, i) => _StatPage(stat: stats[i], position: many ? '${i + 1} of ${stats.length}' : null),
+              itemBuilder: (context, i) => _StatPage(
+                stat: stats[i],
+                position: many ? '${i + 1} of ${stats.length}' : null,
+              ),
             ),
           ),
           if (many)
             ExcludeSemantics(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: [for (var i = 0; i < stats.length; i++) _Dot(active: i == _page, onTap: () => _goTo(i))],
+                children: [
+                  for (var i = 0; i < stats.length; i++)
+                    _Dot(active: i == _page, onTap: () => _goTo(i)),
+                ],
               ),
             ),
         ],
@@ -100,13 +112,39 @@ class _StatPage extends StatelessWidget {
                 Icon(stat.icon, size: 16, color: t.mutedForeground),
                 const SizedBox(width: 6),
                 Flexible(
-                  child: Text(stat.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w500, color: t.mutedForeground)),
+                  child: Text(
+                    stat.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.25,
+                      fontWeight: FontWeight.w500,
+                      color: t.mutedForeground,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            Text(stat.value, style: const TextStyle(fontSize: 28, height: 1.2, fontWeight: FontWeight.w700)),
-            Text(stat.secondary, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.3, color: t.mutedForeground)),
+            Text(
+              stat.value,
+              style: const TextStyle(
+                fontSize: 28,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              stat.secondary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.3,
+                color: t.mutedForeground,
+              ),
+            ),
           ],
         ),
       ),
@@ -124,18 +162,26 @@ class _Dot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: SizedBox(
-        width: 44,
-        height: 24,
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: active ? 16 : 6,
-            height: 6,
-            decoration: BoxDecoration(color: active ? t.foreground : t.mutedForeground.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(3)),
+    // Flexible: three 44px targets are wider than the card's left half on a 320dp phone, so they shrink to fit.
+    return Flexible(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 24,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: active ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: active
+                    ? t.foreground
+                    : t.mutedForeground.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
           ),
         ),
       ),

@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/sync/sync_queue.dart';
-import '../../../core/theme/app_theme.dart';
+import 'home_config.dart';
 
 /// Pill on the hero: "Synced" or the number of uploads waiting; opens the queue.
 class SyncPill extends ConsumerWidget {
@@ -12,7 +12,6 @@ class SyncPill extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.tokens;
     final s = ref.watch(syncQueueProvider);
     final waiting = s.ops.length - s.failed;
     final synced = s.ops.isEmpty;
@@ -27,7 +26,7 @@ class SyncPill extends ConsumerWidget {
                 ? '${uploadsLabel(s.failed)} rejected by the server, open sync queue'
                 : '${uploadsLabel(waiting)} waiting, open sync queue'),
       child: Material(
-        color: t.primaryForeground.withValues(alpha: 0.16),
+        color: HeroColors.foreground.withValues(alpha: 0.16),
         shape: const StadiumBorder(),
         child: InkWell(
           customBorder: const StadiumBorder(),
@@ -46,7 +45,7 @@ class SyncPill extends ConsumerWidget {
                               ? LucideIcons.cloudAlert
                               : LucideIcons.cloudOff),
                     size: 18,
-                    color: t.primaryForeground,
+                    color: HeroColors.foreground,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -54,7 +53,7 @@ class SyncPill extends ConsumerWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: t.primaryForeground,
+                      color: HeroColors.foreground,
                     ),
                   ),
                 ],

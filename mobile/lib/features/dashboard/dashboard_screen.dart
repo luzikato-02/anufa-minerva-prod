@@ -5,13 +5,17 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/sync/online_state.dart';
 import '../../core/sync/sync_queue.dart';
-import '../../core/theme/app_theme.dart';
 import '../shared/minerva_scaffold.dart';
 import 'widgets/home_config.dart';
 import 'widgets/home_header.dart';
 import 'widgets/module_stat.dart';
+import 'widgets/overlap_column.dart';
+import 'widgets/plied_cord_texture.dart';
 import 'widgets/module_tile.dart';
+import 'widgets/problems_carousel.dart';
+import 'widgets/trends_section.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/summary_card.dart';
 
@@ -37,8 +41,7 @@ final dismissedNoticeProvider = NotifierProvider<DismissedNotice, String?>(
   DismissedNotice.new,
 );
 
-const _heroContentHeight =
-    212.0; // leaves room for the pills wrapping at 1.4x text scale
+/// How far the summary card rides up over the hero's rounded bottom edge.
 const _cardOverlap = 40.0;
 
 class DashboardScreen extends ConsumerWidget {
@@ -46,7 +49,6 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.tokens;
     final session = ref.watch(sessionProvider);
     final data = ref.watch(dashboardProvider);
     final failed = ref.watch(syncQueueProvider).failed;
@@ -55,93 +57,93 @@ class DashboardScreen extends ConsumerWidget {
         ? '${failed == 1 ? '1 upload was' : '$failed uploads were'} rejected by the server. Open the Sync queue to retry or discard.'
         : null;
     final topInset = MediaQuery.paddingOf(context).top;
-    final heroHeight = topInset + _heroContentHeight;
+    final tension = data.value?['tension'];
+    final kpis = [
+      HeroKpi(tension is Map ? '${tension['total']}' : '–', 'records'),
+      HeroKpi(tension is Map ? '${tension['open_problems']}' : '–', 'open'),
+      HeroKpi('$failed', 'rejected'),
+    ];
+    // Hold the texture still while offline: the stopped strands are a quiet status cue.
+    final offline = ref.watch(onlineProvider).value == false;
 
     return MinervaScaffold(
       title: 'Home',
       hideAppBar: true,
       bottomNav: true,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: RefreshIndicator(
-            edgeOffset: topInset,
-            onRefresh: () => ref.refresh(dashboardProvider.future),
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                // Hero + summary card. The card is the only in-flow child, pushed down by the hero minus the overlap.
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: heroHeight,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: t.primary,
-                          borderRadius: const BorderRadius.vertical(
-                            bottom: Radius.circular(24),
+      body: RefreshIndicator(
+        edgeOffset: topInset,
+        onRefresh: () => ref.refresh(dashboardProvider.future),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            OverlapColumn(
+              overlap: _cardOverlap,
+              // The hero background bleeds to the edges on any width; its content stays in a 600px column.
+              top: ClipRRect(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                child: ColoredBox(
+                  color: HeroColors.background,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: PliedCordTexture(accent: kHeroAccent, paused: offline)),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          // 56 below the content: 40 sits under the summary card, 16 stays clear.
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, _cardOverlap + 16),
+                            child: HomeHeader(kpis: kpis),
                           ),
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            topInset + 12,
-                            16,
-                            0,
-                          ),
-                          child: const HomeHeader(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              bottom: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: SummaryCard(
+                          stats: data.value == null ? const [] : ModuleStat.listFrom(data.value!),
+                          loading: data.isLoading && !data.hasValue,
+                          error: data.hasError && !data.hasValue ? ApiException.from(data.error!).message : null,
+                          onRetry: () => ref.invalidate(dashboardProvider),
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        heroHeight - _cardOverlap,
-                        16,
-                        0,
+                      // An actionable alert leads: it sits above the tiles, and only while there is something to act on.
+                      if (notice != null && notice != dismissed)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          child: NoticeBanner(
+                            title: 'Uploads need attention',
+                            message: notice,
+                            onTap: () => context.push('/sync'),
+                            onDismiss: () => ref.read(dismissedNoticeProvider.notifier).dismiss(notice),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: ModuleGrid(items: homeModules(session), maxTiles: 8, showAllModules: true),
                       ),
-                      child: SummaryCard(
-                        stats: data.value == null
-                            ? const []
-                            : ModuleStat.listFrom(data.value!),
-                        loading: data.isLoading && !data.hasValue,
-                        error: data.hasError && !data.hasValue
-                            ? ApiException.from(data.error!).message
-                            : null,
-                        onRetry: () => ref.invalidate(dashboardProvider),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: ModuleGrid(
-                    items: homeModules(session),
-                    maxTiles: 8,
-                    showAllModules: true,
+                      if (session.can('tension-records.view')) ...[
+                        const SizedBox(height: 8),
+                        const ProblemsSection(),
+                        const SizedBox(height: 32),
+                        const TrendsSection(),
+                      ],
+                      const SizedBox(height: 24),
+                    ],
                   ),
                 ),
-                if (notice != null && notice != dismissed)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: NoticeBanner(
-                      title: 'Uploads need attention',
-                      message: notice,
-                      onTap: () => context.push('/sync'),
-                      onDismiss: () => ref
-                          .read(dismissedNoticeProvider.notifier)
-                          .dismiss(notice),
-                    ),
-                  ),
-                const SizedBox(height: 24),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

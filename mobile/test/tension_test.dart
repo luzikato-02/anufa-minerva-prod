@@ -2,6 +2,7 @@ import 'package:anufa_minerva_mobile/core/files/file_opener.dart';
 import 'package:anufa_minerva_mobile/features/tension/tension_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'support/pump.dart';
 
@@ -117,6 +118,35 @@ void main() {
     expect(sent['measurement_data'], {'AI': {'A': {'1': {'max': 33.5, 'min': 29}}}});
     expect((sent['metadata'] as Map)['status'], 'in_progress'); // untouched keys preserved
     expect((sent['form_data'] as Map)['specTens'], 30);
+  });
+
+  testWidgets('Back on the edit form asks before discarding changes, and not when nothing changed', (tester) async {
+    await pumpSignedIn(tester, permissions: ['tension-records.view', 'tension-records.edit'], path: '/tension-records/9', routes: {
+      'GET /tension-records/9': (_) => (status: 200, body: {'status': 'success', 'data': _weaving}),
+    });
+    GoRouter router() => GoRouter.of(tester.element(find.byType(Scaffold).first));
+    Future<void> back() async {
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+    }
+
+    router().push('/tension-records/9/edit');
+    await tester.pumpAndSettle();
+    await back(); // untouched: leaves straight away
+    expect(router().state.uri.path, '/tension-records/9');
+
+    router().push('/tension-records/9/edit');
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '31').first, '33.5');
+    await back();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(router().state.uri.path, '/tension-records/9/edit'); // still editing
+    await back();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(router().state.uri.path, '/tension-records/9');
   });
 
   testWidgets('edit route is blocked without the edit permission', (tester) async {

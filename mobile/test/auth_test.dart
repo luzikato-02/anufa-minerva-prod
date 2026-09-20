@@ -17,6 +17,8 @@ Future<void> pumpApp(WidgetTester tester, FakeAdapter adapter, MemoryTokenStore 
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
+  tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true); // the Home texture loops forever
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
   await tester.pumpWidget(ProviderScope(overrides: overridesFor(adapter, store), child: const MinervaApp()));
   await tester.pumpAndSettle();
 }
@@ -72,8 +74,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.token, 'tok');
-    expect(find.text('Welcome back,'), findsOneWidget);
-    expect(find.text('Ana'), findsOneWidget);
+    expect(find.textContaining(', Ana'), findsOneWidget); // "Good <part of day>, Ana"
     expect(find.text('Tension records'), findsOneWidget);
     expect(find.text('Stock taking'), findsNothing);
 
@@ -90,8 +91,7 @@ void main() {
       'GET /dashboard': (_) => (status: 200, body: {'tension': null, 'stockTake': null, 'users': null}),
     });
     await pumpApp(tester, ok, MemoryTokenStore('good'));
-    expect(find.text('Welcome back,'), findsOneWidget);
-    expect(find.text('Ana'), findsOneWidget);
+    expect(find.textContaining(', Ana'), findsOneWidget); // "Good <part of day>, Ana"
     expect(find.text('No summary for your role.'), findsOneWidget);
   });
 

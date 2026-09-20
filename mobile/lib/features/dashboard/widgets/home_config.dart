@@ -5,6 +5,7 @@ import '../../../app/nav.dart';
 import '../../../core/auth/session.dart';
 import '../../../core/sync/sync_queue.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tokens.g.dart' show darkTokens, lightTokens;
 
 /// Fill and icon colours for a module tile, taken from the theme tokens by category.
 /// `general` modules (documents, admin, "All modules") stay neutral.
@@ -150,3 +151,17 @@ List<ScanOption> scanOptionsFor(Session session) => [
       for (final o in scanOptions)
         if (o.permission == null || session.can(o.permission!)) o,
     ];
+
+/// The Home hero is dark in both themes (its texture and text are designed for a dark surface), so it uses fixed token
+/// values instead of the current theme's `primary`, which turns near-white in dark mode.
+class HeroColors {
+  HeroColors._();
+  static final background = lightTokens.primary; // #171717
+  static final foreground = lightTokens.primaryForeground; // #FAFAFA
+  static final muted = darkTokens.mutedForeground; // context line, KPI labels
+  static final track = darkTokens.muted; // unfilled part of the shift bar
+}
+
+/// Accent for the hero's Z-strand texture and shift bar. The app theme is neutral, so this is the one added constant:
+/// the blue of the "process" module colour, lightened to read on the dark hero.
+const kHeroAccent = Color(0xFF6BA8F0);

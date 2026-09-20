@@ -33,7 +33,7 @@ void main() {
   testWidgets('swiping the summary card moves through the modules the user can see', (tester) async {
     await _home(tester);
     expect(find.text('Tension records'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
+    expect(find.descendant(of: find.byType(StatPager), matching: find.text('12')), findsOneWidget);
     expect(_dots, findsNWidgets(3));
 
     await _swipe(tester);
@@ -86,6 +86,14 @@ void main() {
     await _swipe(tester);
     expect(find.bySemanticsLabel(RegExp('Stock taking, 75 percent complete, 1 session in progress, 2 of 3')), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('three pages and the full set of quick actions fit at 320 wide (the dots shrink to fit)', (tester) async {
+    await _home(tester, perms: [..._all, 'tension-records.create', 'stock-take.create']);
+    tester.view.physicalSize = const Size(640, 4800); // 320dp wide
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(_dots, findsNWidgets(3));
   });
 
   testWidgets('three pages fit at 320 wide with the largest text the app allows', (tester) async {

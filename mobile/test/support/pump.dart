@@ -18,6 +18,9 @@ Future<FakeAdapter> pumpSignedIn(
   tester.view.physicalSize = const Size(800, 4800);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
+  // The Home hero texture loops forever, which pumpAndSettle would wait on; run these tests as a reduced-motion user.
+  tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
   final adapter = FakeAdapter({
     'GET /auth/me': (_) => (status: 200, body: sessionJson(permissions: permissions)),
     'GET /dashboard': (_) => (status: 200, body: {'tension': null, 'stockTake': null, 'users': null}),

@@ -14,7 +14,7 @@ class ModuleTint {
 }
 
 class AppTokens extends ThemeExtension<AppTokens> {
-  const AppTokens(this.t, {required this.success, required this.warning, required this.moduleProcess, required this.moduleInventory, required this.moduleLoom});
+  const AppTokens(this.t, {required this.success, required this.warning, required this.moduleProcess, required this.moduleInventory, required this.moduleLoom, required this.chartProblems, required this.chartMeasurements});
 
   final TokenSet t;
 
@@ -29,6 +29,11 @@ class AppTokens extends ThemeExtension<AppTokens> {
   final ModuleTint moduleInventory;
   final ModuleTint moduleLoom;
 
+  /// Bar colours for the Home trend charts. Problems keep the app-wide red; measurements use the process blue.
+  /// Checked with the dataviz palette validator on the card surface in both themes (lightness band, chroma, CVD, contrast).
+  final Color chartProblems;
+  final Color chartMeasurements;
+
   static const light = AppTokens(
     lightTokens,
     success: Color(0xFF16A34A),
@@ -36,6 +41,8 @@ class AppTokens extends ThemeExtension<AppTokens> {
     moduleProcess: ModuleTint(fill: Color(0xFFE7F1FE), icon: Color(0xFF07519D)),
     moduleInventory: ModuleTint(fill: Color(0xFFD8F7FA), icon: Color(0xFF045E66)),
     moduleLoom: ModuleTint(fill: Color(0xFFF2EDFE), icon: Color(0xFF603B93)),
+    chartProblems: Color(0xFFE7000B),
+    chartMeasurements: Color(0xFF07519D),
   );
   static const dark = AppTokens(
     darkTokens,
@@ -44,16 +51,20 @@ class AppTokens extends ThemeExtension<AppTokens> {
     moduleProcess: ModuleTint(fill: Color(0xFF132741), icon: Color(0xFF9DC7FE)),
     moduleInventory: ModuleTint(fill: Color(0xFF012D31), icon: Color(0xFF4DDAE9)),
     moduleLoom: ModuleTint(fill: Color(0xFF2B203D), icon: Color(0xFFCEB5FF)),
+    chartProblems: Color(0xFFFB2C36),
+    chartMeasurements: Color(0xFF4A90E2),
   );
 
   @override
-  AppTokens copyWith({TokenSet? t, Color? success, Color? warning, ModuleTint? moduleProcess, ModuleTint? moduleInventory, ModuleTint? moduleLoom}) => AppTokens(
+  AppTokens copyWith({TokenSet? t, Color? success, Color? warning, ModuleTint? moduleProcess, ModuleTint? moduleInventory, ModuleTint? moduleLoom, Color? chartProblems, Color? chartMeasurements}) => AppTokens(
         t ?? this.t,
         success: success ?? this.success,
         warning: warning ?? this.warning,
         moduleProcess: moduleProcess ?? this.moduleProcess,
         moduleInventory: moduleInventory ?? this.moduleInventory,
         moduleLoom: moduleLoom ?? this.moduleLoom,
+        chartProblems: chartProblems ?? this.chartProblems,
+        chartMeasurements: chartMeasurements ?? this.chartMeasurements,
       );
 
   @override

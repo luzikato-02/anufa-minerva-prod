@@ -21,8 +21,10 @@ class TensionRecordsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final openProblems = GoRouterState.of(context).uri.queryParameters['tab'] == 'problems';
     return DefaultTabController(
       length: 3,
+      initialIndex: openProblems ? 2 : 0,
       child: MinervaScaffold(
         title: 'Tension Records',
         body: Column(children: [
