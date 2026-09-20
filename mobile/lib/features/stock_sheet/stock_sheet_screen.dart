@@ -209,7 +209,7 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
             const SizedBox(height: 12),
             _scanField('Material code', _material, hint: 'e.g. TY022002756'),
             const SizedBox(height: 12),
-            _scanField('Batch', _batch, hint: 'Batch number, or a note like "kupasan"'),
+            _scanField('Batch', _batch, hint: 'TA… or a note'),
             const SizedBox(height: 12),
             _dateField(),
             const SizedBox(height: 12),
@@ -219,9 +219,11 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
               Expanded(child: AppTextField(label: 'Weight (kg)', controller: _weight, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
             ]),
             const SizedBox(height: 12),
-            AppTextField(label: 'Position', controller: _position, keyboardType: TextInputType.number),
-            const SizedBox(height: 12),
-            AppTextField(label: 'Remark', controller: _remark, hint: 'e.g. ex WV, limit'),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 2, child: AppTextField(label: 'Position', controller: _position, keyboardType: TextInputType.number)),
+              const SizedBox(width: 12),
+              Expanded(flex: 3, child: AppTextField(label: 'Remark', controller: _remark, hint: 'e.g. ex WV')),
+            ]),
             _chips(_recent(sheet.rows, (r) => r.remark), _remark),
             const SizedBox(height: 16),
             AppButton(label: editing == null ? 'Add row' : 'Save changes', icon: editing == null ? LucideIcons.plus : LucideIcons.check, loading: _busy, onPressed: _submit),
@@ -238,7 +240,7 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
         const SizedBox(height: 16),
         AppCard(
           title: 'Rows',
-          description: sheet.rows.isEmpty ? 'Rows you add appear here.' : '${sheet.rows.length} rows · ${_number.format(sheet.totalChs)} cheeses · ${_number.format(sheet.totalWeight)} kg',
+          description: sheet.rows.isEmpty ? 'Rows you add appear here.' : '${sheet.rows.length} ${sheet.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(sheet.totalChs)} cheeses · ${_number.format(sheet.totalWeight)} kg',
           child: Column(children: [
             for (var i = 0; i < sheet.rows.length; i++) _RowTile(number: i + 1, row: sheet.rows[i], waiting: waiting.contains(sheet.rows[i].uuid), selected: editing?.uuid == sheet.rows[i].uuid, onTap: () => _edit(sheet.rows[i])),
           ]),
@@ -290,7 +292,7 @@ class _RowTile extends StatelessWidget {
       if (row.weight != null) '${_number.format(row.weight)} kg',
       if (row.position != null) 'pos ${row.position}',
       if (row.remark.isNotEmpty) row.remark,
-    ].join(' · ');
+    ].map((phrase) => phrase.replaceAll(' ', '\u00A0')).join(' · '); // wrap between phrases, not inside one
     return Semantics(
       button: true,
       label: 'Row $number, ${row.batch}${row.color.isEmpty ? '' : ', ${row.color}'}. $detail${waiting ? '. Waiting to upload' : ''}. Tap to edit.',

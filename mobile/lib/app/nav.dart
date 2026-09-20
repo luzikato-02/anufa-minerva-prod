@@ -38,6 +38,7 @@ const navGroups = <NavGroup>[
   NavGroup('Inventory', [
     NavItem('Record: Batch Stock Taking', '/stock-taking', LucideIcons.scanBarcode, permission: 'stock-take.create', section: NavSection.record, category: ModuleCategory.inventory),
     NavItem('Display: Stock Take Records', '/stock-take-records', LucideIcons.clipboardList, permission: 'stock-take.view', section: NavSection.records, category: ModuleCategory.inventory),
+    NavItem('Display: Stock Sheets', '/stock-sheets', LucideIcons.table, permission: 'stock-take.view', section: NavSection.records, category: ModuleCategory.inventory),
     NavItem('Record: Stock Sheet', '/stock-sheet', LucideIcons.clipboardPenLine, permission: 'stock-take.create', section: NavSection.record, category: ModuleCategory.inventory),
     NavItem('Record: Liner Material I/O', '/liner-material-io/record', LucideIcons.construction, section: NavSection.record, category: ModuleCategory.inventory),
     NavItem('Display: Liner Material I/O', '/liner-material-io/display', LucideIcons.construction, section: NavSection.records, category: ModuleCategory.inventory),

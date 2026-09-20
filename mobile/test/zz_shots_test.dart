@@ -1,4 +1,5 @@
 // TEMPORARY: renders the real screens to PNG for the design preview. Not part of the app or the suite.
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -458,6 +459,34 @@ void main() {
       await tester.tap(find.text('Check batch'));
       await tester.pumpAndSettle();
       await s.shot('52-stock-record-sheet');
+    });
+  }
+  for (final mode in ['light', 'dark']) {
+    testWidgets('shots $mode: stock sheet', (tester) async {
+      addTearDown(tester.view.reset);
+      final s = _Shots(tester, mode);
+      final rows = [
+        {'uuid': 'r1', 'color': 'White orange green', 'material_code': 'TY022002756', 'batch': 'TA0092565', 'prod_date': '2026-09-06', 'chs': 28, 'actual_weight': 146.8, 'position': 30, 'remark': 'ex WV'},
+        {'uuid': 'r2', 'color': 'Pink blue yellow', 'material_code': 'TY0220004540', 'batch': 'kupasan', 'prod_date': '2026-08-14', 'chs': 20, 'actual_weight': 76, 'position': 44, 'remark': 'ex WV'},
+        {'uuid': 'r3', 'color': 'Grey violet', 'material_code': 'TY022003416', 'batch': 'TA0092514', 'chs': 23, 'actual_weight': 82, 'position': 40},
+      ];
+      SharedPreferences.setMockInitialValues({'stock-sheet-active': jsonEncode({'uuid': 's1', 'date': '2026-09-19', 'leader': 'Ana Operator', 'rows': rows})});
+      await s.boot(path: '/stock-sheet');
+      await s.shot('90-sheet-record', scrolled: true);
+      await tester.tap(find.text('kupasan'));
+      await tester.pumpAndSettle();
+      await s.shot('91-sheet-edit');
+      final sheet = {
+        'id': 4, 'sheet_date': '2026-09-19', 'leader': 'Ana Operator',
+        'rows': [for (var i = 0; i < rows.length; i++) {...rows[i], 'id': i + 1, 'line_no': i + 1}],
+      };
+      Map<String, dynamic> page(List l) => {'data': l, 'current_page': 1, 'last_page': 1, 'total': l.length};
+      await s.boot(path: '/stock-sheets', routes: {
+        'GET /stock-sheets': (_) => (status: 200, body: page([{'id': 4, 'sheet_date': '2026-09-19', 'leader': 'Ana Operator', 'rows_count': 3, 'total_chs': 71, 'total_weight': '304.80'}, {'id': 3, 'sheet_date': '2026-09-18', 'leader': 'Budi', 'rows_count': 41, 'total_chs': 812, 'total_weight': '9120.50'}])),
+      });
+      await s.shot('92-sheets-list');
+      await s.boot(path: '/stock-sheets/4', routes: {'GET /stock-sheets/4': (_) => (status: 200, body: {'status': 'success', 'data': sheet})});
+      await s.shot('93-sheet-detail');
     });
   }
   for (final mode in ['light', 'dark']) {

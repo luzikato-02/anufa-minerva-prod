@@ -1,3 +1,4 @@
+import 'package:anufa_minerva_mobile/core/files/file_opener.dart';
 import 'package:anufa_minerva_mobile/core/sync/sync_queue.dart';
 import 'package:anufa_minerva_mobile/core/ui/app_text_field.dart';
 import 'package:anufa_minerva_mobile/features/stock/barcode_scanner.dart';
@@ -33,13 +34,13 @@ Future<void> _fill(WidgetTester t, {String material = 'TY022002756', String batc
   }
 
   await type('e.g. TY022002756', material);
-  await type('Batch number, or a note like "kupasan"', batch);
+  await type('TA… or a note', batch);
   await type('e.g. White orange green', color);
   final labelled = {'Cheeses': chs, 'Weight (kg)': weight, 'Position': position};
   for (final e in labelled.entries) {
     if (e.value != null) await t.enterText(_byLabel(e.key), e.value!);
   }
-  await type('e.g. ex WV, limit', remark);
+  await type('e.g. ex WV', remark);
   await t.pump();
 }
 
@@ -47,6 +48,28 @@ Future<void> _add(WidgetTester t) async {
   await t.ensureVisible(find.text('Add row').last);
   await t.tap(find.text('Add row').last);
   await t.pumpAndSettle();
+}
+
+Map<String, dynamic> _page(List rows) => {'data': rows, 'current_page': 1, 'last_page': 1, 'total': rows.length};
+
+final _sheet = {
+  'id': 4,
+  'sheet_date': '2026-09-19',
+  'leader': 'Ana',
+  'rows': [
+    {'id': 11, 'line_no': 1, 'color': 'White orange green', 'material_code': 'TY022002756', 'batch': 'TA0092565', 'prod_date': '2026-09-06', 'chs': 28, 'actual_weight': 146.8, 'position': 30, 'remark': 'ex WV'},
+    {'id': 12, 'line_no': 2, 'color': null, 'material_code': 'TY0220004540', 'batch': 'kupasan', 'prod_date': null, 'chs': 20, 'actual_weight': 76, 'position': 44, 'remark': null},
+  ],
+};
+
+class _RecordingOpener implements FileOpener {
+  final names = <String>[];
+  final files = <String>[];
+  @override
+  Future<void> open(String filename, List<int> bytes) async {
+    names.add(filename);
+    files.add(String.fromCharCodes(bytes));
+  }
 }
 
 void main() {
@@ -73,7 +96,7 @@ void main() {
     expect(body['sheet_client_uuid'], isNotEmpty);
     expect(body['client_uuid'], isNotEmpty);
     expect(find.text('TA0092565'), findsOneWidget); // now in the Rows list
-    expect(find.textContaining('1 rows · 28 cheeses · 146.8 kg'), findsOneWidget);
+    expect(find.textContaining('1 row · 28 cheeses · 146.8 kg'), findsOneWidget);
     expect(find.text('Add row 2'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'TA0092565'), findsNothing); // batch cleared
   });
@@ -132,7 +155,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'stock-sheet-active': '{"uuid":"s1","date":"2026-09-19","leader":"Ana","rows":[{"uuid":"r1","material_code":"M","batch":"TA9","chs":2}]}'});
     await _open(tester);
     expect(find.text('TA9'), findsOneWidget);
-    expect(find.textContaining('1 rows · 2 cheeses'), findsOneWidget);
+    expect(find.textContaining('1 row · 2 cheeses'), findsOneWidget);
     expect(find.text('Add row 2'), findsOneWidget);
   });
 
@@ -213,5 +236,72 @@ void main() {
     await _fill(tester, color: 'White orange green', chs: '28', weight: '146.8', position: '30', remark: 'ex WV');
     await _add(tester);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the list shows each sheet with its totals and searches on the server', (tester) async {
+    final adapter = await pumpSignedIn(tester, permissions: ['stock-take.view'], path: '/stock-sheets', routes: {
+      'GET /stock-sheets': (_) => (status: 200, body: _page([{'id': 4, 'sheet_date': '2026-09-19', 'leader': 'Ana', 'rows_count': 2, 'total_chs': 48, 'total_weight': '222.80'}])),
+    });
+    expect(find.text('Sat 19 Sep 2026'), findsOneWidget);
+    expect(find.text('Recorded by Ana'), findsOneWidget);
+    expect(find.text('2 rows · 48 cheeses · 222.8 kg'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'kupasan');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(adapter.requests.any((r) => r.uri.queryParameters['search'] == 'kupasan'), isTrue);
+  });
+
+  testWidgets('the sheet page lists every row; viewers cannot edit, and the CSV comes out in the paper column order', (tester) async {
+    final opener = _RecordingOpener();
+    await pumpSignedIn(tester, permissions: ['stock-take.view'], path: '/stock-sheets/4', overrides: [fileOpenerProvider.overrideWithValue(opener)], routes: {
+      'GET /stock-sheets/4': (_) => (status: 200, body: {'status': 'success', 'data': _sheet}),
+      'GET /stock-sheets/4/download': (_) => (status: 200, body: {'success': true, 'summary': [{'NO': 1, 'WARNA': 'White orange green', 'KODE MATERIAL': 'TY022002756', 'BATCH': 'TA0092565', 'PROD DATE': '2026-09-06', 'CHS': 28, 'BERAT ACTUAL': 146.8, 'POSITION': 30, 'REMARK': 'ex WV'}]}),
+    });
+    expect(find.text('TA0092565'), findsOneWidget);
+    expect(find.text('kupasan'), findsOneWidget);
+    expect(find.text('2 rows · 48 cheeses · 222.8 kg'), findsOneWidget);
+    await tester.tap(find.text('kupasan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit row'), findsNothing); // no edit permission
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete'), findsNothing);
+    await tester.tap(find.text('Download CSV'));
+    await tester.pumpAndSettle();
+    expect(opener.names, ['stock_sheet_2026-09-19.csv']);
+    expect(opener.files.single.split('\n').first, 'NO,WARNA,KODE MATERIAL,BATCH,PROD DATE,CHS,BERAT ACTUAL,POSITION,REMARK');
+  });
+
+  testWidgets('an editor can correct a row and delete one, straight on the server', (tester) async {
+    final adapter = await pumpSignedIn(tester, permissions: ['stock-take.view', 'stock-take.edit', 'stock-take.delete'], path: '/stock-sheets/4', routes: {
+      'GET /stock-sheets/4': (_) => (status: 200, body: {'status': 'success', 'data': _sheet}),
+      'PATCH /stock-sheets/rows/:id': (_) => (status: 200, body: {'status': 'success'}),
+      'DELETE /stock-sheets/rows/:id': (_) => (status: 200, body: {'status': 'success'}),
+    });
+    await tester.tap(find.text('kupasan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit row'), findsOneWidget);
+    await tester.enterText(_byLabel('Weight (kg)'), '80.5');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final patch = adapter.requests.singleWhere((r) => r.method == 'PATCH');
+    expect(patch.path, '/stock-sheets/rows/12');
+    expect((patch.data as Map)['actual_weight'], 80.5);
+
+    await tester.tap(find.text('kupasan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete row').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete row').last); // confirm dialog
+    await tester.pumpAndSettle();
+    expect(adapter.requests.where((r) => r.method == 'DELETE').single.path, '/stock-sheets/rows/12');
+  });
+
+  testWidgets('Stock Sheet screens follow the stock-take permissions', (tester) async {
+    await pumpSignedIn(tester, permissions: const [], path: '/stock-sheet', routes: {});
+    expect(find.text('Access denied'), findsWidgets);
+    await pumpSignedIn(tester, permissions: const [], path: '/stock-sheets', routes: {});
+    expect(find.text('Access denied'), findsWidgets);
   });
 }
