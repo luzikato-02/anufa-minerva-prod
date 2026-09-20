@@ -30,6 +30,11 @@ git reset --hard "origin/$BRANCH"
 echo "==> composer install"
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
+# The build generates route helpers from the app's routes, so a stale route cache from the previous
+# deploy would leave new routes out and fail the build.
+echo "==> clearing cached routes and config"
+php artisan optimize:clear
+
 echo "==> npm ci && npm run build"
 npm ci
 npm run build
