@@ -138,4 +138,14 @@ class StockSheetApiTest extends TestCase
         $this->assertSame(0, StockSheetRow::count());
         $this->actingAs($u, 'sanctum')->deleteJson("/api/v1/stock-sheets/rows/{$uuid}")->assertNotFound();
     }
+
+    public function test_changing_the_date_on_a_later_row_moves_the_sheet_to_that_date(): void
+    {
+        $u = $this->user();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row())->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['sheet_date' => '2026-09-20', 'batch' => 'B2']))->assertCreated();
+
+        $this->assertSame('2026-09-20', StockSheet::first()->sheet_date->toDateString());
+        $this->assertSame(1, StockSheet::count());
+    }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\MachineMaintenanceController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\StockSheetController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
@@ -58,6 +59,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middlewareFor('store', 'permission:stock-take.create')
         ->middlewareFor('update', 'permission:stock-take.edit')
         ->middlewareFor('destroy', 'permission:stock-take.delete');
+
+    // ---- STOCK SHEETS (the paper stock list) ----
+    Route::middleware('permission:stock-take.view')->group(function () {
+        Route::get('stock-sheets-main', function () {
+            return Inertia::render('stock-sheets-display');
+        })->name('stock-sheets-main');
+
+        Route::get('stock-sheets', [StockSheetController::class, 'index']);
+        Route::get('stock-sheets/{stockSheet}', [StockSheetController::class, 'show'])->whereNumber('stockSheet');
+        Route::get('stock-sheets/{stockSheet}/download', [StockSheetController::class, 'downloadCsv'])->whereNumber('stockSheet');
+    });
+
+    Route::middleware('permission:stock-take.create')->group(function () {
+        Route::get('stock-sheet-main', function () {
+            return Inertia::render('stock-sheet-record');
+        })->name('stock-sheet-main');
+
+        Route::post('stock-sheets/rows', [StockSheetController::class, 'storeRow']);
+    });
+
+    Route::patch('stock-sheets/rows/{row}', [StockSheetController::class, 'updateRow'])->middleware('permission:stock-take.edit');
+    Route::delete('stock-sheets/rows/{row}', [StockSheetController::class, 'destroyRow'])->middleware('permission:stock-take.delete');
+    Route::patch('stock-sheets/{stockSheet}', [StockSheetController::class, 'update'])->middleware('permission:stock-take.edit');
+    Route::delete('stock-sheets/{stockSheet}', [StockSheetController::class, 'destroy'])->middleware('permission:stock-take.delete');
 
     // ---- TENSION RECORDS ----
     Route::middleware('permission:tension-records.view')->group(function () {

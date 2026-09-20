@@ -7,6 +7,7 @@ use App\Models\StockSheet;
 use App\Models\StockSheetRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class StockSheetController extends Controller
@@ -80,6 +81,11 @@ class StockSheetController extends Controller
                 ['client_uuid' => $data['sheet_client_uuid']],
                 ['sheet_date' => $data['sheet_date'], 'leader' => $data['leader'], 'user_id' => $request->user()->id],
             );
+
+            // The date follows the latest row, so changing it on the sheet after the first row still takes effect.
+            if (! $sheet->wasRecentlyCreated && $sheet->sheet_date->toDateString() !== Carbon::parse($data['sheet_date'])->toDateString()) {
+                $sheet->update(['sheet_date' => $data['sheet_date']]);
+            }
 
             $next = (int) StockSheetRow::where('stock_sheet_id', $sheet->id)->max('line_no') + 1;
 
