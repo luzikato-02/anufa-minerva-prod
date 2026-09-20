@@ -126,4 +126,16 @@ class StockSheetApiTest extends TestCase
         $this->assertSame(0, StockSheet::count());
         $this->assertSame(0, StockSheetRow::count());
     }
+
+    public function test_a_row_can_be_edited_and_deleted_by_the_uuid_the_app_generated(): void
+    {
+        $u = $this->user();
+        $uuid = '2b1f6f3e-8f57-4d0a-9c1e-6a2d7f0b9c11';
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['client_uuid' => $uuid]))->assertCreated();
+
+        $this->actingAs($u, 'sanctum')->patchJson("/api/v1/stock-sheets/rows/{$uuid}", ['chs' => 30])->assertOk()->assertJsonPath('data.chs', 30);
+        $this->actingAs($u, 'sanctum')->deleteJson("/api/v1/stock-sheets/rows/{$uuid}")->assertOk();
+        $this->assertSame(0, StockSheetRow::count());
+        $this->actingAs($u, 'sanctum')->deleteJson("/api/v1/stock-sheets/rows/{$uuid}")->assertNotFound();
+    }
 }

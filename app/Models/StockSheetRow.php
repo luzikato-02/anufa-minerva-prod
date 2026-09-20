@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 /** A line on a stock sheet: colour, material, batch, production date, cheese count, weight, position, remark. */
 class StockSheetRow extends Model
@@ -24,6 +25,12 @@ class StockSheetRow extends Model
         'position' => 'integer',
         'line_no' => 'integer',
     ];
+
+    /** The app only knows a row by the uuid it generated, so routes accept that as well as the numeric id. */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where(Str::isUuid($value) ? 'client_uuid' : 'id', $value)->first();
+    }
 
     public function sheet(): BelongsTo
     {

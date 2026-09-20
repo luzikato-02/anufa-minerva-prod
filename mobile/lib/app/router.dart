@@ -19,6 +19,7 @@ import '../features/finish_earlier/fe_scan_screen.dart';
 import '../features/stock/stock_detail_screen.dart';
 import '../features/stock/stock_recording_screen.dart';
 import '../features/stock/stock_records_screen.dart';
+import '../features/stock_sheet/stock_sheet_screen.dart';
 import '../features/tension/recording/twisting_screen.dart';
 import '../features/tension/recording/weaving_screen.dart';
 import '../features/tension/tension_detail_screen.dart';
@@ -32,7 +33,7 @@ import '../features/users/users_screen.dart';
 import 'nav.dart';
 
 /// Nav paths that have a real screen registered above; the rest fall back to a placeholder.
-const _built = {'/dashboard', '/under-construction', '/machine-maintenance', '/users', '/activity-log', '/tension-records', '/twisting-tension', '/weaving-tension', '/stock-taking', '/stock-take-records', '/finish-earlier', '/finish-earlier/scan', '/document-intelligence'};
+const _built = {'/dashboard', '/under-construction', '/machine-maintenance', '/users', '/activity-log', '/tension-records', '/twisting-tension', '/weaving-tension', '/stock-taking', '/stock-take-records', '/stock-sheet', '/finish-earlier', '/finish-earlier/scan', '/document-intelligence'};
 
 const _publicPaths = {'/login', '/two-factor', '/forgot-password'};
 
@@ -93,6 +94,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/twisting-tension', builder: (_, _) => const TwistingScreen()),
       GoRoute(path: '/weaving-tension', builder: (_, _) => const WeavingScreen()),
       GoRoute(path: '/stock-taking', builder: (_, _) => const StockRecordingScreen()),
+      GoRoute(path: '/stock-sheet', builder: (_, _) => const StockSheetScreen()),
       GoRoute(path: '/stock-take-records', builder: (_, _) => const StockRecordsScreen()),
       GoRoute(path: '/stock-take-records/:id', builder: (_, s) => StockDetailScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/finish-earlier', builder: (_, _) => const FeRecordsScreen()),

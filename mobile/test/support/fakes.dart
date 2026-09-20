@@ -44,7 +44,8 @@ class FakeAdapter implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
     requests.add(o);
     if (offline) throw DioException.connectionError(requestOptions: o, reason: 'offline');
-    final h = routes['${o.method} ${o.path}'];
+    // A route ending in `/:id` answers any last path segment (for ids the app generates).
+    final h = routes['${o.method} ${o.path}'] ?? routes['${o.method} ${o.path.replaceFirst(RegExp(r'/[^/]+$'), '/:id')}'];
     final r = h == null ? (status: 404, body: {'message': 'no fake for ${o.method} ${o.path}'}) : h(o);
     return ResponseBody.fromString(jsonEncode(r.body), r.status, headers: {
       Headers.contentTypeHeader: ['application/json'],
