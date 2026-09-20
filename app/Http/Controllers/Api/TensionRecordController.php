@@ -287,6 +287,73 @@ class TensionRecordController extends Controller
     }
 
     /**
+     * Daily counts for the mobile trend charts: problems reported and measurements recorded per calendar day.
+     *
+     * Query params:
+     *   - type: 'twisting' | 'weaving' (required)
+     *   - days: window length ending today, 1-31 (default 14)
+     *   - tz_offset: caller's offset from UTC in minutes (e.g. 420 for UTC+7), so days are the caller's calendar days
+     *
+     * Problems are counted on the day in each problem's own timestamp. Measurements are the record's
+     * completed_measurements, counted on the day the record was created (a weaving session that spans
+     * several days therefore counts on its first day).
+     */
+    public function trends(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'type'      => 'required|in:twisting,weaving',
+            'days'      => 'nullable|integer|min:1|max:31',
+            'tz_offset' => 'nullable|integer|min:-840|max:840',
+        ]);
+        $days = (int) ($validated['days'] ?? 14);
+        $offset = (int) ($validated['tz_offset'] ?? 0);
+
+        $toLocalDate = fn ($timestamp) => \Illuminate\Support\Carbon::parse($timestamp)->utc()->addMinutes($offset)->toDateString();
+
+        $startLocal = now()->utc()->addMinutes($offset)->startOfDay()->subDays($days - 1);
+        $startUtc = $startLocal->copy()->subMinutes($offset);
+
+        $buckets = [];
+        for ($i = 0; $i < $days; $i++) {
+            $date = $startLocal->copy()->addDays($i)->toDateString();
+            $buckets[$date] = ['date' => $date, 'problems' => 0, 'measurements' => 0];
+        }
+
+        TensionRecord::byType($validated['type'])
+            ->where(fn ($q) => $q->where('created_at', '>=', $startUtc)->orWhere('updated_at', '>=', $startUtc))
+            ->get(['id', 'created_at', 'updated_at', 'problems', 'metadata'])
+            ->each(function (TensionRecord $record) use (&$buckets, $toLocalDate) {
+                $createdOn = $toLocalDate($record->created_at);
+                if (isset($buckets[$createdOn])) {
+                    $buckets[$createdOn]['measurements'] += (int) ($record->metadata['completed_measurements'] ?? 0);
+                }
+                foreach ($record->problems ?? [] as $problem) {
+                    if (empty($problem['timestamp'])) {
+                        continue;
+                    }
+                    $reportedOn = $toLocalDate($problem['timestamp']);
+                    if (isset($buckets[$reportedOn])) {
+                        $buckets[$reportedOn]['problems']++;
+                    }
+                }
+            });
+
+        $rows = array_values($buckets);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'type' => $validated['type'],
+                'days' => $rows,
+                'totals' => [
+                    'problems' => array_sum(array_column($rows, 'problems')),
+                    'measurements' => array_sum(array_column($rows, 'measurements')),
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Flattened, paginated list of all reported problems across all tension records
      * (both twisting and weaving), each annotated with parent record context.
      *
