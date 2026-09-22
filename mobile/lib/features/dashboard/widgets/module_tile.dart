@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/nav.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/press_scale.dart';
 import 'all_modules_sheet.dart';
 import 'home_config.dart';
@@ -15,22 +14,19 @@ class ModuleTile extends StatelessWidget {
     required this.label,
     required this.category,
     required this.onTap,
-    this.badge,
   });
 
   final IconData icon;
   final String label;
   final ModuleCategory category;
   final VoidCallback onTap;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.tokens;
     final tint = TileTint.of(context, category);
     return Semantics(
       button: true,
-      label: badge == null ? label : '$label, $badge',
+      label: label,
       excludeSemantics: true,
       child: PressScale(
         child: InkWell(
@@ -39,43 +35,15 @@ class ModuleTile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: tint.background,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(icon, size: 26, color: tint.icon),
-                  ),
-                  if (badge != null)
-                    Positioned(
-                      left: -2,
-                      top: -4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: t.foreground,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          badge!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: t.background,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: tint.background,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(icon, size: 26, color: tint.icon),
               ),
               const SizedBox(height: 8),
               Text(
@@ -122,7 +90,6 @@ class ModuleGrid extends StatelessWidget {
           icon: shown[i].icon,
           label: tileLabel(shown[i].title),
           category: shown[i].category,
-          badge: homeTileBadges[shown[i].path],
           onTap: () => context.go(shown[i].path),
         ),
       if (showAllModules)

@@ -57,12 +57,6 @@ class DashboardScreen extends ConsumerWidget {
         ? '${failed == 1 ? '1 upload was' : '$failed uploads were'} rejected by the server. Open the Sync queue to retry or discard.'
         : null;
     final topInset = MediaQuery.paddingOf(context).top;
-    final tension = data.value?['tension'];
-    final kpis = [
-      HeroKpi(tension is Map ? '${tension['total']}' : '–', 'records'),
-      HeroKpi(tension is Map ? '${tension['open_problems']}' : '–', 'open'),
-      HeroKpi('$failed', 'rejected'),
-    ];
     // Hold the texture still while offline: the stopped strands are a quiet status cue.
     final offline = ref.watch(onlineProvider).value == false;
 
@@ -92,7 +86,7 @@ class DashboardScreen extends ConsumerWidget {
                           // 56 below the content: 40 sits under the summary card, 16 stays clear.
                           child: Padding(
                             padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, _cardOverlap + 16),
-                            child: HomeHeader(kpis: kpis),
+                            child: const HomeHeader(),
                           ),
                         ),
                       ),

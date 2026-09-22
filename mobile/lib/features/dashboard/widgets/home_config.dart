@@ -40,9 +40,6 @@ const homeTilePriority = [
   '/machine-maintenance',
 ];
 
-/// Tiles that get the small dark badge (keep to 1-2).
-const homeTileBadges = {'/stock-taking': 'Offline'};
-
 class QuickActionConfig {
   const QuickActionConfig(
     this.label,

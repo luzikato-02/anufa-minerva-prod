@@ -28,24 +28,27 @@ void main() {
 
   group('shiftAt', () {
     test('a shift includes its first minute and excludes its last', () {
-      expect(shiftAt(_at(7, 0)).name, 'A');
-      expect(shiftAt(_at(14, 59)).name, 'A');
-      expect(shiftAt(_at(15, 0)).name, 'B');
-      expect(shiftAt(_at(22, 59)).name, 'B');
-      expect(shiftAt(_at(23, 0)).name, 'C');
+      expect(shiftAt(_at(0, 0)).name, '1');
+      expect(shiftAt(_at(7, 59)).name, '1');
+      expect(shiftAt(_at(8, 0)).name, '2');
+      expect(shiftAt(_at(15, 59)).name, '2');
+      expect(shiftAt(_at(16, 0)).name, '3');
+      expect(shiftAt(_at(23, 59)).name, '3'); // ends at 00:00, when shift 1 begins again
     });
 
-    test('the overnight shift covers both sides of midnight', () {
-      expect(shiftAt(_at(23, 30)).name, 'C');
-      expect(shiftAt(_at(0, 0)).name, 'C');
-      expect(shiftAt(_at(3, 15)).name, 'C');
-      expect(shiftAt(_at(6, 59)).name, 'C');
-      expect(shiftAt(_at(7, 0)).name, 'A');
+    test('every minute of the day belongs to exactly one shift', () {
+      for (var h = 0; h < 24; h++) {
+        for (final m in [0, 1, 30, 59]) {
+          final matches = kShifts.where((s) => shiftAt(_at(h, m), shifts: [s]) == s && ((h * 60 + m) - s.startHour * 60) % 1440 < s.lengthMinutes);
+          expect(matches.length, 1, reason: '$h:$m');
+        }
+      }
     });
 
     test('formats its range', () {
-      expect(kShifts[0].range, '07:00–15:00');
-      expect(kShifts[2].range, '23:00–07:00'); // overnight
+      expect(kShifts[0].range, '00:00–08:00');
+      expect(kShifts[1].range, '08:00–16:00');
+      expect(kShifts[2].range, '16:00–00:00'); // ends at midnight
     });
 
     test('falls back to the first shift if the list leaves a gap', () {
@@ -54,38 +57,9 @@ void main() {
     });
   });
 
-  group('shiftProgress', () {
-    double p(int h, int m) => shiftProgress(_at(h, m), shiftAt(_at(h, m)));
-
-    test('is 0 at the first minute and grows to just under 1', () {
-      expect(p(7, 0), 0);
-      expect(p(11, 0), closeTo(0.5, 1e-9)); // 4h of 8h
-      expect(p(14, 59), closeTo(479 / 480, 1e-9));
-    });
-
-    test('a new shift starts again at 0', () {
-      expect(p(15, 0), 0);
-      expect(p(23, 0), 0);
-    });
-
-    test('overnight shift: 23:00 is 0, midnight is 1/8, 03:00 is 1/2, 06:59 is almost 1', () {
-      expect(p(23, 0), 0);
-      expect(p(0, 0), closeTo(1 / 8, 1e-9));
-      expect(p(3, 0), closeTo(0.5, 1e-9));
-      expect(p(6, 59), closeTo(479 / 480, 1e-9));
-    });
-
-    test('never leaves 0..1', () {
-      for (var h = 0; h < 24; h++) {
-        for (final m in [0, 1, 30, 59]) {
-          expect(p(h, m), inInclusiveRange(0, 1));
-        }
-      }
-    });
-  });
-
   test('the context line names the date, shift and hours', () {
-    expect(contextLine(DateTime(2026, 9, 19, 9, 30), kShifts[0]), 'Sat, 19 Sep · Shift A · 07:00–15:00');
-    expect(contextLine(DateTime(2026, 9, 19, 2, 0), kShifts[2]), 'Sat, 19 Sep · Shift C · 23:00–07:00');
+    expect(contextLine(DateTime(2026, 9, 19, 9, 30), kShifts[1]), 'Sat, 19 Sep · Shift 2 · 08:00–16:00');
+    expect(contextLine(DateTime(2026, 9, 19, 2, 0), kShifts[0]), 'Sat, 19 Sep · Shift 1 · 00:00–08:00');
+    expect(contextLine(DateTime(2026, 9, 19, 20, 0), kShifts[2]), 'Sat, 19 Sep · Shift 3 · 16:00–00:00');
   });
 }
