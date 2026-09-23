@@ -34,6 +34,9 @@ const navGroups = <NavGroup>[
     NavItem('Record: Weaving Tension', '/weaving-tension', LucideIcons.activity, permission: 'tension-records.create', section: NavSection.record, category: ModuleCategory.process),
     NavItem('Display: Tension Records', '/tension-records', LucideIcons.table, permission: 'tension-records.view', section: NavSection.records, category: ModuleCategory.process),
     NavItem('Machine Maintenance', '/machine-maintenance', LucideIcons.wrench, permission: 'machine-maintenance.view', category: ModuleCategory.process),
+    NavItem('Record: Torque Check', '/torque-check', LucideIcons.gauge, permission: 'torque-checks.create', section: NavSection.record, category: ModuleCategory.process),
+    NavItem('Display: Torque Checks', '/torque-checks', LucideIcons.table, permission: 'torque-checks.view', section: NavSection.records, category: ModuleCategory.process),
+    NavItem('Creel Type Settings', '/creel-type-settings', LucideIcons.settings2, permission: 'creel-types.view', category: ModuleCategory.process),
   ]),
   NavGroup('Inventory', [
     NavItem('Record: Batch Stock Taking', '/stock-taking', LucideIcons.scanBarcode, permission: 'stock-take.create', section: NavSection.record, category: ModuleCategory.inventory),

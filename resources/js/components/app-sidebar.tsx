@@ -22,10 +22,10 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/lib/permissions';
-import { activityLog, batchStockTakingMain, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockSheetMain, stockSheetsMain, stockTakeRecordsMain, tensionRecordsDisplay, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
+import { activityLog, batchStockTakingMain, creelTypeSettings, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockSheetMain, stockSheetsMain, stockTakeRecordsMain, tensionRecordsDisplay, torqueCheckMain, torqueChecksMain, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2 } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
@@ -72,6 +72,24 @@ const processParamsNavItems: NavItem[] = [
         href: machineMaintenance(),
         icon: Settings2,
         permission: 'machine-maintenance.view',
+    },
+    {
+        title: 'Record: Torque Check',
+        href: torqueCheckMain(),
+        icon: Gauge,
+        permission: 'torque-checks.create',
+    },
+    {
+        title: 'Display: Torque Checks',
+        href: torqueChecksMain(),
+        icon: Table2,
+        permission: 'torque-checks.view',
+    },
+    {
+        title: 'Creel Type Settings',
+        href: creelTypeSettings(),
+        icon: Settings2,
+        permission: 'creel-types.view',
     },
 ];
 

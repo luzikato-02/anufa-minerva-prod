@@ -22,6 +22,10 @@ import '../features/stock/stock_records_screen.dart';
 import '../features/stock_sheet/stock_sheet_detail_screen.dart';
 import '../features/stock_sheet/stock_sheet_screen.dart';
 import '../features/stock_sheet/stock_sheets_screen.dart';
+import '../features/torque_check/creel_type_settings_screen.dart';
+import '../features/torque_check/torque_check_detail_screen.dart';
+import '../features/torque_check/torque_check_screen.dart';
+import '../features/torque_check/torque_checks_screen.dart';
 import '../features/tension/recording/twisting_screen.dart';
 import '../features/tension/recording/weaving_screen.dart';
 import '../features/tension/tension_detail_screen.dart';
@@ -35,7 +39,7 @@ import '../features/users/users_screen.dart';
 import 'nav.dart';
 
 /// Nav paths that have a real screen registered above; the rest fall back to a placeholder.
-const _built = {'/dashboard', '/under-construction', '/machine-maintenance', '/users', '/activity-log', '/tension-records', '/twisting-tension', '/weaving-tension', '/stock-taking', '/stock-take-records', '/stock-sheet', '/stock-sheets', '/finish-earlier', '/finish-earlier/scan', '/document-intelligence'};
+const _built = {'/dashboard', '/under-construction', '/machine-maintenance', '/users', '/activity-log', '/tension-records', '/twisting-tension', '/weaving-tension', '/stock-taking', '/stock-take-records', '/stock-sheet', '/stock-sheets', '/finish-earlier', '/finish-earlier/scan', '/document-intelligence', '/torque-check', '/torque-checks', '/creel-type-settings'};
 
 const _publicPaths = {'/login', '/two-factor', '/forgot-password'};
 
@@ -106,6 +110,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/finish-earlier/:id', builder: (_, s) => FeDetailScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/finish-earlier/:id/entries', builder: (_, s) => FeEntriesScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/document-intelligence', builder: (_, _) => const DocumentScreen()),
+      GoRoute(path: '/torque-check', builder: (_, _) => const TorqueCheckScreen()),
+      GoRoute(path: '/torque-checks', builder: (_, _) => const TorqueChecksScreen()),
+      GoRoute(path: '/torque-checks/:id', builder: (_, s) => TorqueCheckDetailScreen(id: int.parse(s.pathParameters['id']!))),
+      GoRoute(path: '/creel-type-settings', builder: (_, _) => const CreelTypeSettingsScreen()),
       GoRoute(path: '/sync', builder: (_, _) => const SyncScreen()),
       GoRoute(path: '/tension-records', builder: (_, _) => const TensionRecordsScreen()),
       GoRoute(path: '/tension-records/:id', builder: (_, s) => TensionDetailScreen(id: int.parse(s.pathParameters['id']!))),

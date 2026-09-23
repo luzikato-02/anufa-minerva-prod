@@ -34,6 +34,9 @@ const _allPerms = [
   'finish-earlier.create',
   'finish-earlier.edit',
   'machine-maintenance.view',
+  'torque-checks.create',
+  'torque-checks.view',
+  'creel-types.view',
   'users.view',
   'activity-log.view',
 ];
@@ -487,6 +490,38 @@ void main() {
       await s.shot('92-sheets-list');
       await s.boot(path: '/stock-sheets/4', routes: {'GET /stock-sheets/4': (_) => (status: 200, body: {'status': 'success', 'data': sheet})});
       await s.shot('93-sheet-detail');
+    });
+  }
+  for (final mode in ['light', 'dark']) {
+    testWidgets('shots $mode: torque check', (tester) async {
+      addTearDown(tester.view.reset);
+      final s = _Shots(tester, mode);
+      Map<String, dynamic> page(List l) => {'data': l, 'current_page': 1, 'last_page': 1, 'total': l.length};
+      final types = {'status': 'success', 'data': [
+        {'id': 1, 'name': 'Standard Creel', 'torque_min': 6.0, 'torque_max': 8.0, 'torque_check_sheets_count': 2},
+      ]};
+      await s.boot(path: '/torque-check', routes: {'GET /creel-types': (_) => (status: 200, body: types)});
+      await s.shot('110-torque-record', scrolled: true);
+
+      final readings = [
+        {'id': 1, 'row_no': 1, 'column_letter': 'A', 'value': 6.0, 'note': null},
+        {'id': 2, 'row_no': 1, 'column_letter': 'B', 'value': 7.0, 'note': null},
+        {'id': 3, 'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor (Ganti baru)'},
+      ];
+      final sheet = {
+        'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704', 'side': 'Ai',
+        'creel_type': {'id': 1, 'name': 'Standard Creel'}, 'readings': readings,
+      };
+      await s.boot(path: '/torque-checks', routes: {
+        'GET /torque-checks': (_) => (status: 200, body: page([
+              {'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704', 'side': 'Ai', 'readings_count': 3, 'out_of_range_count': 1, 'creel_type': {'name': 'Standard Creel'}},
+            ])),
+      });
+      await s.shot('111-torque-list');
+      await s.boot(path: '/torque-checks/4', routes: {'GET /torque-checks/4': (_) => (status: 200, body: {'status': 'success', 'data': sheet})});
+      await s.shot('112-torque-detail', scrolled: true);
+      await s.boot(path: '/creel-type-settings', routes: {'GET /creel-types': (_) => (status: 200, body: types)});
+      await s.shot('113-creel-type-settings');
     });
   }
   for (final mode in ['light', 'dark']) {
