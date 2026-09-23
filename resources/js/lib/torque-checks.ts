@@ -65,6 +65,7 @@ async function request<T>(url: string, method: string, body?: unknown): Promise<
 
 export interface SheetHeader {
     uuid: string;
+    sessionId: string | null;
     checkDate: string;
     operatorName: string;
     machineNumber: string;
@@ -72,11 +73,22 @@ export interface SheetHeader {
     creelTypeId: number;
 }
 
+export interface TorqueSession {
+    session_id: string | null;
+    check_date: string;
+    operator_name: string;
+    machine_number: string;
+    side: TorqueSide;
+    creel_type_id: number;
+    readings: TorqueReading[];
+}
+
 export const torqueCheckApi = {
     list: (params: URLSearchParams) => request<Paginated<TorqueCheckSummary>>(`/torque-checks?${params}`, 'GET'),
     show: (id: number) => request<{ data: TorqueCheckDetail }>(`/torque-checks/${id}`, 'GET').then((r) => r.data),
     submitReading: (sheet: SheetHeader, fields: ReadingFields, clientUuid: string) =>
         request(`/torque-checks/readings`, 'POST', {
+            session_id: sheet.sessionId,
             sheet_client_uuid: sheet.uuid,
             check_date: sheet.checkDate,
             operator_name: sheet.operatorName,
@@ -90,6 +102,9 @@ export const torqueCheckApi = {
     deleteReading: (id: number | string) => request(`/torque-checks/readings/${id}`, 'DELETE'),
     deleteSheet: (id: number) => request(`/torque-checks/${id}`, 'DELETE'),
     download: (id: number) => request<{ grid: Record<string, number | null>[]; problems: { ROW: number; COLUMN: string; NOTE: string }[] }>(`/torque-checks/${id}/download`, 'GET'),
+    /** Looks a sheet up by its operator-facing session id, its numeric id, or (best-effort) its own client uuid
+     *  — the last of these is how a sheet started offline learns the session id it was assigned once online. */
+    getSession: (sessionOrId: string) => request<{ success: boolean; data: TorqueSession }>(`/torque-checks/session/${encodeURIComponent(sessionOrId)}`, 'GET').then((r) => r.data),
 };
 
 export const newUuid = () => crypto.randomUUID();

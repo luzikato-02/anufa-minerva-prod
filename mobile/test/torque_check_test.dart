@@ -18,6 +18,7 @@ Map<String, Handler> get _routes => {
       'GET /creel-types': (_) => (status: 200, body: {'status': 'success', 'data': [_type()]}),
       'POST /torque-checks/readings': (_) => (status: 201, body: {'success': true}),
       'PATCH /torque-checks/readings/:id': (_) => (status: 200, body: {'status': 'success'}),
+      'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': {'session_id': '483920'}}),
     };
 
 Future<FakeAdapter> _open(WidgetTester t, {Map<String, Handler>? routes, List<Override> overrides = const []}) =>
@@ -168,6 +169,48 @@ void main() {
     expect(find.text('Access denied'), findsWidgets);
     await pumpSignedIn(tester, permissions: const [], path: '/creel-type-settings', routes: {});
     expect(find.text('Access denied'), findsWidgets);
+  });
+
+  testWidgets('saving the first cell reveals the session id the server assigned, once seen', (tester) async {
+    await _open(tester);
+    expect(find.text('Resume a session'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Standard (6–8)').last);
+    await tester.pumpAndSettle();
+    await _enterReading(tester, '7');
+    await _saveCell(tester);
+
+    expect(find.textContaining('Session 483920'), findsOneWidget);
+    expect(find.text('Resume a session'), findsNothing);
+  });
+
+  testWidgets('entering a session ID loads that sheet, with its readings and header already filled in', (tester) async {
+    final sheet = {
+      'session_id': '483920', 'check_date': '2026-09-20', 'operator_name': 'Budi', 'machine_number': '9', 'side': 'Bo', 'creel_type_id': 1,
+      'readings': [
+        {'id': 11, 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
+      ],
+    };
+    final adapter = await _open(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': sheet})});
+    await tester.enterText(_byLabel('Session ID'), '483920');
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.requests.any((r) => r.path.endsWith('/torque-checks/session/483920')), isTrue);
+    expect(find.textContaining('Session 483920'), findsOneWidget);
+    expect(find.textContaining('Budi'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '9'), findsOneWidget); // machine number
+    expect(find.text('Resume a session'), findsNothing);
+  });
+
+  testWidgets('an unknown session ID shows an error instead of silently starting fresh', (tester) async {
+    await _open(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 404, body: {'success': false, 'message': 'Session not found'})});
+    await tester.enterText(_byLabel('Session ID'), '000000');
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('was not found'), findsOneWidget);
+    expect(find.text('Resume a session'), findsOneWidget); // still on the chooser
   });
 
   testWidgets('the form fits 320 wide with the largest text the app allows', (tester) async {

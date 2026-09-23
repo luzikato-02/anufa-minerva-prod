@@ -95,6 +95,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('torque-checks', [TorqueCheckController::class, 'index']);
         Route::get('torque-checks/{torqueCheckSheet}', [TorqueCheckController::class, 'show'])->whereNumber('torqueCheckSheet');
         Route::get('torque-checks/{torqueCheckSheet}/download', [TorqueCheckController::class, 'downloadCsv'])->whereNumber('torqueCheckSheet');
+        Route::get('torque-checks/session/{sessionId}', [TorqueCheckController::class, 'getSession']);
     });
 
     Route::middleware('permission:torque-checks.create')->group(function () {

@@ -5,27 +5,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { type CellReading, TorqueCell } from '@/components/torque-check-cell';
-import { type CreelType, creelTypeApi } from '@/lib/creel-types';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { type CreelType, creelTypeApi, formatNumber, inRange } from '@/lib/creel-types';
 import { TORQUE_COLUMNS, TORQUE_MAX_ROW, TORQUE_SIDES, type TorqueColumn, type TorqueSide, newUuid, torqueCheckApi } from '@/lib/torque-checks';
 import { type SharedData } from '@/types';
 import { usePage } from '@inertiajs/react';
-import { FilePlusIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, FilePlusIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'torque-check-active';
 
+interface Reading {
+    clientUuid: string;
+    value: number;
+    note: string;
+}
+
 interface ActiveSheet {
     uuid: string;
+    sessionId: string | null;
     checkDate: string;
     operatorName: string;
     machineNumber: string;
     side: TorqueSide;
     creelTypeId: number | null;
-    readings: Record<string, CellReading>;
+    readings: Record<string, Reading>;
 }
 
 const today = () => new Date().toLocaleDateString('en-CA'); // yyyy-mm-dd in local time
+const position = (row: number, col: TorqueColumn) => `${row}${col}`;
+
+function freshSheet(operatorName: string): ActiveSheet {
+    return { uuid: newUuid(), sessionId: null, checkDate: today(), operatorName, machineNumber: '', side: 'Ai', creelTypeId: null, readings: {} };
+}
 
 function load(operatorName: string): ActiveSheet {
     try {
@@ -34,20 +46,26 @@ function load(operatorName: string): ActiveSheet {
     } catch {
         // fall through to a new sheet
     }
-    return { uuid: newUuid(), checkDate: today(), operatorName, machineNumber: '', side: 'Ai', creelTypeId: null, readings: {} };
+    return freshSheet(operatorName);
 }
 
-function parsePosition(position: string): { rowNo: number; columnLetter: TorqueColumn } {
-    return { rowNo: Number(position.slice(0, -1)), columnLetter: position.slice(-1) as TorqueColumn };
-}
-
-/** Record a torque check: the paper form's header, and its 105x5 grid, saved cell by cell as they are typed. */
+/** Record a torque check: the paper form's header, then one grid cell at a time — same flow as the mobile app. */
 export default function TorqueCheckGrid() {
     const { auth } = usePage<SharedData>().props;
     const [sheet, setSheet] = useState<ActiveSheet>(() => load(auth.user.name));
     const [types, setTypes] = useState<CreelType[]>([]);
     const [typesError, setTypesError] = useState<string | null>(null);
     const [confirmNew, setConfirmNew] = useState(false);
+
+    const [row, setRow] = useState(1);
+    const [col, setCol] = useState<TorqueColumn>('A');
+    const [digits, setDigits] = useState('');
+    const [note, setNote] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [sessionInput, setSessionInput] = useState('');
+    const [sessionError, setSessionError] = useState<string | null>(null);
+    const [loadingSession, setLoadingSession] = useState(false);
 
     useEffect(() => {
         creelTypeApi.list().then(setTypes).catch((e) => setTypesError((e as Error).message));
@@ -61,46 +79,137 @@ export default function TorqueCheckGrid() {
         }
     }, [sheet]);
 
+    // A sheet started offline has no session id until the server has actually seen it. Best-effort: look it up
+    // by its own uuid (the endpoint also matches on that), so the id appears once connectivity allows the
+    // first cell through — even if that happened via a background retry rather than the save that's on screen.
+    useEffect(() => {
+        if (sheet.sessionId || Object.keys(sheet.readings).length === 0) return;
+        let cancelled = false;
+        torqueCheckApi
+            .getSession(sheet.uuid)
+            .then(({ session_id }) => {
+                if (!cancelled && session_id) setSheet((s) => (s.sessionId ? s : { ...s, sessionId: session_id }));
+            })
+            .catch(() => {
+                // Offline, or the first cell hasn't reached the server yet — fine, try again next time.
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [sheet.uuid, sheet.sessionId, sheet.readings]);
+
     const creelType = types.find((t) => t.id === sheet.creelTypeId) ?? null;
     const filledCount = Object.keys(sheet.readings).length;
+    const pos = position(row, col);
+    const value = digits.trim() === '' ? null : Number(digits);
+    const outOfRange = creelType !== null && value !== null && Number.isFinite(value) && !inRange(creelType, value);
 
-    const setReading = (position: string, patch: Partial<CellReading>) =>
-        setSheet((s) => ({ ...s, readings: { ...s.readings, [position]: { ...(s.readings[position] ?? { clientUuid: newUuid(), value: '', note: '', savingValue: false }), ...patch } } }));
+    const goTo = (nextRow: number, nextCol: TorqueColumn) => {
+        setRow(nextRow);
+        setCol(nextCol);
+        const existing = sheet.readings[position(nextRow, nextCol)];
+        setDigits(existing ? String(existing.value) : '');
+        setNote(existing?.note ?? '');
+        setError(null);
+    };
 
-    const submit = async (position: string, value: string, note: string) => {
-        const { rowNo, columnLetter } = parsePosition(position);
-        const n = Number(value.trim().replace(',', '.'));
-        if (value.trim() === '' || !Number.isFinite(n) || n < 0) return setReading(position, { value, error: 'Enter a reading.' });
-        if ((n * 2) % 1 !== 0) return setReading(position, { value, error: 'Must be in steps of 0.5.' });
+    const step = (delta: number) => {
+        const n = (Number(digits) || 0) + delta;
+        if (n < 0) return;
+        setDigits(String(n));
+    };
 
-        const clientUuid = sheet.readings[position]?.clientUuid ?? newUuid();
-        setReading(position, { value, note, clientUuid, savingValue: true, error: undefined });
+    const save = async () => {
+        if (value === null || !Number.isFinite(value) || value < 0) return setError('Enter a reading.');
+        if ((value * 2) % 1 !== 0) return setError('Reading must be in steps of 0.5.');
+        if (outOfRange && !note.trim()) return setError(`This reading is outside ${creelType?.name}'s range (${formatNumber(creelType?.torque_min)}–${formatNumber(creelType?.torque_max)}). Add a note before saving.`);
+
+        const clientUuid = sheet.readings[pos]?.clientUuid ?? newUuid();
+        setBusy(true);
+        setError(null);
         try {
             await torqueCheckApi.submitReading(
-                { uuid: sheet.uuid, checkDate: sheet.checkDate, operatorName: sheet.operatorName, machineNumber: sheet.machineNumber, side: sheet.side, creelTypeId: sheet.creelTypeId! },
-                { row_no: rowNo, column_letter: columnLetter, value: n, note: note.trim() || null },
+                { uuid: sheet.uuid, sessionId: sheet.sessionId, checkDate: sheet.checkDate, operatorName: sheet.operatorName, machineNumber: sheet.machineNumber, side: sheet.side, creelTypeId: sheet.creelTypeId! },
+                { row_no: row, column_letter: col, value, note: note.trim() || null },
                 clientUuid,
             );
-            setReading(position, { savingValue: false });
+            setSheet((s) => ({ ...s, readings: { ...s.readings, [pos]: { clientUuid, value, note: note.trim() } } }));
+            // Move on to the next cell so the operator can keep going without retyping the position.
+            const colIndex = TORQUE_COLUMNS.indexOf(col);
+            if (colIndex < TORQUE_COLUMNS.length - 1) {
+                goTo(row, TORQUE_COLUMNS[colIndex + 1]);
+            } else if (row < TORQUE_MAX_ROW) {
+                goTo(row + 1, TORQUE_COLUMNS[0]);
+            }
         } catch (e) {
-            setReading(position, { savingValue: false, error: (e as Error).message });
+            setError((e as Error).message);
+        } finally {
+            setBusy(false);
         }
     };
 
-    const rows = useMemo(() => Array.from({ length: TORQUE_MAX_ROW }, (_, i) => i + 1), []);
-
     const startNew = () => {
-        setSheet({ uuid: newUuid(), checkDate: today(), operatorName: auth.user.name, machineNumber: '', side: 'Ai', creelTypeId: null, readings: {} });
+        setSheet(freshSheet(auth.user.name));
+        goTo(1, 'A');
         setConfirmNew(false);
     };
 
+    const loadSession = async () => {
+        const id = sessionInput.trim();
+        if (!id) return setSessionError('Enter a session ID.');
+        setLoadingSession(true);
+        setSessionError(null);
+        try {
+            const s = await torqueCheckApi.getSession(id);
+            setSheet({
+                uuid: newUuid(),
+                sessionId: s.session_id,
+                checkDate: s.check_date.slice(0, 10),
+                operatorName: s.operator_name,
+                machineNumber: s.machine_number,
+                side: s.side,
+                creelTypeId: s.creel_type_id,
+                readings: Object.fromEntries(s.readings.map((r) => [position(r.row_no, r.column_letter), { clientUuid: String(r.id), value: r.value, note: r.note ?? '' }])),
+            });
+            goTo(1, 'A');
+        } catch (e) {
+            setSessionError((e as Error).message === 'Session not found' ? `Session "${id}" was not found.` : (e as Error).message);
+        } finally {
+            setLoadingSession(false);
+        }
+    };
+
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4">
+            {!sheet.sessionId && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Resume a session</CardTitle>
+                        <CardDescription>Have a session ID from another device? Enter it to keep recording into that sheet.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {sessionError && (
+                            <Alert variant="destructive" role="alert">
+                                <AlertDescription>{sessionError}</AlertDescription>
+                            </Alert>
+                        )}
+                        <div className="flex items-end gap-2">
+                            <div className="flex-1 space-y-1.5">
+                                <Label htmlFor="tc-session">Session ID</Label>
+                                <Input id="tc-session" placeholder="e.g. 483920" value={sessionInput} onChange={(e) => setSessionInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void loadSession()} />
+                            </div>
+                            <Button onClick={() => void loadSession()} disabled={loadingSession}>
+                                {loadingSession ? 'Loading…' : 'Load'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
             <Card>
                 <CardHeader>
                     <CardTitle>Torque check</CardTitle>
                     <CardDescription>
-                        {sheet.operatorName} · {filledCount} of {TORQUE_MAX_ROW * TORQUE_COLUMNS.length} cells filled
+                        {[sheet.sessionId && `Session ${sheet.sessionId}`, sheet.operatorName, `${filledCount} of ${TORQUE_MAX_ROW * TORQUE_COLUMNS.length} cells filled`].filter(Boolean).join(' · ')}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -109,7 +218,10 @@ export default function TorqueCheckGrid() {
                             <AlertDescription>{typesError}</AlertDescription>
                         </Alert>
                     )}
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <Button variant="outline" size="sm" onClick={() => (filledCount > 0 ? setConfirmNew(true) : startNew())}>
+                        <FilePlusIcon /> Start new sheet
+                    </Button>
+                    <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <Label htmlFor="tc-date">Date</Label>
                             <Input id="tc-date" type="date" value={sheet.checkDate} onChange={(e) => setSheet((s) => ({ ...s, checkDate: e.target.value || today() }))} />
@@ -149,9 +261,6 @@ export default function TorqueCheckGrid() {
                             </Select>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => (filledCount > 0 ? setConfirmNew(true) : startNew())}>
-                        <FilePlusIcon /> Start new sheet
-                    </Button>
                 </CardContent>
             </Card>
 
@@ -162,45 +271,81 @@ export default function TorqueCheckGrid() {
             ) : (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Readings</CardTitle>
-                        <CardDescription>Tab through the grid like the paper form. A reading outside {creelType?.name}&apos;s range ({creelType?.torque_min}–{creelType?.torque_max}) turns red and asks for a note.</CardDescription>
+                        <CardTitle>
+                            Row {row}, column {col}
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <table className="border-separate border-spacing-1">
-                                <thead>
-                                    <tr>
-                                        <th className="w-10 text-left text-xs font-medium text-muted-foreground">NO</th>
-                                        {TORQUE_COLUMNS.map((c) => (
-                                            <th key={c} className="text-xs font-medium text-muted-foreground">
-                                                {c}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((row) => (
-                                        <tr key={row}>
-                                            <td className="text-xs text-muted-foreground">{row}</td>
-                                            {TORQUE_COLUMNS.map((col) => {
-                                                const position = `${row}${col}`;
-                                                return (
-                                                    <td key={col}>
-                                                        <TorqueCell
-                                                            position={position}
-                                                            reading={sheet.readings[position]}
-                                                            creelType={creelType}
-                                                            onValueBlur={(pos, value) => submit(pos, value, sheet.readings[pos]?.note ?? '')}
-                                                            onNoteBlur={(pos, note) => submit(pos, sheet.readings[pos]?.value ?? '', note)}
-                                                        />
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                    <CardContent className="space-y-4">
+                        {error && (
+                            <Alert variant="destructive" role="alert">
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
+                        )}
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium">Row</span>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="icon" aria-label="Previous row" disabled={row <= 1} onClick={() => goTo(row - 1, col)}>
+                                    <ChevronLeftIcon />
+                                </Button>
+                                <Input
+                                    aria-label="Row number"
+                                    type="number"
+                                    min={1}
+                                    max={TORQUE_MAX_ROW}
+                                    className="w-20 text-center"
+                                    value={row}
+                                    onChange={(e) => {
+                                        const n = Number(e.target.value);
+                                        if (Number.isInteger(n) && n >= 1 && n <= TORQUE_MAX_ROW) goTo(n, col);
+                                    }}
+                                />
+                                <Button variant="outline" size="icon" aria-label="Next row" disabled={row >= TORQUE_MAX_ROW} onClick={() => goTo(row + 1, col)}>
+                                    <ChevronRightIcon />
+                                </Button>
+                            </div>
                         </div>
+                        <ToggleGroup type="single" variant="outline" value={col} onValueChange={(v) => v && goTo(row, v as TorqueColumn)} className="w-full">
+                            {TORQUE_COLUMNS.map((c) => {
+                                const filled = position(row, c) in sheet.readings;
+                                return (
+                                    <ToggleGroupItem key={c} value={c} className="flex-1 gap-1">
+                                        {c}
+                                        {filled && <CheckIcon className="size-3" />}
+                                    </ToggleGroupItem>
+                                );
+                            })}
+                        </ToggleGroup>
+                        <div className={`flex flex-col items-center gap-1 rounded-lg border-2 py-4 ${outOfRange ? 'border-destructive/30 bg-destructive/5' : 'border-primary/20 bg-primary/5'}`}>
+                            <span className={`text-xs font-medium ${outOfRange ? 'text-destructive' : 'text-primary'}`}>Reading</span>
+                            <Input
+                                aria-label="Reading"
+                                inputMode="decimal"
+                                className={`h-12 w-32 border-none bg-transparent text-center text-2xl font-bold shadow-none focus-visible:ring-0 ${outOfRange ? 'text-destructive' : 'text-primary'}`}
+                                value={digits}
+                                onChange={(e) => {
+                                    setDigits(e.target.value);
+                                    setError(null);
+                                }}
+                            />
+                            {creelType && <span className="text-xs text-muted-foreground">Range {formatNumber(creelType.torque_min)}–{formatNumber(creelType.torque_max)}</span>}
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="outline" className="flex-1" onClick={() => step(-0.5)}>
+                                -0.5
+                            </Button>
+                            <Button variant="outline" className="flex-1" onClick={() => step(0.5)}>
+                                +0.5
+                            </Button>
+                        </div>
+                        {outOfRange && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="tc-note">Note (required — this reading is out of range)</Label>
+                                <Input id="tc-note" placeholder="e.g. Felt worn/dirty, replaced with new" value={note} onChange={(e) => setNote(e.target.value)} />
+                            </div>
+                        )}
+                        <Button className="w-full" onClick={() => void save()} disabled={busy}>
+                            <CheckIcon /> {busy ? 'Saving…' : 'Save cell'}
+                        </Button>
                     </CardContent>
                 </Card>
             )}

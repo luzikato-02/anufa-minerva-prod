@@ -36,6 +36,27 @@ class TorqueCheckController extends Controller
         return response()->json(['status' => 'success', 'data' => $torqueCheckSheet->load('readings', 'creelType')]);
     }
 
+    /** Looks up a sheet by the session id it was assigned on its first reading, so it can be resumed on another device. */
+    public function getSession(string $sessionId): JsonResponse
+    {
+        $sheet = TorqueCheckSheet::forSessionOrId($sessionId)->first();
+
+        if (! $sheet) {
+            return response()->json(['success' => false, 'message' => 'Session not found'], 404);
+        }
+
+        return response()->json(['success' => true, 'data' => $sheet->load('readings', 'creelType')]);
+    }
+
+    private function generateUniqueSessionId(): string
+    {
+        do {
+            $sessionId = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        } while (TorqueCheckSheet::where('session_id', $sessionId)->exists());
+
+        return $sessionId;
+    }
+
     /** Reading fields shared by create and update. */
     private function readingRules(bool $partial = false): array
     {
@@ -50,28 +71,38 @@ class TorqueCheckController extends Controller
     }
 
     /**
-     * Records (or corrects) one cell. The sheet is created on the first cell, found by its client uuid, so every
-     * queued upload stands on its own; the reading itself is upserted by grid position, so a retried offline
-     * submit or an edit to an already-filled cell never creates a duplicate.
+     * Records (or corrects) one cell.
+     *
+     * `session_id` continues an existing sheet (typed in on another device, or resumed after a reload); it must
+     * already exist. Without it, the sheet is created on the first cell, found by its client uuid — so every
+     * queued upload stands on its own — and assigned a fresh session id for the operator to note down. Either
+     * way the reading itself is upserted by grid position, so a retried offline submit or an edit to an
+     * already-filled cell never creates a duplicate.
      */
     public function storeReading(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'sheet_client_uuid' => 'required|uuid',
-            'check_date' => 'required|date',
-            'operator_name' => 'required|string|max:255',
-            'machine_number' => 'required|string|max:255',
-            'side' => 'required|in:Ai,Ao,Bi,Bo',
-            'creel_type_id' => 'required|exists:creel_types,id',
+            'session_id' => 'nullable|string',
+            'sheet_client_uuid' => 'required_without:session_id|uuid',
+            'check_date' => 'required_without:session_id|date',
+            'operator_name' => 'required_without:session_id|string|max:255',
+            'machine_number' => 'required_without:session_id|string|max:255',
+            'side' => 'required_without:session_id|in:Ai,Ao,Bi,Bo',
+            'creel_type_id' => 'required_without:session_id|exists:creel_types,id',
             'client_uuid' => 'nullable|uuid',
         ] + $this->readingRules());
 
         $reading = DB::transaction(function () use ($data, $request) {
-            $sheet = TorqueCheckSheet::firstOrCreate(
-                ['client_uuid' => $data['sheet_client_uuid']],
-                collect($data)->only(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])->all()
-                    + ['user_id' => $request->user()->id],
-            );
+            if (! empty($data['session_id'])) {
+                $sheet = TorqueCheckSheet::forSessionOrId($data['session_id'])->first();
+                abort_if(! $sheet, 404, 'Session not found');
+            } else {
+                $sheet = TorqueCheckSheet::firstOrCreate(
+                    ['client_uuid' => $data['sheet_client_uuid']],
+                    collect($data)->only(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])->all()
+                        + ['session_id' => $this->generateUniqueSessionId(), 'user_id' => $request->user()->id],
+                );
+            }
 
             return TorqueCheckReading::updateOrCreate(
                 ['torque_check_sheet_id' => $sheet->id, 'row_no' => $data['row_no'], 'column_letter' => $data['column_letter']],
@@ -79,7 +110,7 @@ class TorqueCheckController extends Controller
             );
         });
 
-        return response()->json(['success' => true, 'message' => 'Reading recorded', 'data' => $reading->load('sheet:id,client_uuid')], 201);
+        return response()->json(['success' => true, 'message' => 'Reading recorded', 'data' => $reading->load('sheet:id,client_uuid,session_id')], 201);
     }
 
     public function updateReading(Request $request, TorqueCheckReading $reading): JsonResponse

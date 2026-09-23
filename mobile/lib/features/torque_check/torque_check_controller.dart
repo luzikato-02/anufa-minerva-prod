@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/sync/sync_queue.dart';
 import '../tension/tension_models.dart';
@@ -42,6 +45,26 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
     } catch (_) {
       state = _fresh();
     }
+    unawaited(_refreshSessionId());
+  }
+
+  /// A sheet started offline has no session id until the server has actually seen it. Best-effort: looks the
+  /// sheet up by its own client uuid (which the scope also matches), so the id appears once connectivity
+  /// allows the first cell to reach the server, even if that happened via a later automatic retry rather than
+  /// the original submit. Failures (still offline, nothing saved yet) are silently ignored.
+  Future<void> _refreshSessionId() async {
+    final sheet = state;
+    if (sheet == null || sheet.sessionId != null || sheet.filledCount == 0) return;
+    try {
+      final res = await ref.read(dioProvider).get('/torque-checks/session/${sheet.uuid}');
+      final sessionId = asMap(asMap(res.data)['data'])['session_id'] as String?;
+      if (sessionId != null && state?.sessionId == null) {
+        state = state!.copyWith(sessionId: sessionId);
+        await _save();
+      }
+    } catch (_) {
+      // Offline, or the first cell hasn't reached the server yet — fine, try again next time.
+    }
   }
 
   Future<void> setHeader({DateTime? date, String? operatorName, String? machineNumber, String? side, int? creelTypeId}) async {
@@ -55,7 +78,21 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
     await _save();
   }
 
+  /// Loads an existing sheet by the session id it was assigned on its first reading (typed in by the operator
+  /// to keep recording into it from this device), replacing whatever draft is active here.
+  Future<void> loadSession(String sessionId) async {
+    try {
+      final res = await ref.read(dioProvider).get('/torque-checks/session/${Uri.encodeComponent(sessionId)}');
+      state = ActiveTorqueCheck.fromServer(asMap(asMap(res.data)['data']), localUuid: ref.read(syncQueueProvider.notifier).newId());
+      await _save();
+    } catch (e) {
+      final err = ApiException.from(e);
+      throw err.status == 404 ? ApiException('Session "$sessionId" was not found.', status: 404) : err;
+    }
+  }
+
   Map<String, dynamic> _readingBody(TorqueReading r) => {
+        if (state!.sessionId != null) 'session_id': state!.sessionId,
         'sheet_client_uuid': state!.uuid,
         'check_date': torqueCheckDay(state!.date),
         'operator_name': state!.operatorName,
@@ -67,6 +104,8 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
 
   /// Records (or corrects) one cell and uploads it, or queues it when offline. Every submit is a POST: the
   /// server upserts by grid position, so re-sending an already-filled cell (a retry or an edit) is always safe.
+  /// The very first save assigns the sheet's session id, which the operator can then note down to resume on
+  /// another device; [_refreshSessionId] picks it up once the server has actually seen the sheet.
   Future<SubmitResult> submitReading(TorqueReading reading) async {
     final sheet = state!;
     final previous = sheet.readings[reading.position]; // null when this cell was blank before
@@ -75,7 +114,10 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
     final queue = ref.read(syncQueueProvider.notifier);
     try {
       if (_waiting(reading.uuid)) await queue.discard(reading.uuid);
-      return await queue.submit(method: 'POST', path: '/torque-checks/readings', data: _readingBody(reading), label: 'Torque check · row ${reading.position}', id: reading.uuid);
+      final result = await queue.submit(method: 'POST', path: '/torque-checks/readings', data: _readingBody(reading), label: 'Torque check · row ${reading.position}', id: reading.uuid);
+      await _save();
+      unawaited(_refreshSessionId());
+      return result;
     } catch (_) {
       // The server refused it (validation): put the cell back how it was.
       state = state!.copyWith(readings: {

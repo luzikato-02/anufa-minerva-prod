@@ -153,4 +153,55 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(0, TorqueCheckSheet::count());
         $this->assertSame(0, TorqueCheckReading::count());
     }
+
+    public function test_the_first_reading_assigns_a_session_id_that_a_second_device_can_resume_with(): void
+    {
+        $u = $this->user();
+        $type = $this->creelType();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id))->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+        $this->assertNotEmpty($sessionId);
+        $this->assertSame(6, strlen($sessionId));
+
+        // A second device, with no sheet_client_uuid of its own, resumes by session id alone.
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'row_no' => 2, 'column_letter' => 'B', 'value' => 6.5])
+            ->assertCreated();
+
+        $this->assertSame(1, TorqueCheckSheet::count());
+        $this->assertSame(2, TorqueCheckReading::count());
+    }
+
+    public function test_getSession_finds_the_sheet_by_its_session_id_or_numeric_id_and_404s_when_unknown(): void
+    {
+        $u = $this->user();
+        $type = $this->creelType();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id))->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+        $sheetId = TorqueCheckSheet::first()->id;
+
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/session/{$sessionId}")->assertOk()->assertJsonCount(1, 'data.readings');
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/session/{$sheetId}")->assertOk()->assertJsonCount(1, 'data.readings');
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks/session/000000')->assertNotFound();
+    }
+
+    public function test_resuming_by_session_id_does_not_require_or_change_the_header_fields(): void
+    {
+        $u = $this->user();
+        $type = $this->creelType();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['operator_name' => 'Supanto']))->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'row_no' => 3, 'column_letter' => 'C', 'value' => 7, 'operator_name' => 'Someone Else'])
+            ->assertCreated();
+
+        $this->assertSame('Supanto', TorqueCheckSheet::first()->operator_name);
+    }
+
+    public function test_an_unknown_session_id_is_rejected_rather_than_silently_starting_a_new_sheet(): void
+    {
+        $u = $this->user();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => '999999', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7])
+            ->assertNotFound();
+        $this->assertSame(0, TorqueCheckSheet::count());
+    }
 }

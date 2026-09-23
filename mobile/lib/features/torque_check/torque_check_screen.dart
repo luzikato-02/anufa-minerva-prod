@@ -33,8 +33,11 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
   String _digits = '';
   final _note = TextEditingController();
   final _machineNumber = TextEditingController();
+  final _sessionId = TextEditingController();
   bool _busy = false;
+  bool _loadingSession = false;
   String? _error;
+  String? _sessionError;
 
   @override
   void initState() {
@@ -46,7 +49,25 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
   void dispose() {
     _note.dispose();
     _machineNumber.dispose();
+    _sessionId.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSession() async {
+    final id = _sessionId.text.trim();
+    if (id.isEmpty) return setState(() => _sessionError = 'Enter a session ID.');
+    setState(() {
+      _loadingSession = true;
+      _sessionError = null;
+    });
+    try {
+      await ref.read(torqueCheckProvider.notifier).loadSession(id);
+      if (mounted) _goTo(1, 0);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _sessionError = e.message);
+    } finally {
+      if (mounted) setState(() => _loadingSession = false);
+    }
   }
 
   String get _position => '$_row${kTorqueColumns[_column]}';
@@ -151,9 +172,27 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
         return MinervaScaffold(
           title: 'Torque Check',
           body: ListView(padding: const EdgeInsets.all(16), children: [
+            if (sheet.sessionId == null)
+              AppCard(
+                title: 'Resume a session',
+                description: 'Have a session ID from another device? Enter it to keep recording into that sheet.',
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  if (_sessionError != null) ...[AppAlert(message: _sessionError!), const SizedBox(height: 12)],
+                  Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Expanded(child: AppTextField(label: 'Session ID', controller: _sessionId, hint: 'e.g. 483920', keyboardType: TextInputType.number, onSubmitted: (_) => _loadSession())),
+                    const SizedBox(width: 8),
+                    AppButton(label: 'Load', loading: _loadingSession, onPressed: _loadSession),
+                  ]),
+                ]),
+              ),
+            if (sheet.sessionId == null) const SizedBox(height: 16),
             AppCard(
               title: DateFormat('EEE d MMM y').format(sheet.date),
-              description: '${sheet.operatorName} · ${sheet.filledCount} of ${kTorqueMaxRow * kTorqueColumns.length} cells filled',
+              description: [
+                if (sheet.sessionId != null) 'Session ${sheet.sessionId}',
+                sheet.operatorName,
+                '${sheet.filledCount} of ${kTorqueMaxRow * kTorqueColumns.length} cells filled',
+              ].join(' · '),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Align(
                   alignment: AlignmentDirectional.centerStart,
@@ -242,7 +281,13 @@ class _ColumnChip extends StatelessWidget {
           height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(border: Border.all(color: selected ? t.primary : t.input), borderRadius: BorderRadius.circular(Radii.md)),
-          child: Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: selected ? t.primaryForeground : t.foreground)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: selected ? t.primaryForeground : t.foreground)),
+            if (filled) ...[
+              const SizedBox(width: 4),
+              Icon(LucideIcons.check, size: 12, color: selected ? t.primaryForeground : t.foreground),
+            ],
+          ]),
         ),
       ),
     );

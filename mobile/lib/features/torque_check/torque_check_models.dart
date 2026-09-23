@@ -38,7 +38,7 @@ String torqueCheckDay(DateTime d) => _day(d);
 
 /// The torque check sheet being filled in on this device.
 class ActiveTorqueCheck {
-  const ActiveTorqueCheck({required this.uuid, required this.date, required this.operatorName, this.machineNumber = '', this.side = 'Ai', this.creelTypeId, this.readings = const {}});
+  const ActiveTorqueCheck({required this.uuid, required this.date, required this.operatorName, this.machineNumber = '', this.side = 'Ai', this.creelTypeId, this.sessionId, this.readings = const {}});
 
   final String uuid;
   final DateTime date;
@@ -47,18 +47,23 @@ class ActiveTorqueCheck {
   final String side;
   final int? creelTypeId;
 
+  /// Set once the first cell is saved (or immediately, when resumed by typing an existing session id).
+  /// The screen shows a session picker until this is known.
+  final String? sessionId;
+
   /// Keyed by "$rowNo$columnLetter" for O(1) lookup; only filled cells have an entry.
   final Map<String, TorqueReading> readings;
 
   int get filledCount => readings.length;
 
-  ActiveTorqueCheck copyWith({DateTime? date, String? operatorName, String? machineNumber, String? side, int? creelTypeId, Map<String, TorqueReading>? readings}) => ActiveTorqueCheck(
+  ActiveTorqueCheck copyWith({DateTime? date, String? operatorName, String? machineNumber, String? side, int? creelTypeId, String? sessionId, Map<String, TorqueReading>? readings}) => ActiveTorqueCheck(
         uuid: uuid,
         date: date ?? this.date,
         operatorName: operatorName ?? this.operatorName,
         machineNumber: machineNumber ?? this.machineNumber,
         side: side ?? this.side,
         creelTypeId: creelTypeId ?? this.creelTypeId,
+        sessionId: sessionId ?? this.sessionId,
         readings: readings ?? this.readings,
       );
 
@@ -69,6 +74,7 @@ class ActiveTorqueCheck {
         'machineNumber': machineNumber,
         'side': side,
         'creelTypeId': creelTypeId,
+        'sessionId': sessionId,
         'readings': [for (final r in readings.values) r.toJson()],
       };
 
@@ -79,9 +85,26 @@ class ActiveTorqueCheck {
         machineNumber: '${j['machineNumber'] ?? ''}',
         side: '${j['side'] ?? kTorqueSides[0]}',
         creelTypeId: (j['creelTypeId'] as num?)?.toInt(),
+        sessionId: j['sessionId'] as String?,
         readings: {
           if (j['readings'] is List)
             for (final reading in [for (final r in j['readings'] as List) TorqueReading.fromJson(asMap(r))]) reading.position: reading,
+        },
+      );
+
+  /// From the server's sheet+readings response (`show` or `session/{id}`), for resuming on another device.
+  /// Server readings carry a numeric id, reused as the "uuid" here since the reading routes accept either.
+  factory ActiveTorqueCheck.fromServer(Map<String, dynamic> j, {required String localUuid}) => ActiveTorqueCheck(
+        uuid: localUuid,
+        date: DateTime.tryParse('${j['check_date']}') ?? DateTime.now(),
+        operatorName: '${j['operator_name'] ?? ''}',
+        machineNumber: '${j['machine_number'] ?? ''}',
+        side: '${j['side'] ?? kTorqueSides[0]}',
+        creelTypeId: (j['creel_type_id'] as num?)?.toInt() ?? (j['creel_type'] is Map ? (asMap(j['creel_type'])['id'] as num?)?.toInt() : null),
+        sessionId: j['session_id'] as String?,
+        readings: {
+          if (j['readings'] is List)
+            for (final reading in [for (final r in j['readings'] as List) TorqueReading.fromJson({...asMap(r), 'uuid': asMap(r)['id']})]) reading.position: reading,
         },
       );
 }
