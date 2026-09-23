@@ -97,11 +97,18 @@ class TorqueCheckController extends Controller
                 $sheet = TorqueCheckSheet::forSessionOrId($data['session_id'])->first();
                 abort_if(! $sheet, 404, 'Session not found');
             } else {
-                $sheet = TorqueCheckSheet::firstOrCreate(
-                    ['client_uuid' => $data['sheet_client_uuid']],
-                    collect($data)->only(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])->all()
-                        + ['session_id' => $this->generateUniqueSessionId(), 'user_id' => $request->user()->id],
-                );
+                // Two near-simultaneous first-cell submits (a double tap, a retry racing the original) can both
+                // find nothing and try to create the sheet; `firstOrCreate` catches that itself in the common
+                // case, but under load its own re-fetch can still lose narrowly — so fall back to one more here.
+                try {
+                    $sheet = TorqueCheckSheet::firstOrCreate(
+                        ['client_uuid' => $data['sheet_client_uuid']],
+                        collect($data)->only(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])->all()
+                            + ['session_id' => $this->generateUniqueSessionId(), 'user_id' => $request->user()->id],
+                    );
+                } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                    $sheet = TorqueCheckSheet::where('client_uuid', $data['sheet_client_uuid'])->firstOrFail();
+                }
             }
 
             return TorqueCheckReading::updateOrCreate(

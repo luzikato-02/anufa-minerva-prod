@@ -25,10 +25,18 @@ class TorqueCheckSheet extends Model
      * Find by the operator-facing session id (typed to resume elsewhere), the numeric id, or the creating
      * device's own client uuid — the last of these lets a device that saved its first cell while offline
      * discover the session id it was assigned once it is back online.
+     *
+     * `id` is only compared when `$id` actually looks numeric: Postgres (unlike sqlite) errors on comparing
+     * a non-numeric string against a bigint column, even one side of an `orWhere`.
      */
     public function scopeForSessionOrId($query, $id)
     {
-        return $query->where('id', $id)->orWhere('session_id', $id)->orWhere('client_uuid', $id);
+        return $query->where(function ($q) use ($id) {
+            $q->where('session_id', $id)->orWhere('client_uuid', $id);
+            if (ctype_digit((string) $id)) {
+                $q->orWhere('id', $id);
+            }
+        });
     }
 
     public function readings(): HasMany
