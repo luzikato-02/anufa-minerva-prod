@@ -6,7 +6,9 @@ use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
 use App\Http\Controllers\Api\MachineMaintenanceController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\CreelTypeController;
 use App\Http\Controllers\Api\StockSheetController;
+use App\Http\Controllers\Api\TorqueCheckController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
@@ -81,6 +83,26 @@ Route::name('v1.')->group(function () {
         Route::delete('stock-sheets/rows/{row}', [StockSheetController::class, 'destroyRow'])->middleware('permission:stock-take.delete');
         Route::patch('stock-sheets/{stockSheet}', [StockSheetController::class, 'update'])->middleware('permission:stock-take.edit');
         Route::delete('stock-sheets/{stockSheet}', [StockSheetController::class, 'destroy'])->middleware('permission:stock-take.delete');
+
+        // --- Torque checks (creel adaptor torque) ---
+        Route::middleware('permission:torque-checks.view')->group(function () {
+            Route::get('torque-checks', [TorqueCheckController::class, 'index']);
+            Route::get('torque-checks/{torqueCheckSheet}', [TorqueCheckController::class, 'show'])->whereNumber('torqueCheckSheet');
+            Route::get('torque-checks/{torqueCheckSheet}/download', [TorqueCheckController::class, 'downloadCsv'])->whereNumber('torqueCheckSheet');
+        });
+        Route::middleware('permission:creel-types.view')->group(function () {
+            Route::get('creel-types', [CreelTypeController::class, 'index']);
+        });
+        Route::post('torque-checks/readings', [TorqueCheckController::class, 'storeReading'])->middleware('permission:torque-checks.create');
+        Route::patch('torque-checks/readings/{reading}', [TorqueCheckController::class, 'updateReading'])->middleware('permission:torque-checks.edit');
+        Route::delete('torque-checks/readings/{reading}', [TorqueCheckController::class, 'destroyReading'])->middleware('permission:torque-checks.delete');
+        Route::patch('torque-checks/{torqueCheckSheet}', [TorqueCheckController::class, 'update'])->middleware('permission:torque-checks.edit');
+        Route::delete('torque-checks/{torqueCheckSheet}', [TorqueCheckController::class, 'destroy'])->middleware('permission:torque-checks.delete');
+        Route::middleware('permission:creel-types.manage')->group(function () {
+            Route::post('creel-types', [CreelTypeController::class, 'store']);
+            Route::patch('creel-types/{id}', [CreelTypeController::class, 'update']);
+            Route::delete('creel-types/{id}', [CreelTypeController::class, 'destroy']);
+        });
 
         // --- Tension (twisting + weaving) ---
         Route::middleware('permission:tension-records.view')->group(function () {
