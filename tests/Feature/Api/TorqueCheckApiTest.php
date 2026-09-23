@@ -130,18 +130,22 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(['ROW' => 14, 'COLUMN' => 'A', 'NOTE' => 'Felt aus kotor (Ganti baru)'], $csv->json('problems.0'));
     }
 
-    public function test_a_session_lookup_by_a_non_numeric_id_never_touches_the_numeric_id_column(): void
+    public function test_a_session_lookup_never_compares_a_mismatched_id_against_a_typed_column(): void
     {
-        // Regression: forSessionOrId used to compare `id = $id` unconditionally, which sqlite tolerates for a
-        // non-numeric string but Postgres (dev/prod) rejects outright as a type error on the bigint column.
+        // Regression: forSessionOrId used to compare `id`/`client_uuid` unconditionally, which sqlite tolerates
+        // for a mismatched string but Postgres (dev/prod) rejects outright as a type error — a numeric session
+        // id against the uuid column, or a uuid against the bigint id column, on a bigint/uuid-typed column.
         $u = $this->user();
         $type = $this->creelType();
         $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id))->assertCreated();
         $uuid = $created->json('data.sheet.client_uuid');
+        $sessionId = $created->json('data.sheet.session_id');
         $this->assertNotEmpty($uuid);
+        $this->assertNotEmpty($sessionId);
 
-        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/session/{$uuid}")->assertOk();
-        $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks/session/not-a-real-id-or-uuid')->assertNotFound();
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/session/{$uuid}")->assertOk(); // a uuid against client_uuid
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/session/{$sessionId}")->assertOk(); // a numeric id against session_id
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks/session/not-a-real-id-or-uuid')->assertNotFound(); // matches nothing typed
     }
 
     public function test_download_404s_when_the_sheet_has_no_readings(): void

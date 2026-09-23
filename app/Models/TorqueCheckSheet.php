@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -26,15 +27,19 @@ class TorqueCheckSheet extends Model
      * device's own client uuid — the last of these lets a device that saved its first cell while offline
      * discover the session id it was assigned once it is back online.
      *
-     * `id` is only compared when `$id` actually looks numeric: Postgres (unlike sqlite) errors on comparing
-     * a non-numeric string against a bigint column, even one side of an `orWhere`.
+     * `id` and `client_uuid` are only compared when `$id` actually looks like their type (numeric, and a real
+     * uuid, respectively): Postgres (unlike sqlite) rejects a mismatched value outright as a type error against
+     * a bigint or native uuid column, even on one side of an `orWhere` that could never have matched anyway.
      */
     public function scopeForSessionOrId($query, $id)
     {
         return $query->where(function ($q) use ($id) {
-            $q->where('session_id', $id)->orWhere('client_uuid', $id);
+            $q->where('session_id', $id);
             if (ctype_digit((string) $id)) {
                 $q->orWhere('id', $id);
+            }
+            if (Str::isUuid($id)) {
+                $q->orWhere('client_uuid', $id);
             }
         });
     }
