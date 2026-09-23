@@ -32,6 +32,7 @@ class ServerTorqueSheet {
   String get operatorName => '${raw['operator_name'] ?? ''}';
   String get machineNumber => '${raw['machine_number'] ?? ''}';
   String get side => '${raw['side'] ?? ''}';
+  String? get sessionId => raw['session_id'] as String?;
   String? get creelTypeName => raw['creel_type'] is Map ? '${(raw['creel_type'] as Map)['name']}' : null;
 
   Map<String, TorqueReading> get readings => {
@@ -138,7 +139,7 @@ class _Grid extends StatelessWidget {
     return ListView(padding: const EdgeInsets.all(16), children: [
       AppCard(
         title: 'Summary',
-        description: [s.operatorName, 'Machine ${s.machineNumber}', 'Side ${s.side}', if (s.creelTypeName != null) s.creelTypeName!].join(' · '),
+        description: [if (s.sessionId != null) 'Session ${s.sessionId}', s.operatorName, 'Machine ${s.machineNumber}', 'Side ${s.side}', if (s.creelTypeName != null) s.creelTypeName!].join(' · '),
         child: Text('${readings.length} cells filled, up to row $lastRow', style: TextStyle(color: t.mutedForeground)),
       ),
       const SizedBox(height: 16),

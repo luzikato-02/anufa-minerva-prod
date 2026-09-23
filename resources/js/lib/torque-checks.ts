@@ -19,6 +19,7 @@ export interface TorqueReading {
 
 export interface TorqueCheckSummary {
     id: number;
+    session_id: string | null;
     check_date: string;
     operator_name: string;
     machine_number: string;
@@ -30,6 +31,7 @@ export interface TorqueCheckSummary {
 
 export interface TorqueCheckDetail {
     id: number;
+    session_id: string | null;
     check_date: string;
     operator_name: string;
     machine_number: string;

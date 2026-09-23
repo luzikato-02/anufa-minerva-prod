@@ -67,7 +67,7 @@ export function TorqueChecksTable() {
 
     return (
         <div className="space-y-4">
-            <Input aria-label="Search torque checks" placeholder="Search operator or machine number" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+            <Input aria-label="Search torque checks" placeholder="Search session, operator or machine number" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
             {error && (
                 <Alert variant="destructive" role="alert">
                     <AlertDescription>{error}</AlertDescription>
@@ -77,6 +77,7 @@ export function TorqueChecksTable() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead>Session</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Operator</TableHead>
                             <TableHead>Machine</TableHead>
@@ -89,13 +90,14 @@ export function TorqueChecksTable() {
                     <TableBody>
                         {rows.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     {loading ? 'Loading…' : 'No torque checks yet.'}
                                 </TableCell>
                             </TableRow>
                         ) : (
                             rows.map((s) => (
                                 <TableRow key={s.id} className="cursor-pointer" tabIndex={0} onClick={() => setOpenId(s.id)} onKeyDown={(e) => e.key === 'Enter' && setOpenId(s.id)}>
+                                    <TableCell className="font-mono text-sm">{s.session_id ?? '—'}</TableCell>
                                     <TableCell className="font-medium">{day(s.check_date)}</TableCell>
                                     <TableCell>{s.operator_name}</TableCell>
                                     <TableCell>{s.machine_number}</TableCell>
@@ -177,7 +179,7 @@ function SheetDialog({ id, onClose, onChanged }: { id: number; onClose: () => vo
                 <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
                     <DialogHeader>
                         <DialogTitle>{sheet ? day(sheet.check_date) : 'Torque check'}</DialogTitle>
-                        <DialogDescription>{sheet ? `Machine ${sheet.machine_number} · Side ${sheet.side} · ${sheet.operator_name}${sheet.creel_type ? ` · ${sheet.creel_type.name}` : ''}` : 'Loading…'}</DialogDescription>
+                        <DialogDescription>{sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Machine ${sheet.machine_number} · Side ${sheet.side} · ${sheet.operator_name}${sheet.creel_type ? ` · ${sheet.creel_type.name}` : ''}` : 'Loading…'}</DialogDescription>
                     </DialogHeader>
                     {error && (
                         <Alert variant="destructive" role="alert">

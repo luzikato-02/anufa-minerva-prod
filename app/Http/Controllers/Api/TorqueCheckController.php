@@ -22,7 +22,8 @@ class TorqueCheckController extends Controller
         if ($search = strtolower(trim((string) $request->input('search')))) {
             $query->where(function ($q) use ($search) {
                 $q->whereRaw('LOWER(operator_name) LIKE ?', ["%{$search}%"])
-                    ->orWhereRaw('LOWER(machine_number) LIKE ?', ["%{$search}%"]);
+                    ->orWhereRaw('LOWER(machine_number) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(session_id) LIKE ?', ["%{$search}%"]);
             });
         }
 

@@ -30,7 +30,7 @@ class _TorqueChecksScreenState extends ConsumerState<TorqueChecksScreen> {
           emptyMessage: 'No torque checks yet.',
           header: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SearchField(hint: 'Search operator or machine number', onChanged: (v) => setState(() => _search = v)),
+            child: SearchField(hint: 'Search session, operator or machine number', onChanged: (v) => setState(() => _search = v)),
           ),
           itemBuilder: (ctx, r) => _SheetCard(r),
         ),
@@ -49,16 +49,17 @@ class _SheetCard extends StatelessWidget {
     final filled = (r['readings_count'] as num?)?.toInt() ?? 0;
     final outOfRange = (r['out_of_range_count'] as num?)?.toInt() ?? 0;
     final creelType = r['creel_type'] is Map ? (r['creel_type'] as Map)['name'] : null;
+    final sessionId = r['session_id'] as String?;
     return Semantics(
       button: true,
-      label: 'Torque check ${date == null ? '' : DateFormat('d MMM y').format(date)}, machine ${r['machine_number']}, side ${r['side']}, $filled cells filled',
+      label: 'Torque check ${date == null ? '' : DateFormat('d MMM y').format(date)}, ${sessionId == null ? '' : 'session $sessionId, '}machine ${r['machine_number']}, side ${r['side']}, $filled cells filled',
       excludeSemantics: true,
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.lg + 4),
         onTap: () => context.push('/torque-checks/${r['id']}'),
         child: AppCard(
           title: date == null ? 'Torque check' : DateFormat('EEE d MMM y').format(date),
-          description: 'Machine ${r['machine_number']} · Side ${r['side']} · ${r['operator_name']}',
+          description: [if (sessionId != null) 'Session $sessionId', 'Machine ${r['machine_number']}', 'Side ${r['side']}', '${r['operator_name']}'].join(' · '),
           action: outOfRange > 0 ? AppBadge('$outOfRange out of range', variant: AppBadgeVariant.warning) : null,
           child: Align(
             alignment: AlignmentDirectional.centerStart,

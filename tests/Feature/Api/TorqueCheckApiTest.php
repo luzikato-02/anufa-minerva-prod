@@ -118,6 +118,11 @@ class TorqueCheckApiTest extends TestCase
         $list = $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks')->assertOk();
         $list->assertJsonPath('data.0.readings_count', 2);
         $list->assertJsonPath('data.0.out_of_range_count', 1);
+        $sessionId = $list->json('data.0.session_id');
+        $this->assertNotEmpty($sessionId);
+
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks?search='.$sessionId)->assertOk()->assertJsonCount(1, 'data');
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks?search=no-such-session')->assertOk()->assertJsonCount(0, 'data');
 
         $sheet = TorqueCheckSheet::first();
         $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/{$sheet->id}")->assertOk()->assertJsonCount(2, 'data.readings');
