@@ -25,6 +25,7 @@ import '../features/stock_sheet/stock_sheets_screen.dart';
 import '../features/torque_check/creel_type_settings_screen.dart';
 import '../features/torque_check/torque_check_detail_screen.dart';
 import '../features/torque_check/torque_check_screen.dart';
+import '../features/torque_check/torque_check_session_screen.dart';
 import '../features/torque_check/torque_checks_screen.dart';
 import '../features/tension/recording/twisting_screen.dart';
 import '../features/tension/recording/weaving_screen.dart';
@@ -111,6 +112,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/finish-earlier/:id/entries', builder: (_, s) => FeEntriesScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/document-intelligence', builder: (_, _) => const DocumentScreen()),
       GoRoute(path: '/torque-check', builder: (_, _) => const TorqueCheckScreen()),
+      GoRoute(path: '/torque-check/session', builder: (_, _) => const TorqueCheckSessionScreen()),
       GoRoute(path: '/torque-checks', builder: (_, _) => const TorqueChecksScreen()),
       GoRoute(path: '/torque-checks/:id', builder: (_, s) => TorqueCheckDetailScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/creel-type-settings', builder: (_, _) => const CreelTypeSettingsScreen()),

@@ -99,6 +99,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('permission:torque-checks.create')->group(function () {
+        Route::get('torque-check-session', function () {
+            return Inertia::render('torque-check-session');
+        })->name('torque-check-session');
+
         Route::get('torque-check-main', function () {
             return Inertia::render('torque-check-record');
         })->name('torque-check-main');

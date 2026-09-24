@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -37,41 +38,24 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
   String _digits = '';
   final _note = TextEditingController();
   final _machineNumber = TextEditingController();
-  final _sessionId = TextEditingController();
   bool _busy = false;
-  bool _loadingSession = false;
   String? _error;
-  String? _sessionError;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(torqueCheckProvider.notifier).open());
+    Future.microtask(() async {
+      await ref.read(torqueCheckProvider.notifier).open();
+      // Nothing active on this device (a first or direct visit) — starting or resuming a sheet happens there.
+      if (mounted && ref.read(torqueCheckProvider) == null) context.go('/torque-check/session');
+    });
   }
 
   @override
   void dispose() {
     _note.dispose();
     _machineNumber.dispose();
-    _sessionId.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSession() async {
-    final id = _sessionId.text.trim();
-    if (id.isEmpty) return setState(() => _sessionError = 'Enter a session ID.');
-    setState(() {
-      _loadingSession = true;
-      _sessionError = null;
-    });
-    try {
-      await ref.read(torqueCheckProvider.notifier).loadSession(id);
-      if (mounted) _goTo(0, 1, 0);
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _sessionError = e.message);
-    } finally {
-      if (mounted) setState(() => _loadingSession = false);
-    }
   }
 
   String get _position => '${kTorqueSides[_side]}-$_row${kTorqueColumns[_column]}';
@@ -112,7 +96,6 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
   Future<void> _save(ActiveTorqueCheck sheet, CreelType? type) async {
     final value = double.tryParse(_digits);
     if (value == null) return setState(() => _error = 'Enter a reading.');
-    if ((value * 2) % 1 != 0) return setState(() => _error = 'Reading must be in steps of 0.5.');
     final outOfRange = type != null && !type.inRange(value);
     if (outOfRange && _note.text.trim().isEmpty) {
       return setState(() => _error = 'This reading is outside ${type.name}\'s range (${fmtNum(type.torqueMin)}–${fmtNum(type.torqueMax)}). Add a note before saving.');
@@ -138,15 +121,6 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _startNew(ActiveTorqueCheck sheet) async {
-    if (sheet.filledCount > 0) {
-      final ok = await confirmDialog(context, title: 'Start a new sheet?', message: 'The ${sheet.filledCount} readings on this sheet are already saved. You will begin an empty sheet.', confirmLabel: 'Start new sheet');
-      if (!ok || !mounted) return;
-    }
-    await ref.read(torqueCheckProvider.notifier).startNew();
-    if (mounted) _goTo(0, 1, 0);
   }
 
   @override
@@ -177,20 +151,6 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
         return MinervaScaffold(
           title: 'Torque Check',
           body: ListView(padding: const EdgeInsets.all(16), children: [
-            if (sheet.sessionId == null)
-              AppCard(
-                title: 'Resume a session',
-                description: 'Have a session ID from another device? Enter it to keep recording into that sheet.',
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  if (_sessionError != null) ...[AppAlert(message: _sessionError!), const SizedBox(height: 12)],
-                  Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Expanded(child: AppTextField(label: 'Session ID', controller: _sessionId, hint: 'e.g. 483920', keyboardType: TextInputType.number, onSubmitted: (_) => _loadSession())),
-                    const SizedBox(width: 8),
-                    AppButton(label: 'Load', loading: _loadingSession, onPressed: _loadSession),
-                  ]),
-                ]),
-              ),
-            if (sheet.sessionId == null) const SizedBox(height: 16),
             AppCard(
               title: DateFormat('EEE d MMM y').format(sheet.date),
               description: [
@@ -201,7 +161,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Align(
                   alignment: AlignmentDirectional.centerStart,
-                  child: AppButton(label: 'Start new sheet', icon: LucideIcons.filePlus, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => _startNew(sheet)),
+                  child: AppButton(label: 'Change session', icon: LucideIcons.arrowLeftRight, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => context.go('/torque-check/session')),
                 ),
                 const SizedBox(height: 12),
                 AppTextField(label: 'Machine number', controller: _machineNumber, onChanged: (v) => ref.read(torqueCheckProvider.notifier).setHeader(machineNumber: v)),

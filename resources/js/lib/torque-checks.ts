@@ -114,3 +114,52 @@ export const torqueCheckApi = {
 };
 
 export const newUuid = () => crypto.randomUUID();
+
+/** The device's own working copy of a sheet — the session-select page starts one, the record page fills it in. */
+export const TORQUE_ACTIVE_SHEET_KEY = 'torque-check-active';
+
+export interface TorqueActiveReading {
+    clientUuid: string;
+    value: number;
+    note: string;
+}
+
+export interface TorqueActiveSheet {
+    uuid: string;
+    sessionId: string | null;
+    checkDate: string;
+    operatorName: string;
+    machineNumber: string;
+    creelTypeId: number | null;
+    /** Keyed by "side-rowcol"; one sheet holds a separate 105x5 grid per side. */
+    readings: Record<string, TorqueActiveReading>;
+}
+
+export const torqueToday = () => new Date().toLocaleDateString('en-CA'); // yyyy-mm-dd in local time
+export const torquePosition = (side: TorqueSide, row: number, col: TorqueColumn) => `${side}-${row}${col}`;
+
+export function freshTorqueSheet(operatorName: string): TorqueActiveSheet {
+    return { uuid: newUuid(), sessionId: null, checkDate: torqueToday(), operatorName, machineNumber: '', creelTypeId: null, readings: {} };
+}
+
+export function loadActiveTorqueSheet(): TorqueActiveSheet | null {
+    try {
+        const raw = localStorage.getItem(TORQUE_ACTIVE_SHEET_KEY);
+        if (raw) return JSON.parse(raw) as TorqueActiveSheet;
+    } catch {
+        // fall through to null
+    }
+    return null;
+}
+
+export function saveActiveTorqueSheet(sheet: TorqueActiveSheet) {
+    try {
+        localStorage.setItem(TORQUE_ACTIVE_SHEET_KEY, JSON.stringify(sheet));
+    } catch {
+        // storage full or blocked: readings are still saved on the server
+    }
+}
+
+/** A blank placeholder sheet (freshly created, nothing recorded and no session yet) isn't a session in
+ *  progress — it's fine to send the operator back through session-select without losing anything. */
+export const torqueSheetIsStarted = (sheet: TorqueActiveSheet) => sheet.sessionId !== null || Object.keys(sheet.readings).length > 0;

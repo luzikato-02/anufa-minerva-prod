@@ -81,7 +81,7 @@ class TorqueCheckController extends Controller
             'side' => "{$req}|in:".implode(',', self::SIDES),
             'row_no' => "{$req}|integer|between:1,105",
             'column_letter' => "{$req}|in:A,B,C,D,E",
-            'value' => "{$req}|numeric|min:0|multiple_of:0.5",
+            'value' => "{$req}|numeric|min:0",
             'note' => 'nullable|string|max:255',
         ];
     }
@@ -137,7 +137,7 @@ class TorqueCheckController extends Controller
 
     public function updateReading(Request $request, TorqueCheckReading $reading): JsonResponse
     {
-        $reading->update($request->validate(['value' => 'sometimes|required|numeric|min:0|multiple_of:0.5', 'note' => 'nullable|string|max:255']));
+        $reading->update($request->validate(['value' => 'sometimes|required|numeric|min:0', 'note' => 'nullable|string|max:255']));
 
         return response()->json(['status' => 'success', 'data' => $reading->fresh()]);
     }

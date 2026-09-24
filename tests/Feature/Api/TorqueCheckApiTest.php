@@ -75,11 +75,12 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(['Ai' => 7.0, 'Ao' => 6.5, 'Bi' => 7.5, 'Bo' => 8.0], TorqueCheckReading::pluck('value', 'side')->all());
     }
 
-    public function test_value_must_be_a_half_step_position_must_be_in_range_and_side_must_be_valid(): void
+    public function test_value_is_not_limited_to_half_steps_but_position_must_be_in_range_and_side_must_be_valid(): void
     {
         $u = $this->user();
         $type = $this->creelType();
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['value' => 7.3]))->assertUnprocessable()->assertJsonValidationErrors('value');
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['value' => 7.3]))->assertCreated();
+        $this->assertSame(7.3, TorqueCheckReading::first()->value);
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['row_no' => 106]))->assertUnprocessable()->assertJsonValidationErrors('row_no');
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['column_letter' => 'F']))->assertUnprocessable()->assertJsonValidationErrors('column_letter');
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ci']))->assertUnprocessable()->assertJsonValidationErrors('side');

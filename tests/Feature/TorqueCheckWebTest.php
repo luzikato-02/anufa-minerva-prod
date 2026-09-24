@@ -27,9 +27,11 @@ class TorqueCheckWebTest extends TestCase
         $viewer = $this->user(['torque-checks.view']);
         $this->actingAs($viewer)->get('/torque-checks-main')->assertOk();
         $this->actingAs($viewer)->get('/torque-check-main')->assertForbidden();
+        $this->actingAs($viewer)->get('/torque-check-session')->assertForbidden();
 
         $recorder = $this->user(['torque-checks.create']);
         $this->actingAs($recorder)->get('/torque-check-main')->assertOk();
+        $this->actingAs($recorder)->get('/torque-check-session')->assertOk();
         $this->actingAs($recorder)->get('/torque-checks-main')->assertForbidden();
     }
 

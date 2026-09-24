@@ -21,8 +21,17 @@ Map<String, Handler> get _routes => {
       'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': {'session_id': '483920'}}),
     };
 
-Future<FakeAdapter> _open(WidgetTester t, {Map<String, Handler>? routes, List<Override> overrides = const []}) =>
-    pumpSignedIn(t, permissions: _perms, path: '/torque-check', routes: routes ?? _routes, overrides: overrides);
+/// Opens the record screen with a fresh sheet already active — starting a sheet is the session-select
+/// screen's job, so this walks through it once ("Start new sheet") before handing back to the caller.
+Future<FakeAdapter> _open(WidgetTester t, {Map<String, Handler>? routes, List<Override> overrides = const []}) async {
+  final adapter = await pumpSignedIn(t, permissions: _perms, path: '/torque-check', routes: routes ?? _routes, overrides: overrides);
+  await t.tap(find.text('Start new sheet'));
+  await t.pumpAndSettle();
+  return adapter;
+}
+
+Future<FakeAdapter> _openSessionScreen(WidgetTester t, {Map<String, Handler>? routes}) =>
+    pumpSignedIn(t, permissions: _perms, path: '/torque-check/session', routes: routes ?? _routes);
 
 Finder _byLabel(String label) => find.descendant(of: find.widgetWithText(AppTextField, label), matching: find.byType(TextField));
 
@@ -67,7 +76,13 @@ void main() {
     expect(ai.position, isNot(ao.position));
   });
 
-  testWidgets('recording a cell selects the creel type, uploads the full header and clamps to 0.5 steps', (tester) async {
+  testWidgets('visiting the record screen with nothing active sends the operator to session-select first', (tester) async {
+    await pumpSignedIn(tester, permissions: _perms, path: '/torque-check', routes: _routes);
+    expect(find.text('Start new sheet'), findsOneWidget); // the chooser, not the grid
+    expect(find.text('Resume a session'), findsOneWidget);
+  });
+
+  testWidgets('recording a cell selects the creel type and uploads the full header', (tester) async {
     final adapter = await _open(tester);
     await _selectCreelType(tester);
     await tester.enterText(_byLabel('Machine number'), '2704');
@@ -182,6 +197,8 @@ void main() {
   testWidgets('Torque Check screens follow the torque-checks permissions', (tester) async {
     await pumpSignedIn(tester, permissions: const [], path: '/torque-check', routes: {});
     expect(find.text('Access denied'), findsWidgets);
+    await pumpSignedIn(tester, permissions: const [], path: '/torque-check/session', routes: {});
+    expect(find.text('Access denied'), findsWidgets);
     await pumpSignedIn(tester, permissions: const [], path: '/torque-checks', routes: {});
     expect(find.text('Access denied'), findsWidgets);
     await pumpSignedIn(tester, permissions: const [], path: '/creel-type-settings', routes: {});
@@ -190,13 +207,30 @@ void main() {
 
   testWidgets('saving the first cell reveals the session id the server assigned, once seen', (tester) async {
     await _open(tester);
-    expect(find.text('Resume a session'), findsOneWidget);
+    expect(find.textContaining('Session'), findsNothing);
     await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
-
     expect(find.textContaining('Session 483920'), findsOneWidget);
-    expect(find.text('Resume a session'), findsNothing);
+  });
+
+  testWidgets('Change session goes back to the chooser, confirming before discarding already-saved readings', (tester) async {
+    await _open(tester);
+    await _selectCreelType(tester);
+    await _enterReading(tester, '7');
+    await _saveCell(tester); // Ai-1A saved
+
+    await tester.tap(find.text('Change session'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start new sheet'), findsOneWidget); // back on the chooser
+
+    await tester.tap(find.text('Start new sheet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start a new sheet?'), findsOneWidget); // confirms first, since a reading is already saved
+
+    await tester.tap(find.text('Start new sheet').last); // confirm
+    await tester.pumpAndSettle();
+    expect(find.text('Side Ai, row 1, column A'), findsOneWidget); // a fresh sheet, back at the start
   });
 
   testWidgets('entering a session ID loads that sheet, with its readings and header already filled in', (tester) async {
@@ -206,16 +240,15 @@ void main() {
         {'id': 11, 'side': 'Bo', 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
       ],
     };
-    final adapter = await _open(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': sheet})});
+    final adapter = await _openSessionScreen(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': sheet})});
     await tester.enterText(_byLabel('Session ID'), '483920');
     await tester.tap(find.text('Load'));
     await tester.pumpAndSettle();
 
     expect(adapter.requests.any((r) => r.path.endsWith('/torque-checks/session/483920')), isTrue);
-    expect(find.textContaining('Session 483920'), findsOneWidget);
+    expect(find.textContaining('Session 483920'), findsOneWidget); // now on the grid
     expect(find.textContaining('Budi'), findsOneWidget);
     expect(find.widgetWithText(TextField, '9'), findsOneWidget); // machine number
-    expect(find.text('Resume a session'), findsNothing);
 
     // The loaded sheet's Bo-1A reading isn't visible on the default Ai side...
     expect(find.text('Side Ai, row 1, column A'), findsOneWidget);
@@ -227,7 +260,7 @@ void main() {
   });
 
   testWidgets('an unknown session ID shows an error instead of silently starting fresh', (tester) async {
-    await _open(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 404, body: {'success': false, 'message': 'Session not found'})});
+    await _openSessionScreen(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 404, body: {'success': false, 'message': 'Session not found'})});
     await tester.enterText(_byLabel('Session ID'), '000000');
     await tester.tap(find.text('Load'));
     await tester.pumpAndSettle();
@@ -244,6 +277,15 @@ void main() {
     await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the session-select screen fits 320 wide with the largest text the app allows', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+    await _openSessionScreen(tester);
+    tester.view.physicalSize = const Size(640, 4800);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }

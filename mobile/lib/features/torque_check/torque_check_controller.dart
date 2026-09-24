@@ -36,14 +36,17 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
     return DateTime(n.year, n.month, n.day);
   }
 
-  /// Restores this device's sheet, or starts an empty one.
+  /// Restores this device's sheet, if one is already active. Starting fresh or resuming by session id
+  /// happens on the session-select screen, not here — this leaves [state] null when nothing was saved yet
+  /// (a first/direct visit), which is the record screen's cue to send the operator there first.
   Future<void> open() async {
     if (state != null) return;
     final raw = (await SharedPreferences.getInstance()).getString(storageKey);
+    if (raw == null) return;
     try {
-      state = raw == null ? _fresh() : ActiveTorqueCheck.fromJson(asMap(jsonDecode(raw)));
+      state = ActiveTorqueCheck.fromJson(asMap(jsonDecode(raw)));
     } catch (_) {
-      state = _fresh();
+      state = null;
     }
     unawaited(_refreshSessionId());
   }
