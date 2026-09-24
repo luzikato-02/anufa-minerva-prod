@@ -468,6 +468,10 @@ void main() {
     testWidgets('shots $mode: stock sheet', (tester) async {
       addTearDown(tester.view.reset);
       final s = _Shots(tester, mode);
+      // The front door: nothing active yet, so it's the chooser, not the form.
+      await s.boot(path: '/stock-sheet/session');
+      await s.shot('89-stock-sheet-session');
+
       final rows = [
         {'uuid': 'r1', 'color': 'White orange green', 'material_code': 'TY022002756', 'batch': 'TA0092565', 'prod_date': '2026-09-06', 'chs': 28, 'actual_weight': 146.8, 'position': 30, 'remark': 'ex WV'},
         {'uuid': 'r2', 'color': 'Pink blue yellow', 'material_code': 'TY0220004540', 'batch': 'kupasan', 'prod_date': '2026-08-14', 'chs': 20, 'actual_weight': 76, 'position': 44, 'remark': 'ex WV'},
@@ -500,8 +504,9 @@ void main() {
       final types = {'status': 'success', 'data': [
         {'id': 1, 'name': 'Standard Creel', 'torque_min': 6.0, 'torque_max': 8.0, 'torque_check_sheets_count': 2},
       ]};
-      await s.boot(path: '/torque-check', routes: {'GET /creel-types': (_) => (status: 200, body: types)});
-      await s.shot('110-torque-record', scrolled: true);
+      // The front door: nothing active yet, so it's the chooser, not the grid.
+      await s.boot(path: '/torque-check/session');
+      await s.shot('109-torque-check-session');
 
       final readings = [
         {'id': 1, 'side': 'Ai', 'row_no': 1, 'column_letter': 'A', 'value': 6.0, 'note': null},
@@ -509,6 +514,14 @@ void main() {
         {'id': 3, 'side': 'Ai', 'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor (Ganti baru)'},
         {'id': 4, 'side': 'Bo', 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
       ];
+      // A sheet already active on this device (as if the operator had just resumed it), so the grid renders
+      // with real readings instead of bouncing back to the session chooser.
+      SharedPreferences.setMockInitialValues({'torque-check-active': jsonEncode({
+        'uuid': 'demo', 'date': '2026-09-22', 'operatorName': 'Supanto', 'machineNumber': '2704', 'creelTypeId': 1, 'sessionId': '483920',
+        'readings': [for (final r in readings) {'uuid': 'tr${r['id']}', 'side': r['side'], 'row_no': r['row_no'], 'column_letter': r['column_letter'], 'value': r['value'], 'note': r['note']}],
+      })});
+      await s.boot(path: '/torque-check', routes: {'GET /creel-types': (_) => (status: 200, body: types)});
+      await s.shot('110-torque-record', scrolled: true);
       final sheet = {
         'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704',
         'creel_type': {'id': 1, 'name': 'Standard Creel'}, 'readings': readings,
