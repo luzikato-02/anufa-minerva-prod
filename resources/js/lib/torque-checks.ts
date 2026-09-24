@@ -11,6 +11,7 @@ export interface TorqueReading {
     id?: number;
     /** Generated in the browser; the reading's handle on the server. */
     client_uuid: string;
+    side: TorqueSide;
     row_no: number;
     column_letter: TorqueColumn;
     value: number;
@@ -23,7 +24,8 @@ export interface TorqueCheckSummary {
     check_date: string;
     operator_name: string;
     machine_number: string;
-    side: TorqueSide;
+    /** Sides that have at least one reading, in Ai/Ao/Bi/Bo order. */
+    sides_recorded: TorqueSide[];
     readings_count: number;
     out_of_range_count: number;
     creel_type: { id: number; name: string } | null;
@@ -35,7 +37,6 @@ export interface TorqueCheckDetail {
     check_date: string;
     operator_name: string;
     machine_number: string;
-    side: TorqueSide;
     creel_type: { id: number; name: string } | null;
     readings: TorqueReading[];
 }
@@ -47,7 +48,7 @@ export interface Paginated<T> {
     total: number;
 }
 
-export type ReadingFields = Pick<TorqueReading, 'row_no' | 'column_letter' | 'value' | 'note'>;
+export type ReadingFields = Pick<TorqueReading, 'side' | 'row_no' | 'column_letter' | 'value' | 'note'>;
 
 async function request<T>(url: string, method: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
@@ -71,7 +72,6 @@ export interface SheetHeader {
     checkDate: string;
     operatorName: string;
     machineNumber: string;
-    side: TorqueSide;
     creelTypeId: number;
 }
 
@@ -80,9 +80,14 @@ export interface TorqueSession {
     check_date: string;
     operator_name: string;
     machine_number: string;
-    side: TorqueSide;
     creel_type_id: number;
     readings: TorqueReading[];
+}
+
+export interface CsvSection {
+    side: TorqueSide;
+    grid: Record<string, number | null>[];
+    problems: { ROW: number; COLUMN: string; NOTE: string }[];
 }
 
 export const torqueCheckApi = {
@@ -95,15 +100,14 @@ export const torqueCheckApi = {
             check_date: sheet.checkDate,
             operator_name: sheet.operatorName,
             machine_number: sheet.machineNumber,
-            side: sheet.side,
             creel_type_id: sheet.creelTypeId,
             client_uuid: clientUuid,
             ...fields,
         }),
-    updateReading: (id: number | string, fields: Partial<ReadingFields>) => request(`/torque-checks/readings/${id}`, 'PATCH', fields),
+    updateReading: (id: number | string, fields: Partial<Omit<ReadingFields, 'side' | 'row_no' | 'column_letter'>>) => request(`/torque-checks/readings/${id}`, 'PATCH', fields),
     deleteReading: (id: number | string) => request(`/torque-checks/readings/${id}`, 'DELETE'),
     deleteSheet: (id: number) => request(`/torque-checks/${id}`, 'DELETE'),
-    download: (id: number) => request<{ grid: Record<string, number | null>[]; problems: { ROW: number; COLUMN: string; NOTE: string }[] }>(`/torque-checks/${id}/download`, 'GET'),
+    download: (id: number) => request<{ sections: CsvSection[] }>(`/torque-checks/${id}/download`, 'GET'),
     /** Looks a sheet up by its operator-facing session id, its numeric id, or (best-effort) its own client uuid
      *  — the last of these is how a sheet started offline learns the session id it was assigned once online. */
     getSession: (sessionOrId: string) => request<{ success: boolean; data: TorqueSession }>(`/torque-checks/session/${encodeURIComponent(sessionOrId)}`, 'GET').then((r) => r.data),

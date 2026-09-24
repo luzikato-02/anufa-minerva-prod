@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePermissions } from '@/lib/permissions';
-import { TORQUE_COLUMNS, TORQUE_MAX_ROW, type TorqueCheckDetail, type TorqueCheckSummary, torqueCheckApi } from '@/lib/torque-checks';
+import { TORQUE_COLUMNS, TORQUE_MAX_ROW, TORQUE_SIDES, type TorqueCheckDetail, type TorqueCheckSummary, type TorqueSide, torqueCheckApi } from '@/lib/torque-checks';
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, Trash2Icon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const PAGE_SIZE = 10;
+const TOTAL_CELLS = TORQUE_SIDES.length * TORQUE_MAX_ROW * TORQUE_COLUMNS.length;
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
 function saveCsv(filename: string, csv: string) {
@@ -81,7 +83,7 @@ export function TorqueChecksTable() {
                             <TableHead>Date</TableHead>
                             <TableHead>Operator</TableHead>
                             <TableHead>Machine</TableHead>
-                            <TableHead>Side</TableHead>
+                            <TableHead>Sides</TableHead>
                             <TableHead>Creel type</TableHead>
                             <TableHead className="text-right">Filled</TableHead>
                             <TableHead className="text-right">Out of range</TableHead>
@@ -101,10 +103,10 @@ export function TorqueChecksTable() {
                                     <TableCell className="font-medium">{day(s.check_date)}</TableCell>
                                     <TableCell>{s.operator_name}</TableCell>
                                     <TableCell>{s.machine_number}</TableCell>
-                                    <TableCell>{s.side}</TableCell>
+                                    <TableCell>{s.sides_recorded.join(', ') || '—'}</TableCell>
                                     <TableCell>{s.creel_type?.name ?? '—'}</TableCell>
                                     <TableCell className="text-right">
-                                        {s.readings_count}/{TORQUE_MAX_ROW * TORQUE_COLUMNS.length}
+                                        {s.readings_count}/{TOTAL_CELLS}
                                     </TableCell>
                                     <TableCell className="text-right">{s.out_of_range_count > 0 ? <Badge variant="destructive">{s.out_of_range_count}</Badge> : '—'}</TableCell>
                                 </TableRow>
@@ -134,28 +136,39 @@ function SheetDialog({ id, onClose, onChanged }: { id: number; onClose: () => vo
     const [sheet, setSheet] = useState<TorqueCheckDetail | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [side, setSide] = useState<TorqueSide | null>(null);
 
     useEffect(() => {
         torqueCheckApi
             .show(id)
-            .then(setSheet)
+            .then((s) => {
+                setSheet(s);
+                setSide(TORQUE_SIDES.find((side) => s.readings.some((r) => r.side === side)) ?? null);
+            })
             .catch((e) => setError((e as Error).message));
     }, [id]);
 
-    const byPosition = new Map((sheet?.readings ?? []).map((r) => [`${r.row_no}${r.column_letter}`, r]));
-    const lastRow = Math.max(0, ...(sheet?.readings ?? []).map((r) => r.row_no));
+    const recordedSides = useMemo(() => TORQUE_SIDES.filter((s) => (sheet?.readings ?? []).some((r) => r.side === s)), [sheet]);
+    const byPosition = new Map((sheet?.readings ?? []).filter((r) => r.side === side).map((r) => [`${r.row_no}${r.column_letter}`, r]));
+    const lastRow = Math.max(0, ...(sheet?.readings ?? []).filter((r) => r.side === side).map((r) => r.row_no));
 
     const download = async () => {
         try {
-            const { grid, problems } = await torqueCheckApi.download(id);
-            const headers = Object.keys(grid[0] ?? {});
-            const lines = [
-                headers.join(','),
-                ...grid.map((row) => headers.map((h) => csvCell(row[h])).join(',')),
-                '',
-                'LIST PROBLEM',
-                ...problems.map((p) => `${p.ROW} ${p.COLUMN} ${csvCell(p.NOTE)}`),
-            ];
+            const { sections } = await torqueCheckApi.download(id);
+            const lines: string[] = [];
+            for (const section of sections) {
+                if (lines.length > 0) lines.push('');
+                lines.push(`SIDE ${section.side}`);
+                if (section.grid.length > 0) {
+                    const headers = Object.keys(section.grid[0]);
+                    lines.push(headers.join(','));
+                    lines.push(...section.grid.map((row) => headers.map((h) => csvCell(row[h])).join(',')));
+                }
+                if (section.problems.length > 0) {
+                    lines.push('', 'LIST PROBLEM');
+                    lines.push(...section.problems.map((p) => `${p.ROW} ${p.COLUMN} ${csvCell(p.NOTE)}`));
+                }
+            }
             saveCsv(`torque_check_${sheet?.check_date.slice(0, 10) ?? id}.csv`, lines.join('\n'));
         } catch (e) {
             setError((e as Error).message);
@@ -179,12 +192,21 @@ function SheetDialog({ id, onClose, onChanged }: { id: number; onClose: () => vo
                 <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
                     <DialogHeader>
                         <DialogTitle>{sheet ? day(sheet.check_date) : 'Torque check'}</DialogTitle>
-                        <DialogDescription>{sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Machine ${sheet.machine_number} · Side ${sheet.side} · ${sheet.operator_name}${sheet.creel_type ? ` · ${sheet.creel_type.name}` : ''}` : 'Loading…'}</DialogDescription>
+                        <DialogDescription>{sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Machine ${sheet.machine_number} · ${sheet.operator_name}${sheet.creel_type ? ` · ${sheet.creel_type.name}` : ''}` : 'Loading…'}</DialogDescription>
                     </DialogHeader>
                     {error && (
                         <Alert variant="destructive" role="alert">
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
+                    )}
+                    {recordedSides.length > 1 && side && (
+                        <ToggleGroup type="single" variant="outline" value={side} onValueChange={(v) => v && setSide(v as TorqueSide)} className="w-full">
+                            {recordedSides.map((s) => (
+                                <ToggleGroupItem key={s} value={s} className="flex-1">
+                                    {s}
+                                </ToggleGroupItem>
+                            ))}
+                        </ToggleGroup>
                     )}
                     {sheet && lastRow > 0 && (
                         <div className="overflow-x-auto">
@@ -217,6 +239,7 @@ function SheetDialog({ id, onClose, onChanged }: { id: number; onClose: () => vo
                             </table>
                         </div>
                     )}
+                    {sheet && recordedSides.length === 0 && <p className="text-sm text-muted-foreground">No readings recorded on this sheet yet.</p>}
                     <DialogFooter className="gap-2 sm:justify-between">
                         {can('torque-checks.delete') ? (
                             <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
@@ -225,7 +248,7 @@ function SheetDialog({ id, onClose, onChanged }: { id: number; onClose: () => vo
                         ) : (
                             <span />
                         )}
-                        <Button variant="outline" onClick={() => void download()} disabled={!sheet || lastRow === 0}>
+                        <Button variant="outline" onClick={() => void download()} disabled={recordedSides.length === 0}>
                             <DownloadIcon /> Download CSV
                         </Button>
                     </DialogFooter>

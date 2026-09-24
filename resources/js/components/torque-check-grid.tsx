@@ -14,6 +14,7 @@ import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, FilePlusIcon } from 'luci
 import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'torque-check-active';
+const TOTAL_CELLS = TORQUE_SIDES.length * TORQUE_MAX_ROW * TORQUE_COLUMNS.length;
 
 interface Reading {
     clientUuid: string;
@@ -27,16 +28,16 @@ interface ActiveSheet {
     checkDate: string;
     operatorName: string;
     machineNumber: string;
-    side: TorqueSide;
     creelTypeId: number | null;
+    /** Keyed by "side-rowcol"; one sheet holds a separate 105x5 grid per side. */
     readings: Record<string, Reading>;
 }
 
 const today = () => new Date().toLocaleDateString('en-CA'); // yyyy-mm-dd in local time
-const position = (row: number, col: TorqueColumn) => `${row}${col}`;
+const position = (side: TorqueSide, row: number, col: TorqueColumn) => `${side}-${row}${col}`;
 
 function freshSheet(operatorName: string): ActiveSheet {
-    return { uuid: newUuid(), sessionId: null, checkDate: today(), operatorName, machineNumber: '', side: 'Ai', creelTypeId: null, readings: {} };
+    return { uuid: newUuid(), sessionId: null, checkDate: today(), operatorName, machineNumber: '', creelTypeId: null, readings: {} };
 }
 
 function load(operatorName: string): ActiveSheet {
@@ -49,7 +50,8 @@ function load(operatorName: string): ActiveSheet {
     return freshSheet(operatorName);
 }
 
-/** Record a torque check: the paper form's header, then one grid cell at a time — same flow as the mobile app. */
+/** Record a torque check: the paper form's header, then one grid cell at a time — same flow as the mobile app.
+ *  Side is a grid axis (like row and column), not a header field: one sheet holds a separate 105x5 grid per side. */
 export default function TorqueCheckGrid() {
     const { auth } = usePage<SharedData>().props;
     const [sheet, setSheet] = useState<ActiveSheet>(() => load(auth.user.name));
@@ -57,6 +59,7 @@ export default function TorqueCheckGrid() {
     const [typesError, setTypesError] = useState<string | null>(null);
     const [confirmNew, setConfirmNew] = useState(false);
 
+    const [side, setSide] = useState<TorqueSide>('Ai');
     const [row, setRow] = useState(1);
     const [col, setCol] = useState<TorqueColumn>('A');
     const [digits, setDigits] = useState('');
@@ -100,14 +103,15 @@ export default function TorqueCheckGrid() {
 
     const creelType = types.find((t) => t.id === sheet.creelTypeId) ?? null;
     const filledCount = Object.keys(sheet.readings).length;
-    const pos = position(row, col);
+    const pos = position(side, row, col);
     const value = digits.trim() === '' ? null : Number(digits);
     const outOfRange = creelType !== null && value !== null && Number.isFinite(value) && !inRange(creelType, value);
 
-    const goTo = (nextRow: number, nextCol: TorqueColumn) => {
+    const goTo = (nextSide: TorqueSide, nextRow: number, nextCol: TorqueColumn) => {
+        setSide(nextSide);
         setRow(nextRow);
         setCol(nextCol);
-        const existing = sheet.readings[position(nextRow, nextCol)];
+        const existing = sheet.readings[position(nextSide, nextRow, nextCol)];
         setDigits(existing ? String(existing.value) : '');
         setNote(existing?.note ?? '');
         setError(null);
@@ -129,17 +133,17 @@ export default function TorqueCheckGrid() {
         setError(null);
         try {
             await torqueCheckApi.submitReading(
-                { uuid: sheet.uuid, sessionId: sheet.sessionId, checkDate: sheet.checkDate, operatorName: sheet.operatorName, machineNumber: sheet.machineNumber, side: sheet.side, creelTypeId: sheet.creelTypeId! },
-                { row_no: row, column_letter: col, value, note: note.trim() || null },
+                { uuid: sheet.uuid, sessionId: sheet.sessionId, checkDate: sheet.checkDate, operatorName: sheet.operatorName, machineNumber: sheet.machineNumber, creelTypeId: sheet.creelTypeId! },
+                { side, row_no: row, column_letter: col, value, note: note.trim() || null },
                 clientUuid,
             );
             setSheet((s) => ({ ...s, readings: { ...s.readings, [pos]: { clientUuid, value, note: note.trim() } } }));
             // Move on to the next cell so the operator can keep going without retyping the position.
             const colIndex = TORQUE_COLUMNS.indexOf(col);
             if (colIndex < TORQUE_COLUMNS.length - 1) {
-                goTo(row, TORQUE_COLUMNS[colIndex + 1]);
+                goTo(side, row, TORQUE_COLUMNS[colIndex + 1]);
             } else if (row < TORQUE_MAX_ROW) {
-                goTo(row + 1, TORQUE_COLUMNS[0]);
+                goTo(side, row + 1, TORQUE_COLUMNS[0]);
             }
         } catch (e) {
             setError((e as Error).message);
@@ -150,7 +154,7 @@ export default function TorqueCheckGrid() {
 
     const startNew = () => {
         setSheet(freshSheet(auth.user.name));
-        goTo(1, 'A');
+        goTo('Ai', 1, 'A');
         setConfirmNew(false);
     };
 
@@ -167,11 +171,10 @@ export default function TorqueCheckGrid() {
                 checkDate: s.check_date.slice(0, 10),
                 operatorName: s.operator_name,
                 machineNumber: s.machine_number,
-                side: s.side,
                 creelTypeId: s.creel_type_id,
-                readings: Object.fromEntries(s.readings.map((r) => [position(r.row_no, r.column_letter), { clientUuid: String(r.id), value: r.value, note: r.note ?? '' }])),
+                readings: Object.fromEntries(s.readings.map((r) => [position(r.side, r.row_no, r.column_letter), { clientUuid: String(r.id), value: r.value, note: r.note ?? '' }])),
             });
-            goTo(1, 'A');
+            goTo('Ai', 1, 'A');
         } catch (e) {
             setSessionError((e as Error).message === 'Session not found' ? `Session "${id}" was not found.` : (e as Error).message);
         } finally {
@@ -208,9 +211,7 @@ export default function TorqueCheckGrid() {
             <Card>
                 <CardHeader>
                     <CardTitle>Torque check</CardTitle>
-                    <CardDescription>
-                        {[sheet.sessionId && `Session ${sheet.sessionId}`, sheet.operatorName, `${filledCount} of ${TORQUE_MAX_ROW * TORQUE_COLUMNS.length} cells filled`].filter(Boolean).join(' · ')}
-                    </CardDescription>
+                    <CardDescription>{[sheet.sessionId && `Session ${sheet.sessionId}`, sheet.operatorName, `${filledCount} of ${TOTAL_CELLS} cells filled`].filter(Boolean).join(' · ')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {typesError && (
@@ -230,22 +231,7 @@ export default function TorqueCheckGrid() {
                             <Label htmlFor="tc-machine">Machine number</Label>
                             <Input id="tc-machine" value={sheet.machineNumber} onChange={(e) => setSheet((s) => ({ ...s, machineNumber: e.target.value }))} />
                         </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="tc-side">Side</Label>
-                            <Select value={sheet.side} onValueChange={(v) => setSheet((s) => ({ ...s, side: v as TorqueSide }))}>
-                                <SelectTrigger id="tc-side">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {TORQUE_SIDES.map((side) => (
-                                        <SelectItem key={side} value={side}>
-                                            {side}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 sm:col-span-2">
                             <Label htmlFor="tc-type">Creel type</Label>
                             <Select value={sheet.creelTypeId?.toString() ?? ''} onValueChange={(v) => setSheet((s) => ({ ...s, creelTypeId: Number(v) }))}>
                                 <SelectTrigger id="tc-type">
@@ -272,7 +258,7 @@ export default function TorqueCheckGrid() {
                 <Card>
                     <CardHeader>
                         <CardTitle>
-                            Row {row}, column {col}
+                            Side {side}, row {row}, column {col}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -281,10 +267,21 @@ export default function TorqueCheckGrid() {
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
+                        <ToggleGroup type="single" variant="outline" value={side} onValueChange={(v) => v && goTo(v as TorqueSide, row, col)} className="w-full">
+                            {TORQUE_SIDES.map((s) => {
+                                const filled = Object.keys(sheet.readings).some((k) => k.startsWith(`${s}-`));
+                                return (
+                                    <ToggleGroupItem key={s} value={s} className="flex-1 gap-1">
+                                        {s}
+                                        {filled && <CheckIcon className="size-3" />}
+                                    </ToggleGroupItem>
+                                );
+                            })}
+                        </ToggleGroup>
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-medium">Row</span>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" size="icon" aria-label="Previous row" disabled={row <= 1} onClick={() => goTo(row - 1, col)}>
+                                <Button variant="outline" size="icon" aria-label="Previous row" disabled={row <= 1} onClick={() => goTo(side, row - 1, col)}>
                                     <ChevronLeftIcon />
                                 </Button>
                                 <Input
@@ -296,17 +293,17 @@ export default function TorqueCheckGrid() {
                                     value={row}
                                     onChange={(e) => {
                                         const n = Number(e.target.value);
-                                        if (Number.isInteger(n) && n >= 1 && n <= TORQUE_MAX_ROW) goTo(n, col);
+                                        if (Number.isInteger(n) && n >= 1 && n <= TORQUE_MAX_ROW) goTo(side, n, col);
                                     }}
                                 />
-                                <Button variant="outline" size="icon" aria-label="Next row" disabled={row >= TORQUE_MAX_ROW} onClick={() => goTo(row + 1, col)}>
+                                <Button variant="outline" size="icon" aria-label="Next row" disabled={row >= TORQUE_MAX_ROW} onClick={() => goTo(side, row + 1, col)}>
                                     <ChevronRightIcon />
                                 </Button>
                             </div>
                         </div>
-                        <ToggleGroup type="single" variant="outline" value={col} onValueChange={(v) => v && goTo(row, v as TorqueColumn)} className="w-full">
+                        <ToggleGroup type="single" variant="outline" value={col} onValueChange={(v) => v && goTo(side, row, v as TorqueColumn)} className="w-full">
                             {TORQUE_COLUMNS.map((c) => {
-                                const filled = position(row, c) in sheet.readings;
+                                const filled = position(side, row, c) in sheet.readings;
                                 return (
                                     <ToggleGroupItem key={c} value={c} className="flex-1 gap-1">
                                         {c}
