@@ -4,27 +4,30 @@ const kTorqueColumns = ['A', 'B', 'C', 'D', 'E'];
 const kTorqueMaxRow = 105;
 const kTorqueSides = ['Ai', 'Ao', 'Bi', 'Bo'];
 
-/// One cell of the torque grid: a fixed position (row 1-105, column A-E) and its reading.
+/// One cell of the torque grid: a fixed position (side, row 1-105, column A-E) and its reading. A sheet holds
+/// a separate 105x5 grid per side, so the same row/column on two sides are two independent cells.
 class TorqueReading {
-  const TorqueReading({required this.uuid, required this.rowNo, required this.columnLetter, required this.value, this.note = ''});
+  const TorqueReading({required this.uuid, required this.side, required this.rowNo, required this.columnLetter, required this.value, this.note = ''});
 
   /// Generated on the device; doubles as the upload's idempotency key and the reading's handle on the server.
   final String uuid;
+  final String side;
   final int rowNo;
   final String columnLetter;
   final double value;
   final String note;
 
-  String get position => '$rowNo$columnLetter';
+  String get position => '$side-$rowNo$columnLetter';
 
-  TorqueReading copyWith({double? value, String? note}) => TorqueReading(uuid: uuid, rowNo: rowNo, columnLetter: columnLetter, value: value ?? this.value, note: note ?? this.note);
+  TorqueReading copyWith({double? value, String? note}) => TorqueReading(uuid: uuid, side: side, rowNo: rowNo, columnLetter: columnLetter, value: value ?? this.value, note: note ?? this.note);
 
-  Map<String, dynamic> toFields() => {'row_no': rowNo, 'column_letter': columnLetter, 'value': value, 'note': note.isEmpty ? null : note};
+  Map<String, dynamic> toFields() => {'side': side, 'row_no': rowNo, 'column_letter': columnLetter, 'value': value, 'note': note.isEmpty ? null : note};
 
   Map<String, dynamic> toJson() => {'uuid': uuid, ...toFields()};
 
   factory TorqueReading.fromJson(Map<String, dynamic> j) => TorqueReading(
         uuid: '${j['uuid']}',
+        side: '${j['side']}',
         rowNo: (j['row_no'] as num).toInt(),
         columnLetter: '${j['column_letter']}',
         value: (j['value'] as num).toDouble(),
@@ -36,32 +39,32 @@ String _day(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toStr
 
 String torqueCheckDay(DateTime d) => _day(d);
 
-/// The torque check sheet being filled in on this device.
+/// The torque check sheet being filled in on this device. Side is per-reading, not a header field: a fixed
+/// header value looked editable but, once the sheet existed, changing it did nothing — the server only ever
+/// used it to create the sheet, and readings weren't keyed by it anyway.
 class ActiveTorqueCheck {
-  const ActiveTorqueCheck({required this.uuid, required this.date, required this.operatorName, this.machineNumber = '', this.side = 'Ai', this.creelTypeId, this.sessionId, this.readings = const {}});
+  const ActiveTorqueCheck({required this.uuid, required this.date, required this.operatorName, this.machineNumber = '', this.creelTypeId, this.sessionId, this.readings = const {}});
 
   final String uuid;
   final DateTime date;
   final String operatorName;
   final String machineNumber;
-  final String side;
   final int? creelTypeId;
 
   /// Set once the first cell is saved (or immediately, when resumed by typing an existing session id).
   /// The screen shows a session picker until this is known.
   final String? sessionId;
 
-  /// Keyed by "$rowNo$columnLetter" for O(1) lookup; only filled cells have an entry.
+  /// Keyed by "$side-$rowNo$columnLetter" for O(1) lookup; only filled cells have an entry.
   final Map<String, TorqueReading> readings;
 
   int get filledCount => readings.length;
 
-  ActiveTorqueCheck copyWith({DateTime? date, String? operatorName, String? machineNumber, String? side, int? creelTypeId, String? sessionId, Map<String, TorqueReading>? readings}) => ActiveTorqueCheck(
+  ActiveTorqueCheck copyWith({DateTime? date, String? operatorName, String? machineNumber, int? creelTypeId, String? sessionId, Map<String, TorqueReading>? readings}) => ActiveTorqueCheck(
         uuid: uuid,
         date: date ?? this.date,
         operatorName: operatorName ?? this.operatorName,
         machineNumber: machineNumber ?? this.machineNumber,
-        side: side ?? this.side,
         creelTypeId: creelTypeId ?? this.creelTypeId,
         sessionId: sessionId ?? this.sessionId,
         readings: readings ?? this.readings,
@@ -72,7 +75,6 @@ class ActiveTorqueCheck {
         'date': _day(date),
         'operatorName': operatorName,
         'machineNumber': machineNumber,
-        'side': side,
         'creelTypeId': creelTypeId,
         'sessionId': sessionId,
         'readings': [for (final r in readings.values) r.toJson()],
@@ -83,7 +85,6 @@ class ActiveTorqueCheck {
         date: DateTime.tryParse('${j['date']}') ?? DateTime.now(),
         operatorName: '${j['operatorName'] ?? ''}',
         machineNumber: '${j['machineNumber'] ?? ''}',
-        side: '${j['side'] ?? kTorqueSides[0]}',
         creelTypeId: (j['creelTypeId'] as num?)?.toInt(),
         sessionId: j['sessionId'] as String?,
         readings: {
@@ -99,7 +100,6 @@ class ActiveTorqueCheck {
         date: DateTime.tryParse('${j['check_date']}') ?? DateTime.now(),
         operatorName: '${j['operator_name'] ?? ''}',
         machineNumber: '${j['machine_number'] ?? ''}',
-        side: '${j['side'] ?? kTorqueSides[0]}',
         creelTypeId: (j['creel_type_id'] as num?)?.toInt() ?? (j['creel_type'] is Map ? (asMap(j['creel_type'])['id'] as num?)?.toInt() : null),
         sessionId: j['session_id'] as String?,
         readings: {

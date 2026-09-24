@@ -67,8 +67,8 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
     }
   }
 
-  Future<void> setHeader({DateTime? date, String? operatorName, String? machineNumber, String? side, int? creelTypeId}) async {
-    state = state!.copyWith(date: date, operatorName: operatorName, machineNumber: machineNumber, side: side, creelTypeId: creelTypeId);
+  Future<void> setHeader({DateTime? date, String? operatorName, String? machineNumber, int? creelTypeId}) async {
+    state = state!.copyWith(date: date, operatorName: operatorName, machineNumber: machineNumber, creelTypeId: creelTypeId);
     await _save();
   }
 
@@ -97,7 +97,6 @@ class TorqueCheckController extends Notifier<ActiveTorqueCheck?> {
         'check_date': torqueCheckDay(state!.date),
         'operator_name': state!.operatorName,
         'machine_number': state!.machineNumber,
-        'side': state!.side,
         'creel_type_id': state!.creelTypeId,
         ...r.toFields(),
       };

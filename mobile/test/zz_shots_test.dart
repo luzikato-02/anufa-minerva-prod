@@ -504,17 +504,18 @@ void main() {
       await s.shot('110-torque-record', scrolled: true);
 
       final readings = [
-        {'id': 1, 'row_no': 1, 'column_letter': 'A', 'value': 6.0, 'note': null},
-        {'id': 2, 'row_no': 1, 'column_letter': 'B', 'value': 7.0, 'note': null},
-        {'id': 3, 'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor (Ganti baru)'},
+        {'id': 1, 'side': 'Ai', 'row_no': 1, 'column_letter': 'A', 'value': 6.0, 'note': null},
+        {'id': 2, 'side': 'Ai', 'row_no': 1, 'column_letter': 'B', 'value': 7.0, 'note': null},
+        {'id': 3, 'side': 'Ai', 'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor (Ganti baru)'},
+        {'id': 4, 'side': 'Bo', 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
       ];
       final sheet = {
-        'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704', 'side': 'Ai',
+        'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704',
         'creel_type': {'id': 1, 'name': 'Standard Creel'}, 'readings': readings,
       };
       await s.boot(path: '/torque-checks', routes: {
         'GET /torque-checks': (_) => (status: 200, body: page([
-              {'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704', 'side': 'Ai', 'readings_count': 3, 'out_of_range_count': 1, 'creel_type': {'name': 'Standard Creel'}},
+              {'id': 4, 'check_date': '2026-09-22', 'operator_name': 'Supanto', 'machine_number': '2704', 'sides_recorded': ['Ai', 'Bo'], 'readings_count': 4, 'out_of_range_count': 1, 'creel_type': {'name': 'Standard Creel'}},
             ])),
       });
       await s.shot('111-torque-list');

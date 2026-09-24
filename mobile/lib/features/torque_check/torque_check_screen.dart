@@ -16,10 +16,13 @@ import '../shared/minerva_scaffold.dart';
 import '../tension/recording/recording_widgets.dart';
 import '../tension/tension_models.dart' show fmtNum;
 import 'creel_type_models.dart';
+import 'position_chip.dart';
 import 'torque_check_controller.dart';
 import 'torque_check_models.dart';
 
-/// "Record: Torque Check": one grid cell (row 1-105 x column A-E) at a time.
+final _totalCells = kTorqueSides.length * kTorqueMaxRow * kTorqueColumns.length;
+
+/// "Record: Torque Check": one grid cell (side x row 1-105 x column A-E) at a time, one grid per side.
 class TorqueCheckScreen extends ConsumerStatefulWidget {
   const TorqueCheckScreen({super.key});
 
@@ -28,6 +31,7 @@ class TorqueCheckScreen extends ConsumerStatefulWidget {
 }
 
 class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
+  int _side = 0; // index into kTorqueSides
   int _row = 1;
   int _column = 0; // index into kTorqueColumns
   String _digits = '';
@@ -62,7 +66,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
     });
     try {
       await ref.read(torqueCheckProvider.notifier).loadSession(id);
-      if (mounted) _goTo(1, 0);
+      if (mounted) _goTo(0, 1, 0);
     } on ApiException catch (e) {
       if (mounted) setState(() => _sessionError = e.message);
     } finally {
@@ -70,7 +74,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
     }
   }
 
-  String get _position => '$_row${kTorqueColumns[_column]}';
+  String get _position => '${kTorqueSides[_side]}-$_row${kTorqueColumns[_column]}';
 
   void _loadCell(ActiveTorqueCheck sheet) {
     final existing = sheet.readings[_position];
@@ -81,8 +85,9 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
     });
   }
 
-  void _goTo(int row, int column) {
+  void _goTo(int side, int row, int column) {
     setState(() {
+      _side = side;
       _row = row;
       _column = column;
     });
@@ -113,7 +118,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
       return setState(() => _error = 'This reading is outside ${type.name}\'s range (${fmtNum(type.torqueMin)}–${fmtNum(type.torqueMax)}). Add a note before saving.');
     }
     final existing = sheet.readings[_position];
-    final reading = TorqueReading(uuid: existing?.uuid ?? ref.read(syncQueueProvider.notifier).newId(), rowNo: _row, columnLetter: kTorqueColumns[_column], value: value, note: _note.text.trim());
+    final reading = TorqueReading(uuid: existing?.uuid ?? ref.read(syncQueueProvider.notifier).newId(), side: kTorqueSides[_side], rowNo: _row, columnLetter: kTorqueColumns[_column], value: value, note: _note.text.trim());
     setState(() {
       _busy = true;
       _error = null;
@@ -124,9 +129,9 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
       showToast(context, result == SubmitResult.sent ? 'Reading saved' : 'Saved on this device. It will upload when you are online.');
       // Move on to the next cell so the operator can keep going without retyping the position.
       if (_column < kTorqueColumns.length - 1) {
-        _goTo(_row, _column + 1);
+        _goTo(_side, _row, _column + 1);
       } else if (_row < kTorqueMaxRow) {
-        _goTo(_row + 1, 0);
+        _goTo(_side, _row + 1, 0);
       }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -141,12 +146,12 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
       if (!ok || !mounted) return;
     }
     await ref.read(torqueCheckProvider.notifier).startNew();
-    if (mounted) _goTo(1, 0);
+    if (mounted) _goTo(0, 1, 0);
   }
 
   @override
   Widget build(BuildContext context) {
-    // The sheet loads asynchronously; once it lands, show whatever (if anything) is already saved at 1A.
+    // The sheet loads asynchronously; once it lands, show whatever (if anything) is already saved at Ai-1A.
     ref.listen(torqueCheckProvider, (prev, next) {
       if (prev == null && next != null) _loadCell(next);
     });
@@ -191,7 +196,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
               description: [
                 if (sheet.sessionId != null) 'Session ${sheet.sessionId}',
                 sheet.operatorName,
-                '${sheet.filledCount} of ${kTorqueMaxRow * kTorqueColumns.length} cells filled',
+                '${sheet.filledCount} of $_totalCells cells filled',
               ].join(' · '),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Align(
@@ -199,23 +204,29 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
                   child: AppButton(label: 'Start new sheet', icon: LucideIcons.filePlus, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => _startNew(sheet)),
                 ),
                 const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: AppTextField(label: 'Machine number', controller: _machineNumber, onChanged: (v) => ref.read(torqueCheckProvider.notifier).setHeader(machineNumber: v))),
-                  const SizedBox(width: 12),
-                  Expanded(child: AppSelect<String>(label: 'Side', value: sheet.side, items: {for (final s in kTorqueSides) s: s}, onChanged: (v) => ref.read(torqueCheckProvider.notifier).setHeader(side: v))),
-                ]),
+                AppTextField(label: 'Machine number', controller: _machineNumber, onChanged: (v) => ref.read(torqueCheckProvider.notifier).setHeader(machineNumber: v)),
                 const SizedBox(height: 12),
                 AppSelect<int>(label: 'Creel type', value: sheet.creelTypeId, hint: 'Select a creel type', items: {for (final ty in typeList) ty.id: '${ty.name} (${fmtNum(ty.torqueMin)}–${fmtNum(ty.torqueMax)})'}, onChanged: (v) => ref.read(torqueCheckProvider.notifier).setHeader(creelTypeId: v)),
               ]),
             ),
             const SizedBox(height: 16),
             AppCard(
-              title: 'Row $_row, column ${kTorqueColumns[_column]}',
+              title: 'Side ${kTorqueSides[_side]}, row $_row, column ${kTorqueColumns[_column]}',
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (_error != null) ...[AppAlert(message: _error!), const SizedBox(height: 12)],
-                NumberStepper(label: 'Row', value: '$_row', onPrev: _row > 1 ? () => _goTo(_row - 1, _column) : null, onNext: _row < kTorqueMaxRow ? () => _goTo(_row + 1, _column) : null, onTap: () async {
+                Row(children: [
+                  for (var i = 0; i < kTorqueSides.length; i++)
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: i == kTorqueSides.length - 1 ? 0 : 8),
+                        child: PositionChip(label: kTorqueSides[i], selected: i == _side, filled: sheet.readings.keys.any((k) => k.startsWith('${kTorqueSides[i]}-')), onTap: () => _goTo(i, _row, _column)),
+                      ),
+                    ),
+                ]),
+                const SizedBox(height: 12),
+                NumberStepper(label: 'Row', value: '$_row', onPrev: _row > 1 ? () => _goTo(_side, _row - 1, _column) : null, onNext: _row < kTorqueMaxRow ? () => _goTo(_side, _row + 1, _column) : null, onTap: () async {
                   final n = await askNumber(context, title: 'Go to row', current: _row, max: kTorqueMaxRow);
-                  if (n != null) _goTo(n, _column);
+                  if (n != null) _goTo(_side, n, _column);
                 }),
                 const SizedBox(height: 12),
                 Row(children: [
@@ -223,7 +234,7 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(right: i == kTorqueColumns.length - 1 ? 0 : 8),
-                        child: _ColumnChip(label: kTorqueColumns[i], selected: i == _column, filled: sheet.readings.containsKey('$_row${kTorqueColumns[i]}'), onTap: () => _goTo(_row, i)),
+                        child: PositionChip(label: kTorqueColumns[i], selected: i == _column, filled: sheet.readings.containsKey('${kTorqueSides[_side]}-$_row${kTorqueColumns[i]}'), onTap: () => _goTo(_side, _row, i)),
                       ),
                     ),
                 ]),
@@ -256,40 +267,6 @@ class _TorqueCheckScreenState extends ConsumerState<TorqueCheckScreen> {
           ]),
         );
       },
-    );
-  }
-}
-
-class _ColumnChip extends StatelessWidget {
-  const _ColumnChip({required this.label, required this.selected, required this.filled, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final bool filled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    return Material(
-      color: selected ? t.primary : (filled ? t.accent : t.background),
-      borderRadius: BorderRadius.circular(Radii.md),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.md),
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(border: Border.all(color: selected ? t.primary : t.input), borderRadius: BorderRadius.circular(Radii.md)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: selected ? t.primaryForeground : t.foreground)),
-            if (filled) ...[
-              const SizedBox(width: 4),
-              Icon(LucideIcons.check, size: 12, color: selected ? t.primaryForeground : t.foreground),
-            ],
-          ]),
-        ),
-      ),
     );
   }
 }

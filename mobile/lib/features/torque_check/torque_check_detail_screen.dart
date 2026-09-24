@@ -19,9 +19,10 @@ import '../../core/ui/async_body.dart';
 import '../settings/settings_shell.dart' show showToast;
 import '../shared/minerva_scaffold.dart';
 import '../tension/tension_models.dart';
+import 'position_chip.dart';
 import 'torque_check_models.dart';
 
-/// A sheet as the server holds it, with its full grid of readings.
+/// A sheet as the server holds it, with its full grid of readings, one 105x5 grid per recorded side.
 class ServerTorqueSheet {
   ServerTorqueSheet(this.raw);
 
@@ -31,15 +32,22 @@ class ServerTorqueSheet {
   DateTime? get date => DateTime.tryParse('${raw['check_date']}');
   String get operatorName => '${raw['operator_name'] ?? ''}';
   String get machineNumber => '${raw['machine_number'] ?? ''}';
-  String get side => '${raw['side'] ?? ''}';
   String? get sessionId => raw['session_id'] as String?;
   String? get creelTypeName => raw['creel_type'] is Map ? '${(raw['creel_type'] as Map)['name']}' : null;
 
-  Map<String, TorqueReading> get readings => {
-        for (final reading in [if (raw['readings'] is List) for (final r in raw['readings'] as List) TorqueReading.fromJson({...asMap(r), 'uuid': asMap(r)['id']})]) reading.position: reading,
-      };
+  List<TorqueReading> get _allReadings => [if (raw['readings'] is List) for (final r in raw['readings'] as List) TorqueReading.fromJson({...asMap(r), 'uuid': asMap(r)['id']})];
 
-  int get lastRow => readings.values.fold(0, (a, r) => r.rowNo > a ? r.rowNo : a);
+  /// Sides that have at least one reading, in the fixed Ai/Ao/Bi/Bo order.
+  List<String> get recordedSides {
+    final used = _allReadings.map((r) => r.side).toSet();
+    return [for (final s in kTorqueSides) if (used.contains(s)) s];
+  }
+
+  Map<String, TorqueReading> readingsFor(String side) => {for (final r in _allReadings.where((r) => r.side == side)) '${r.rowNo}${r.columnLetter}': r};
+
+  int lastRowFor(String side) => readingsFor(side).values.fold(0, (a, r) => r.rowNo > a ? r.rowNo : a);
+
+  int get totalFilled => _allReadings.length;
 }
 
 final torqueCheckDetailProvider = FutureProvider.autoDispose.family<ServerTorqueSheet, int>((ref, id) async {
@@ -64,19 +72,26 @@ class _TorqueCheckDetailScreenState extends ConsumerState<TorqueCheckDetailScree
   Future<void> _download(ServerTorqueSheet s) async {
     try {
       final res = await ref.read(dioProvider).get('/torque-checks/${s.id}/download');
-      final body = asMap(res.data);
-      final grid = [for (final r in body['grid'] as List? ?? const []) asMap(r)];
-      final problems = [for (final r in body['problems'] as List? ?? const []) asMap(r)];
-      if (grid.isEmpty) throw ApiException('This sheet has no readings yet.');
+      final sections = [for (final r in asMap(res.data)['sections'] as List? ?? const []) asMap(r)];
+      if (sections.isEmpty) throw ApiException('This sheet has no readings yet.');
 
-      final headers = grid.first.keys.toList();
-      final lines = [
-        headers.join(','),
-        for (final row in grid) headers.map((h) => csvEscape(row[h])).join(','),
-        '',
-        'LIST PROBLEM',
-        for (final p in problems) '${p['ROW']} ${p['COLUMN']} ${csvEscape(p['NOTE'])}',
-      ];
+      final lines = <String>[];
+      for (final section in sections) {
+        final grid = [for (final r in section['grid'] as List? ?? const []) asMap(r)];
+        final problems = [for (final r in section['problems'] as List? ?? const []) asMap(r)];
+        if (lines.isNotEmpty) lines.add('');
+        lines.add('SIDE ${section['side']}');
+        if (grid.isNotEmpty) {
+          final headers = grid.first.keys.toList();
+          lines.add(headers.join(','));
+          lines.addAll(grid.map((row) => headers.map((h) => csvEscape(row[h])).join(',')));
+        }
+        if (problems.isNotEmpty) {
+          lines.add('');
+          lines.add('LIST PROBLEM');
+          lines.addAll(problems.map((p) => '${p['ROW']} ${p['COLUMN']} ${csvEscape(p['NOTE'])}'));
+        }
+      }
 
       final day = s.date == null ? '${s.id}' : DateFormat('yyyy-MM-dd').format(s.date!);
       await ref.read(fileOpenerProvider).open('torque_check_$day.csv', utf8.encode(lines.join('\n')));
@@ -126,26 +141,46 @@ class _TorqueCheckDetailScreenState extends ConsumerState<TorqueCheckDetailScree
   }
 }
 
-class _Grid extends StatelessWidget {
+class _Grid extends StatefulWidget {
   const _Grid(this.s);
 
   final ServerTorqueSheet s;
 
   @override
+  State<_Grid> createState() => _GridState();
+}
+
+class _GridState extends State<_Grid> {
+  late String _side = widget.s.recordedSides.firstOrNull ?? kTorqueSides.first;
+
+  @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final readings = s.readings;
-    final lastRow = s.lastRow;
+    final s = widget.s;
+    final sides = s.recordedSides;
+    final readings = sides.isEmpty ? const <String, TorqueReading>{} : s.readingsFor(_side);
+    final lastRow = sides.isEmpty ? 0 : s.lastRowFor(_side);
+    final totalCells = kTorqueSides.length * kTorqueMaxRow * kTorqueColumns.length;
     return ListView(padding: const EdgeInsets.all(16), children: [
       AppCard(
         title: 'Summary',
-        description: [if (s.sessionId != null) 'Session ${s.sessionId}', s.operatorName, 'Machine ${s.machineNumber}', 'Side ${s.side}', if (s.creelTypeName != null) s.creelTypeName!].join(' · '),
-        child: Text('${readings.length} cells filled, up to row $lastRow', style: TextStyle(color: t.mutedForeground)),
+        description: [if (s.sessionId != null) 'Session ${s.sessionId}', s.operatorName, 'Machine ${s.machineNumber}', if (s.creelTypeName != null) s.creelTypeName!].join(' · '),
+        child: Text('${s.totalFilled} of $totalCells cells filled${sides.isEmpty ? '' : ' · Sides ${sides.join(', ')}'}', style: TextStyle(color: t.mutedForeground)),
       ),
       const SizedBox(height: 16),
-      if (readings.isEmpty)
+      if (sides.isEmpty)
         const AppAlert(message: 'No readings recorded on this sheet yet.', destructive: false)
-      else
+      else ...[
+        if (sides.length > 1) ...[
+          Row(children: [
+            for (final side in sides)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: SizedBox(width: 64, child: PositionChip(label: side, selected: side == _side, filled: false, onTap: () => setState(() => _side = side))),
+              ),
+          ]),
+          const SizedBox(height: 12),
+        ],
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
@@ -164,6 +199,7 @@ class _Grid extends StatelessWidget {
             ],
           ),
         ),
+      ],
     ]);
   }
 

@@ -39,48 +39,77 @@ Future<void> _saveCell(WidgetTester t) async {
   await t.pumpAndSettle();
 }
 
+Future<void> _selectCreelType(WidgetTester t) async {
+  await t.tap(find.byType(DropdownButtonFormField<int>));
+  await t.pumpAndSettle();
+  await t.tap(find.text('Standard (6–8)').last);
+  await t.pumpAndSettle();
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('a reading round-trips through the device copy', () {
-    final r = TorqueReading(uuid: 'u1', rowNo: 14, columnLetter: 'A', value: 8.5, note: 'Felt aus kotor');
-    expect(r.position, '14A');
-    expect(r.toFields(), {'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor'});
+    final r = TorqueReading(uuid: 'u1', side: 'Ai', rowNo: 14, columnLetter: 'A', value: 8.5, note: 'Felt aus kotor');
+    expect(r.position, 'Ai-14A');
+    expect(r.toFields(), {'side': 'Ai', 'row_no': 14, 'column_letter': 'A', 'value': 8.5, 'note': 'Felt aus kotor'});
     final back = TorqueReading.fromJson(r.toJson());
-    expect((back.rowNo, back.columnLetter, back.value, back.note), (14, 'A', 8.5, 'Felt aus kotor'));
+    expect((back.side, back.rowNo, back.columnLetter, back.value, back.note), ('Ai', 14, 'A', 8.5, 'Felt aus kotor'));
   });
 
   test('an empty note is sent as null', () {
-    expect(const TorqueReading(uuid: 'u', rowNo: 1, columnLetter: 'A', value: 7).toFields()['note'], isNull);
+    expect(const TorqueReading(uuid: 'u', side: 'Ai', rowNo: 1, columnLetter: 'A', value: 7).toFields()['note'], isNull);
+  });
+
+  test('the same row and column on a different side is a different position', () {
+    const ai = TorqueReading(uuid: 'u1', side: 'Ai', rowNo: 1, columnLetter: 'A', value: 7);
+    const ao = TorqueReading(uuid: 'u2', side: 'Ao', rowNo: 1, columnLetter: 'A', value: 6.5);
+    expect(ai.position, isNot(ao.position));
   });
 
   testWidgets('recording a cell selects the creel type, uploads the full header and clamps to 0.5 steps', (tester) async {
     final adapter = await _open(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await tester.enterText(_byLabel('Machine number'), '2704');
     await _enterReading(tester, '7');
     await _saveCell(tester);
 
     final body = adapter.requests.singleWhere((r) => r.method == 'POST').data as Map;
+    expect(body['side'], 'Ai');
     expect(body['row_no'], 1);
     expect(body['column_letter'], 'A');
     expect(body['value'], 7);
     expect(body['machine_number'], '2704');
-    expect(body['side'], 'Ai');
     expect(body['creel_type_id'], 1);
     expect(body['sheet_client_uuid'], isNotEmpty);
-    expect(find.text('Row 1, column B'), findsOneWidget); // advanced to the next cell
+    expect(find.text('Side Ai, row 1, column B'), findsOneWidget); // advanced to the next cell
+  });
+
+  testWidgets('switching side keeps the same row and column but is a separate cell', (tester) async {
+    final adapter = await _open(tester);
+    await _selectCreelType(tester);
+    await _enterReading(tester, '7');
+    await _saveCell(tester); // Ai-1A saved, now on Ai-1B
+
+    await tester.tap(find.text('Ao'));
+    await tester.pumpAndSettle();
+    expect(find.text('Side Ao, row 1, column B'), findsOneWidget); // row/column carried over, side switched
+    expect(find.text('--'), findsOneWidget); // Ao-1B is blank, not Ai-1A's value (Numpad's own '7' key is always on screen)
+
+    await _enterReading(tester, '6.5');
+    await _saveCell(tester);
+
+    final bodies = adapter.requests.where((r) => r.method == 'POST').map((r) => r.data as Map).toList();
+    expect(bodies.length, 2);
+    expect(bodies[0]['side'], 'Ai');
+    expect(bodies[1]['side'], 'Ao');
+    expect(bodies[1]['row_no'], 1);
+    expect(bodies[1]['column_letter'], 'B');
   });
 
   testWidgets('an out-of-range reading requires a note before it can be saved', (tester) async {
     final adapter = await _open(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
 
     await _enterReading(tester, '8.5');
     await _saveCell(tester);
@@ -96,10 +125,7 @@ void main() {
 
   testWidgets('an in-range reading saves without a note', (tester) async {
     final adapter = await _open(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7.5');
     await _saveCell(tester);
     expect((adapter.requests.singleWhere((r) => r.method == 'POST').data as Map)['value'], 7.5);
@@ -108,31 +134,25 @@ void main() {
   testWidgets('offline, a reading is kept on the device, queued once and marked Waiting on retry', (tester) async {
     final adapter = await _open(tester);
     adapter.offline = true;
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
 
     final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
     final op = container.read(syncQueueProvider).ops.single;
     expect(op.path, '/torque-checks/readings');
-    expect(op.label, 'Torque check · row 1A');
+    expect(op.label, 'Torque check · row Ai-1A');
     expect(op.data['value'], 7);
   });
 
   testWidgets('editing a cell whose upload is still queued swaps it instead of adding a second', (tester) async {
     final adapter = await _open(tester);
     adapter.offline = true;
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
 
-    // Navigate back to 1A and correct it while still offline.
+    // Navigate back to Ai-1A and correct it while still offline.
     await tester.tap(find.text('A').first);
     await tester.pumpAndSettle();
     expect(find.text('7'), findsWidgets); // prefilled with the saved value
@@ -147,10 +167,7 @@ void main() {
 
   testWidgets('the sheet survives an app restart', (tester) async {
     await _open(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
     expect((await SharedPreferences.getInstance()).getString('torque-check-active'), contains('"value":7.0'));
@@ -174,10 +191,7 @@ void main() {
   testWidgets('saving the first cell reveals the session id the server assigned, once seen', (tester) async {
     await _open(tester);
     expect(find.text('Resume a session'), findsOneWidget);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
 
@@ -187,9 +201,9 @@ void main() {
 
   testWidgets('entering a session ID loads that sheet, with its readings and header already filled in', (tester) async {
     final sheet = {
-      'session_id': '483920', 'check_date': '2026-09-20', 'operator_name': 'Budi', 'machine_number': '9', 'side': 'Bo', 'creel_type_id': 1,
+      'session_id': '483920', 'check_date': '2026-09-20', 'operator_name': 'Budi', 'machine_number': '9', 'creel_type_id': 1,
       'readings': [
-        {'id': 11, 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
+        {'id': 11, 'side': 'Bo', 'row_no': 1, 'column_letter': 'A', 'value': 7.0, 'note': null},
       ],
     };
     final adapter = await _open(tester, routes: {..._routes, 'GET /torque-checks/session/:id': (_) => (status: 200, body: {'success': true, 'data': sheet})});
@@ -202,6 +216,14 @@ void main() {
     expect(find.textContaining('Budi'), findsOneWidget);
     expect(find.widgetWithText(TextField, '9'), findsOneWidget); // machine number
     expect(find.text('Resume a session'), findsNothing);
+
+    // The loaded sheet's Bo-1A reading isn't visible on the default Ai side...
+    expect(find.text('Side Ai, row 1, column A'), findsOneWidget);
+    expect(find.text('--'), findsOneWidget); // digits box empty (Numpad's own '7' key is always on screen)
+    // ...but shows once Bo is selected.
+    await tester.tap(find.text('Bo'));
+    await tester.pumpAndSettle();
+    expect(find.text('--'), findsNothing);
   });
 
   testWidgets('an unknown session ID shows an error instead of silently starting fresh', (tester) async {
@@ -219,10 +241,7 @@ void main() {
     await _open(tester);
     tester.view.physicalSize = const Size(640, 4800);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Standard (6–8)').last);
-    await tester.pumpAndSettle();
+    await _selectCreelType(tester);
     await _enterReading(tester, '7');
     await _saveCell(tester);
     expect(tester.takeException(), isNull);
