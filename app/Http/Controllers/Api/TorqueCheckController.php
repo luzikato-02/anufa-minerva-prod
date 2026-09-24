@@ -8,16 +8,23 @@ use App\Models\TorqueCheckSheet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class TorqueCheckController extends Controller
 {
+    private const SIDES = ['Ai', 'Ao', 'Bi', 'Bo'];
+
     public function index(Request $request): JsonResponse
     {
         $query = TorqueCheckSheet::query()
             ->with('creelType:id,name,torque_min,torque_max')
             ->withCount('readings')
             ->withCount(['readings as out_of_range_count' => fn ($q) => $q->whereNotNull('note')]);
+
+        // One withCount per side rather than a driver-specific GROUP_CONCAT/STRING_AGG, so this stays
+        // portable between sqlite (tests) and Postgres (dev/prod).
+        foreach (self::SIDES as $side) {
+            $query->withCount(['readings as '.strtolower($side).'_count' => fn ($q) => $q->where('side', $side)]);
+        }
 
         if ($search = strtolower(trim((string) $request->input('search')))) {
             $query->where(function ($q) use ($search) {
@@ -29,7 +36,14 @@ class TorqueCheckController extends Controller
 
         $query->orderByDesc('check_date')->orderByDesc('id');
 
-        return response()->json($query->paginate(min((int) $request->get('per_page', 10), 200)));
+        $page = $query->paginate(min((int) $request->get('per_page', 10), 200));
+        $page->getCollection()->transform(function ($sheet) {
+            $sheet->sides_recorded = collect(self::SIDES)->filter(fn ($side) => $sheet->{strtolower($side).'_count'} > 0)->values();
+
+            return $sheet;
+        });
+
+        return response()->json($page);
     }
 
     public function show(TorqueCheckSheet $torqueCheckSheet): JsonResponse
@@ -64,6 +78,7 @@ class TorqueCheckController extends Controller
         $req = $partial ? 'sometimes|required' : 'required';
 
         return [
+            'side' => "{$req}|in:".implode(',', self::SIDES),
             'row_no' => "{$req}|integer|between:1,105",
             'column_letter' => "{$req}|in:A,B,C,D,E",
             'value' => "{$req}|numeric|min:0|multiple_of:0.5",
@@ -72,13 +87,13 @@ class TorqueCheckController extends Controller
     }
 
     /**
-     * Records (or corrects) one cell.
+     * Records (or corrects) one cell of one side's grid.
      *
      * `session_id` continues an existing sheet (typed in on another device, or resumed after a reload); it must
      * already exist. Without it, the sheet is created on the first cell, found by its client uuid — so every
      * queued upload stands on its own — and assigned a fresh session id for the operator to note down. Either
-     * way the reading itself is upserted by grid position, so a retried offline submit or an edit to an
-     * already-filled cell never creates a duplicate.
+     * way the reading itself is upserted by side+grid position, so a retried offline submit or an edit to an
+     * already-filled cell never creates a duplicate, and the same row/column on a different side is a separate cell.
      */
     public function storeReading(Request $request): JsonResponse
     {
@@ -88,7 +103,6 @@ class TorqueCheckController extends Controller
             'check_date' => 'required_without:session_id|date',
             'operator_name' => 'required_without:session_id|string|max:255',
             'machine_number' => 'required_without:session_id|string|max:255',
-            'side' => 'required_without:session_id|in:Ai,Ao,Bi,Bo',
             'creel_type_id' => 'required_without:session_id|exists:creel_types,id',
             'client_uuid' => 'nullable|uuid',
         ] + $this->readingRules());
@@ -104,7 +118,7 @@ class TorqueCheckController extends Controller
                 try {
                     $sheet = TorqueCheckSheet::firstOrCreate(
                         ['client_uuid' => $data['sheet_client_uuid']],
-                        collect($data)->only(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])->all()
+                        collect($data)->only(['check_date', 'operator_name', 'machine_number', 'creel_type_id'])->all()
                             + ['session_id' => $this->generateUniqueSessionId(), 'user_id' => $request->user()->id],
                     );
                 } catch (\Illuminate\Database\UniqueConstraintViolationException) {
@@ -113,7 +127,7 @@ class TorqueCheckController extends Controller
             }
 
             return TorqueCheckReading::updateOrCreate(
-                ['torque_check_sheet_id' => $sheet->id, 'row_no' => $data['row_no'], 'column_letter' => $data['column_letter']],
+                ['torque_check_sheet_id' => $sheet->id, 'side' => $data['side'], 'row_no' => $data['row_no'], 'column_letter' => $data['column_letter']],
                 collect($data)->only(['value', 'note'])->all() + ['client_uuid' => $data['client_uuid'] ?? null, 'user_id' => $request->user()->id],
             );
         });
@@ -141,7 +155,6 @@ class TorqueCheckController extends Controller
             'check_date' => 'sometimes|date',
             'operator_name' => 'sometimes|string|max:255',
             'machine_number' => 'sometimes|string|max:255',
-            'side' => 'sometimes|in:Ai,Ao,Bi,Bo',
             'creel_type_id' => 'sometimes|exists:creel_types,id',
         ]));
 
@@ -156,7 +169,7 @@ class TorqueCheckController extends Controller
         return response()->json(['status' => 'success', 'message' => 'Torque check sheet deleted successfully.']);
     }
 
-    /** The grid in the paper's layout (one row per NO, columns A-E), plus the flagged cells as a problem list. */
+    /** One grid section per side that has readings (the paper's layout: one row per NO, columns A-E), plus each side's flagged cells as a problem list. */
     public function downloadCsv(TorqueCheckSheet $torqueCheckSheet): JsonResponse
     {
         $readings = $torqueCheckSheet->readings()->get();
@@ -164,20 +177,24 @@ class TorqueCheckController extends Controller
             return response()->json(['success' => false, 'message' => 'This sheet has no readings yet.'], 404);
         }
 
-        $lastRow = (int) $readings->max('row_no');
-        $byPosition = $readings->keyBy(fn ($r) => "{$r->row_no}{$r->column_letter}");
+        $sections = $readings->groupBy('side')->map(function ($sideReadings, $side) {
+            $lastRow = (int) $sideReadings->max('row_no');
+            $byPosition = $sideReadings->keyBy(fn ($r) => "{$r->row_no}{$r->column_letter}");
 
-        $grid = [];
-        for ($row = 1; $row <= $lastRow; $row++) {
-            $line = ['NO' => $row];
-            foreach (['A', 'B', 'C', 'D', 'E'] as $col) {
-                $line[$col] = $byPosition->get("{$row}{$col}")?->value;
+            $grid = [];
+            for ($row = 1; $row <= $lastRow; $row++) {
+                $line = ['NO' => $row];
+                foreach (['A', 'B', 'C', 'D', 'E'] as $col) {
+                    $line[$col] = $byPosition->get("{$row}{$col}")?->value;
+                }
+                $grid[] = $line;
             }
-            $grid[] = $line;
-        }
 
-        $problems = $readings->whereNotNull('note')->map(fn ($r) => ['ROW' => $r->row_no, 'COLUMN' => $r->column_letter, 'NOTE' => $r->note])->values();
+            $problems = $sideReadings->whereNotNull('note')->map(fn ($r) => ['ROW' => $r->row_no, 'COLUMN' => $r->column_letter, 'NOTE' => $r->note])->values();
 
-        return response()->json(['success' => true, 'sheet_id' => $torqueCheckSheet->id, 'grid' => $grid, 'problems' => $problems]);
+            return ['side' => $side, 'grid' => $grid, 'problems' => $problems];
+        })->sortBy('side')->values();
+
+        return response()->json(['success' => true, 'sheet_id' => $torqueCheckSheet->id, 'sections' => $sections]);
     }
 }

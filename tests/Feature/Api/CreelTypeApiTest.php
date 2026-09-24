@@ -54,8 +54,8 @@ class CreelTypeApiTest extends TestCase
     {
         $u = $this->user(['creel-types.view', 'creel-types.manage', 'torque-checks.create']);
         $type = CreelType::create(['name' => 'Standard', 'torque_min' => 6.0, 'torque_max' => 8.0]);
-        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '12', 'side' => 'Ai', 'creel_type_id' => $type->id]);
-        TorqueCheckReading::create(['torque_check_sheet_id' => $sheet->id, 'row_no' => 1, 'column_letter' => 'A', 'value' => 7]);
+        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '12', 'creel_type_id' => $type->id]);
+        TorqueCheckReading::create(['torque_check_sheet_id' => $sheet->id, 'side' => 'Ai', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7]);
 
         $this->actingAs($u, 'sanctum')->deleteJson("/api/v1/creel-types/{$type->id}")->assertUnprocessable();
         $this->assertSame(1, CreelType::count());

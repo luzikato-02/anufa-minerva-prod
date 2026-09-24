@@ -34,8 +34,8 @@ class TorqueCheckApiTest extends TestCase
     {
         return $extra + [
             'sheet_client_uuid' => self::SHEET, 'check_date' => '2026-09-22', 'operator_name' => 'Supanto',
-            'machine_number' => '2704', 'side' => 'Ai', 'creel_type_id' => $creelTypeId,
-            'row_no' => 1, 'column_letter' => 'A', 'value' => 7.0,
+            'machine_number' => '2704', 'creel_type_id' => $creelTypeId,
+            'side' => 'Ai', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7.0,
         ];
     }
 
@@ -61,13 +61,28 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(7.5, TorqueCheckReading::first()->value);
     }
 
-    public function test_value_must_be_a_half_step_and_position_must_be_in_range(): void
+    public function test_the_same_row_and_column_on_a_different_side_is_a_separate_cell(): void
+    {
+        $u = $this->user();
+        $type = $this->creelType();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ai', 'value' => 7.0]))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ao', 'value' => 6.5]))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Bi', 'value' => 7.5]))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Bo', 'value' => 8.0]))->assertCreated();
+
+        $this->assertSame(1, TorqueCheckSheet::count());
+        $this->assertSame(4, TorqueCheckReading::count()); // same row 1, column A, four different sides
+        $this->assertSame(['Ai' => 7.0, 'Ao' => 6.5, 'Bi' => 7.5, 'Bo' => 8.0], TorqueCheckReading::pluck('value', 'side')->all());
+    }
+
+    public function test_value_must_be_a_half_step_position_must_be_in_range_and_side_must_be_valid(): void
     {
         $u = $this->user();
         $type = $this->creelType();
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['value' => 7.3]))->assertUnprocessable()->assertJsonValidationErrors('value');
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['row_no' => 106]))->assertUnprocessable()->assertJsonValidationErrors('row_no');
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['column_letter' => 'F']))->assertUnprocessable()->assertJsonValidationErrors('column_letter');
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ci']))->assertUnprocessable()->assertJsonValidationErrors('side');
     }
 
     public function test_an_out_of_range_value_is_still_accepted_with_its_note(): void
@@ -108,31 +123,45 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(0, TorqueCheckReading::count());
     }
 
-    public function test_the_list_shows_totals_and_the_sheet_can_be_viewed_and_downloaded(): void
+    public function test_the_list_shows_totals_and_which_sides_have_been_recorded(): void
     {
         $u = $this->user();
         $type = $this->creelType();
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['row_no' => 1, 'column_letter' => 'A', 'value' => 7.0]))->assertCreated();
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['row_no' => 14, 'column_letter' => 'A', 'value' => 8.5, 'note' => 'Felt aus kotor (Ganti baru)']))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ai', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7.0]))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Bo', 'row_no' => 14, 'column_letter' => 'A', 'value' => 8.5, 'note' => 'Felt aus kotor (Ganti baru)']))->assertCreated();
 
         $list = $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks')->assertOk();
         $list->assertJsonPath('data.0.readings_count', 2);
         $list->assertJsonPath('data.0.out_of_range_count', 1);
+        $this->assertSame(['Ai', 'Bo'], $list->json('data.0.sides_recorded'));
         $sessionId = $list->json('data.0.session_id');
         $this->assertNotEmpty($sessionId);
 
         $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks?search='.$sessionId)->assertOk()->assertJsonCount(1, 'data');
         $this->actingAs($u, 'sanctum')->getJson('/api/v1/torque-checks?search=no-such-session')->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_the_sheet_can_be_viewed_and_downloaded_as_one_section_per_side(): void
+    {
+        $u = $this->user();
+        $type = $this->creelType();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ai', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7.0]))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Ai', 'row_no' => 14, 'column_letter' => 'A', 'value' => 8.5, 'note' => 'Felt aus kotor (Ganti baru)']))->assertCreated();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['side' => 'Bo', 'row_no' => 1, 'column_letter' => 'A', 'value' => 6.5]))->assertCreated();
 
         $sheet = TorqueCheckSheet::first();
-        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/{$sheet->id}")->assertOk()->assertJsonCount(2, 'data.readings');
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/{$sheet->id}")->assertOk()->assertJsonCount(3, 'data.readings');
 
         $csv = $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/{$sheet->id}/download")->assertOk();
-        $this->assertSame(14, count($csv->json('grid'))); // rows 1..14, blanks included
-        $this->assertNull($csv->json('grid.1.A')); // row 2, never recorded
-        $this->assertEquals(7.0, $csv->json('grid.0.A'));
-        $this->assertCount(1, $csv->json('problems'));
-        $this->assertSame(['ROW' => 14, 'COLUMN' => 'A', 'NOTE' => 'Felt aus kotor (Ganti baru)'], $csv->json('problems.0'));
+        $sections = collect($csv->json('sections'))->keyBy('side');
+        $this->assertSame(['Ai', 'Bo'], $sections->keys()->all());
+        $this->assertSame(14, count($sections['Ai']['grid'])); // rows 1..14, blanks included
+        $this->assertNull($sections['Ai']['grid'][1]['A']); // row 2, never recorded on this side
+        $this->assertEquals(7.0, $sections['Ai']['grid'][0]['A']);
+        $this->assertCount(1, $sections['Ai']['problems']);
+        $this->assertSame(['ROW' => 14, 'COLUMN' => 'A', 'NOTE' => 'Felt aus kotor (Ganti baru)'], $sections['Ai']['problems'][0]);
+        $this->assertSame(1, count($sections['Bo']['grid'])); // Bo only has row 1
+        $this->assertEquals(6.5, $sections['Bo']['grid'][0]['A']);
     }
 
     public function test_a_session_lookup_never_compares_a_mismatched_id_against_a_typed_column(): void
@@ -157,7 +186,7 @@ class TorqueCheckApiTest extends TestCase
     {
         $u = $this->user();
         $type = $this->creelType();
-        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '1', 'side' => 'Ai', 'creel_type_id' => $type->id]);
+        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '1', 'creel_type_id' => $type->id]);
         $this->actingAs($u, 'sanctum')->getJson("/api/v1/torque-checks/{$sheet->id}/download")->assertNotFound();
     }
 
@@ -187,7 +216,7 @@ class TorqueCheckApiTest extends TestCase
         $this->assertSame(6, strlen($sessionId));
 
         // A second device, with no sheet_client_uuid of its own, resumes by session id alone.
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'row_no' => 2, 'column_letter' => 'B', 'value' => 6.5])
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'side' => 'Ai', 'row_no' => 2, 'column_letter' => 'B', 'value' => 6.5])
             ->assertCreated();
 
         $this->assertSame(1, TorqueCheckSheet::count());
@@ -214,7 +243,7 @@ class TorqueCheckApiTest extends TestCase
         $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', $this->reading($type->id, ['operator_name' => 'Supanto']))->assertCreated();
         $sessionId = $created->json('data.sheet.session_id');
 
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'row_no' => 3, 'column_letter' => 'C', 'value' => 7, 'operator_name' => 'Someone Else'])
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => $sessionId, 'side' => 'Bi', 'row_no' => 3, 'column_letter' => 'C', 'value' => 7, 'operator_name' => 'Someone Else'])
             ->assertCreated();
 
         $this->assertSame('Supanto', TorqueCheckSheet::first()->operator_name);
@@ -223,7 +252,7 @@ class TorqueCheckApiTest extends TestCase
     public function test_an_unknown_session_id_is_rejected_rather_than_silently_starting_a_new_sheet(): void
     {
         $u = $this->user();
-        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => '999999', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7])
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/torque-checks/readings', ['session_id' => '999999', 'side' => 'Ai', 'row_no' => 1, 'column_letter' => 'A', 'value' => 7])
             ->assertNotFound();
         $this->assertSame(0, TorqueCheckSheet::count());
     }

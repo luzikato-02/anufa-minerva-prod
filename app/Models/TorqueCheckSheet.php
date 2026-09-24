@@ -11,12 +11,13 @@ use Illuminate\Support\Str;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
-/** One torque-check sheet: a dated grid of readings for one machine/side, checked against a creel type's standard. */
+/** One torque-check sheet: a dated set of readings for one machine, checked against a creel type's standard. Each
+ * reading also carries its own side (Ai/Ao/Bi/Bo), so one sheet can hold a separate 105x5 grid per side. */
 class TorqueCheckSheet extends Model
 {
     use HasFactory, SoftDeletes, LogsActivity;
 
-    protected $fillable = ['client_uuid', 'session_id', 'check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id', 'user_id'];
+    protected $fillable = ['client_uuid', 'session_id', 'check_date', 'operator_name', 'machine_number', 'creel_type_id', 'user_id'];
 
     protected $casts = [
         'check_date' => 'date:Y-m-d',
@@ -46,7 +47,7 @@ class TorqueCheckSheet extends Model
 
     public function readings(): HasMany
     {
-        return $this->hasMany(TorqueCheckReading::class)->orderBy('row_no')->orderBy('column_letter');
+        return $this->hasMany(TorqueCheckReading::class)->orderBy('side')->orderBy('row_no')->orderBy('column_letter');
     }
 
     public function creelType(): BelongsTo
@@ -57,7 +58,7 @@ class TorqueCheckSheet extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['check_date', 'operator_name', 'machine_number', 'side', 'creel_type_id'])
+            ->logOnly(['check_date', 'operator_name', 'machine_number', 'creel_type_id'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }

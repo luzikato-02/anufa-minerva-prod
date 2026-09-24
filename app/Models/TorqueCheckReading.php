@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-/** One cell of the torque grid: a row/column position, its reading, and an optional note if it was out of range. */
+/** One cell of the torque grid: a side/row/column position, its reading, and an optional note if it was out of range. */
 class TorqueCheckReading extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['torque_check_sheet_id', 'row_no', 'column_letter', 'value', 'note', 'client_uuid', 'user_id'];
+    protected $fillable = ['torque_check_sheet_id', 'side', 'row_no', 'column_letter', 'value', 'note', 'client_uuid', 'user_id'];
 
     protected $casts = [
         'row_no' => 'integer',

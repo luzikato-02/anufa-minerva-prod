@@ -43,7 +43,7 @@ class TorqueCheckWebTest extends TestCase
         $this->actingAs($u)->getJson('/torque-checks')->assertOk()->assertJsonPath('data.0.readings_count', 1);
 
         $sheet = TorqueCheckSheet::first();
-        $this->actingAs($u)->getJson("/torque-checks/{$sheet->id}/download")->assertOk()->assertJsonPath('grid.0.A', 7);
+        $this->actingAs($u)->getJson("/torque-checks/{$sheet->id}/download")->assertOk()->assertJsonPath('sections.0.grid.0.A', 7);
         $this->actingAs($u)->deleteJson("/torque-checks/{$sheet->id}")->assertOk();
         $this->assertSame(0, TorqueCheckSheet::count());
     }
@@ -53,7 +53,7 @@ class TorqueCheckWebTest extends TestCase
         $viewer = $this->user(['torque-checks.view']);
         $this->actingAs($viewer)->postJson('/torque-checks/readings', [])->assertForbidden();
         $type = CreelType::create(['name' => 'Standard', 'torque_min' => 6.0, 'torque_max' => 8.0]);
-        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '1', 'side' => 'Ai', 'creel_type_id' => $type->id]);
+        $sheet = TorqueCheckSheet::create(['check_date' => '2026-09-22', 'operator_name' => 'Ana', 'machine_number' => '1', 'creel_type_id' => $type->id]);
         $this->actingAs($viewer)->deleteJson("/torque-checks/{$sheet->id}")->assertForbidden();
         $this->assertSame(1, TorqueCheckSheet::count());
     }
