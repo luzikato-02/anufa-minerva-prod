@@ -17,10 +17,20 @@ const _perms = ['stock-take.create', 'stock-take.view'];
 Map<String, Handler> get _routes => {
       'POST /stock-sheets/rows': (_) => (status: 201, body: {'success': true}),
       'PATCH /stock-sheets/rows/:id': (_) => (status: 200, body: {'status': 'success'}),
+      'GET /stock-sheets/session/:id': (_) => (status: 200, body: {'success': true, 'data': {'session_id': '483920'}}),
     };
 
-Future<FakeAdapter> _open(WidgetTester t, {Map<String, Handler>? routes, List<Override> overrides = const []}) =>
-    pumpSignedIn(t, permissions: _perms, path: '/stock-sheet', routes: routes ?? _routes, overrides: overrides);
+/// Opens the record screen with a fresh sheet already active — starting a sheet is the session-select
+/// screen's job, so this walks through it once ("Start new sheet") before handing back to the caller.
+Future<FakeAdapter> _open(WidgetTester t, {Map<String, Handler>? routes, List<Override> overrides = const []}) async {
+  final adapter = await pumpSignedIn(t, permissions: _perms, path: '/stock-sheet', routes: routes ?? _routes, overrides: overrides);
+  await t.tap(find.text('Start new sheet'));
+  await t.pumpAndSettle();
+  return adapter;
+}
+
+Future<FakeAdapter> _openSessionScreen(WidgetTester t, {Map<String, Handler>? routes}) =>
+    pumpSignedIn(t, permissions: _perms, path: '/stock-sheet/session', routes: routes ?? _routes);
 
 Finder _byLabel(String label) => find.descendant(of: find.widgetWithText(AppTextField, label), matching: find.byType(TextField));
 
@@ -74,6 +84,12 @@ class _RecordingOpener implements FileOpener {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('visiting the record screen with nothing active sends the operator to session-select first', (tester) async {
+    await pumpSignedIn(tester, permissions: _perms, path: '/stock-sheet', routes: _routes);
+    expect(find.text('Start new sheet'), findsOneWidget); // the chooser, not the form
+    expect(find.text('Resume a session'), findsOneWidget);
+  });
 
   test('a row keeps the sheet columns and round-trips through the device copy', () {
     final row = SheetRow(uuid: 'u1', color: 'Pink blue yellow', materialCode: 'TY0220004540', batch: 'kupasan', prodDate: DateTime(2026, 8, 14), chs: 20, weight: 76, position: 44, remark: 'ex WV');
@@ -153,7 +169,7 @@ void main() {
 
   testWidgets('the sheet saved on the device is restored when the screen opens', (tester) async {
     SharedPreferences.setMockInitialValues({'stock-sheet-active': '{"uuid":"s1","date":"2026-09-19","leader":"Ana","rows":[{"uuid":"r1","material_code":"M","batch":"TA9","chs":2}]}'});
-    await _open(tester);
+    await pumpSignedIn(tester, permissions: _perms, path: '/stock-sheet', routes: _routes);
     expect(find.text('TA9'), findsOneWidget);
     expect(find.textContaining('1 row · 2 cheeses'), findsOneWidget);
     expect(find.text('Add row 2'), findsOneWidget);
@@ -301,7 +317,54 @@ void main() {
   testWidgets('Stock Sheet screens follow the stock-take permissions', (tester) async {
     await pumpSignedIn(tester, permissions: const [], path: '/stock-sheet', routes: {});
     expect(find.text('Access denied'), findsWidgets);
+    await pumpSignedIn(tester, permissions: const [], path: '/stock-sheet/session', routes: {});
+    expect(find.text('Access denied'), findsWidgets);
     await pumpSignedIn(tester, permissions: const [], path: '/stock-sheets', routes: {});
     expect(find.text('Access denied'), findsWidgets);
+  });
+
+  testWidgets('Change session goes back to the chooser, confirming before discarding already-saved rows', (tester) async {
+    await _open(tester);
+    await _fill(tester, batch: 'TA1');
+    await _add(tester); // one row saved
+
+    await tester.tap(find.text('Change session'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start new sheet'), findsOneWidget); // back on the chooser
+
+    await tester.tap(find.text('Start new sheet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start a new sheet?'), findsOneWidget); // confirms first, since a row is already saved
+
+    await tester.tap(find.text('Start new sheet').last); // confirm
+    await tester.pumpAndSettle();
+    expect(find.text('Add row 1'), findsOneWidget); // a fresh sheet, back at the start
+  });
+
+  testWidgets('entering a session ID loads that sheet, with its rows and header already filled in', (tester) async {
+    final sheet = {
+      'session_id': '483920', 'sheet_date': '2026-09-19', 'leader': 'Budi',
+      'rows': [
+        {'id': 11, 'line_no': 1, 'color': null, 'material_code': 'M', 'batch': 'TA9', 'prod_date': null, 'chs': 2, 'actual_weight': null, 'position': null, 'remark': null},
+      ],
+    };
+    final adapter = await _openSessionScreen(tester, routes: {..._routes, 'GET /stock-sheets/session/:id': (_) => (status: 200, body: {'success': true, 'data': sheet})});
+    await tester.enterText(_byLabel('Session ID'), '483920');
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.requests.any((r) => r.path.endsWith('/stock-sheets/session/483920')), isTrue);
+    expect(find.textContaining('Session 483920'), findsOneWidget); // now on the form
+    expect(find.text('TA9'), findsOneWidget);
+    expect(find.text('Add row 2'), findsOneWidget);
+  });
+
+  testWidgets('an unknown session ID shows an error instead of silently starting fresh', (tester) async {
+    await _openSessionScreen(tester, routes: {..._routes, 'GET /stock-sheets/session/:id': (_) => (status: 404, body: {'success': false, 'message': 'Session not found'})});
+    await tester.enterText(_byLabel('Session ID'), '000000');
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('was not found'), findsOneWidget);
+    expect(find.text('Resume a session'), findsOneWidget); // still on the chooser
   });
 }

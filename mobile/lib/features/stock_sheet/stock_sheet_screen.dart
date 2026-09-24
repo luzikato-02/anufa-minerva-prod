@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -43,7 +44,11 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(stockSheetProvider.notifier).open());
+    Future.microtask(() async {
+      await ref.read(stockSheetProvider.notifier).open();
+      // Nothing active on this device (a first or direct visit) — starting or resuming a sheet happens there.
+      if (mounted && ref.read(stockSheetProvider) == null) context.go('/stock-sheet/session');
+    });
   }
 
   @override
@@ -149,15 +154,6 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
     }
   }
 
-  Future<void> _startNew(ActiveSheet sheet) async {
-    if (sheet.rows.isNotEmpty) {
-      final ok = await confirmDialog(context, title: 'Start a new sheet?', message: 'The ${sheet.rows.length} rows on this sheet are already saved. You will begin an empty sheet.', confirmLabel: 'Start new sheet');
-      if (!ok || !mounted) return;
-    }
-    await ref.read(stockSheetProvider.notifier).startNew();
-    if (mounted) _resetForm();
-  }
-
   /// Recent values from this sheet, shown as one-tap chips under a field.
   List<String> _recent(List<SheetRow> rows, String Function(SheetRow) pick) {
     final seen = <String>[];
@@ -192,11 +188,11 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         AppCard(
           title: dayFmt.format(sheet.date),
-          description: 'Recorded by ${sheet.leader}',
+          description: [if (sheet.sessionId != null) 'Session ${sheet.sessionId}', 'Recorded by ${sheet.leader}'].join(' · '),
           action: AppButton(label: 'Change date', size: AppButtonSize.sm, variant: AppButtonVariant.outline, onPressed: () => _pickDate(current: sheet.date, onPicked: ref.read(stockSheetProvider.notifier).setDate)),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
-            child: AppButton(label: 'Start new sheet', icon: LucideIcons.filePlus, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => _startNew(sheet)),
+            child: AppButton(label: 'Change session', icon: LucideIcons.arrowLeftRight, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => context.go('/stock-sheet/session')),
           ),
         ),
         const SizedBox(height: 16),

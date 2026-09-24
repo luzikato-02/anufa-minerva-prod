@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/sync/sync_queue.dart';
 import '../tension/tension_models.dart';
@@ -33,14 +36,37 @@ class StockSheetController extends Notifier<ActiveSheet?> {
     return DateTime(n.year, n.month, n.day);
   }
 
-  /// Restores this device's sheet, or starts an empty one.
+  /// Restores this device's sheet, if one is already active. Starting fresh or resuming by session id
+  /// happens on the session-select screen, not here — this leaves [state] null when nothing was saved yet
+  /// (a first/direct visit), which is the record screen's cue to send the operator there first.
   Future<void> open() async {
     if (state != null) return;
     final raw = (await SharedPreferences.getInstance()).getString(storageKey);
+    if (raw == null) return;
     try {
-      state = raw == null ? _fresh() : ActiveSheet.fromJson(asMap(jsonDecode(raw)));
+      state = ActiveSheet.fromJson(asMap(jsonDecode(raw)));
     } catch (_) {
-      state = _fresh();
+      state = null;
+    }
+    unawaited(_refreshSessionId());
+  }
+
+  /// A sheet started offline has no session id until the server has actually seen it. Best-effort: looks the
+  /// sheet up by its own client uuid (which the scope also matches), so the id appears once connectivity
+  /// allows the first row to reach the server, even if that happened via a later automatic retry rather than
+  /// the original submit. Failures (still offline, nothing saved yet) are silently ignored.
+  Future<void> _refreshSessionId() async {
+    final sheet = state;
+    if (sheet == null || sheet.sessionId != null || sheet.rows.isEmpty) return;
+    try {
+      final res = await ref.read(dioProvider).get('/stock-sheets/session/${sheet.uuid}');
+      final sessionId = asMap(asMap(res.data)['data'])['session_id'] as String?;
+      if (sessionId != null && state?.sessionId == null) {
+        state = state!.copyWith(sessionId: sessionId);
+        await _save();
+      }
+    } catch (_) {
+      // Offline, or the first row hasn't reached the server yet — fine, try again next time.
     }
   }
 
@@ -55,7 +81,21 @@ class StockSheetController extends Notifier<ActiveSheet?> {
     await _save();
   }
 
+  /// Loads an existing sheet by the session id it was assigned on its first row (typed in by the operator
+  /// to keep recording into it from this device), replacing whatever draft is active here.
+  Future<void> loadSession(String sessionId) async {
+    try {
+      final res = await ref.read(dioProvider).get('/stock-sheets/session/${Uri.encodeComponent(sessionId)}');
+      state = ActiveSheet.fromServer(asMap(asMap(res.data)['data']), localUuid: ref.read(syncQueueProvider.notifier).newId());
+      await _save();
+    } catch (e) {
+      final err = ApiException.from(e);
+      throw err.status == 404 ? ApiException('Session "$sessionId" was not found.', status: 404) : err;
+    }
+  }
+
   Map<String, dynamic> _rowBody(SheetRow row) => {
+        if (state!.sessionId != null) 'session_id': state!.sessionId,
         'sheet_client_uuid': state!.uuid,
         'sheet_date': sheetDay(state!.date),
         'leader': state!.leader,
@@ -70,7 +110,9 @@ class StockSheetController extends Notifier<ActiveSheet?> {
     state = sheet.copyWith(rows: [...sheet.rows, row]);
     await _save();
     try {
-      return await ref.read(syncQueueProvider.notifier).submit(method: 'POST', path: '/stock-sheets/rows', data: _rowBody(row), label: _label(sheet.rows.length + 1), id: row.uuid);
+      final result = await ref.read(syncQueueProvider.notifier).submit(method: 'POST', path: '/stock-sheets/rows', data: _rowBody(row), label: _label(sheet.rows.length + 1), id: row.uuid);
+      unawaited(_refreshSessionId());
+      return result;
     } catch (_) {
       // The server refused it (validation), so it isn't on the sheet.
       state = state!.copyWith(rows: [for (final r in state!.rows) if (r.uuid != row.uuid) r]);

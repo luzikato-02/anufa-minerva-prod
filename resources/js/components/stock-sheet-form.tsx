@@ -6,61 +6,69 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RowDraft, RowFieldsForm, draftFrom, emptyDraft, readDraft } from '@/components/stock-sheet-row-fields';
-import { type SharedData } from '@/types';
-import { type SheetRow, formatNumber, newUuid, stockSheetApi } from '@/lib/stock-sheets';
-import { usePage } from '@inertiajs/react';
-import { CheckIcon, FilePlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import {
+    type SheetRow,
+    type StockSheetActiveSheet,
+    formatNumber,
+    loadActiveStockSheet,
+    newUuid,
+    saveActiveStockSheet,
+    stockSheetApi,
+    stockSheetToday,
+} from '@/lib/stock-sheets';
+import { stockSheetSession } from '@/routes';
+import { router } from '@inertiajs/react';
+import { ArrowLeftRightIcon, CheckIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-const STORAGE_KEY = 'stock-sheet-active';
-
-interface ActiveSheet {
-    uuid: string;
-    date: string;
-    leader: string;
-    rows: SheetRow[];
-}
-
-const today = () => new Date().toLocaleDateString('en-CA'); // yyyy-mm-dd in local time
-
-function load(leader: string): ActiveSheet {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw) as ActiveSheet;
-    } catch {
-        // fall through to a new sheet
-    }
-    return { uuid: newUuid(), date: today(), leader, rows: [] };
-}
-
-/** Record the paper stock sheet, one row at a time. Every row is saved as it is added. */
+/** Record the paper stock sheet, one row at a time. Starting or resuming a sheet happens on a separate page
+ *  (stock-sheet-session); this screen always assumes one is already active, and bounces back there if it
+ *  finds nothing to work with (e.g. a direct/first visit). Every row is saved on the server as it is added. */
 export default function StockSheetForm() {
-    const { auth } = usePage<SharedData>().props;
-    const [sheet, setSheet] = useState<ActiveSheet>(() => load(auth.user.name));
+    const [sheet, setSheet] = useState<StockSheetActiveSheet | null>(() => loadActiveStockSheet());
     const [draft, setDraft] = useState<RowDraft>(emptyDraft);
     const [editing, setEditing] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const [confirm, setConfirm] = useState<'new' | 'delete' | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState(false);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(sheet));
-        } catch {
-            // storage full or blocked: the rows are still saved on the server
-        }
+        if (!sheet) router.visit(stockSheetSession());
+    }, [sheet]);
+
+    useEffect(() => {
+        if (sheet) saveActiveStockSheet(sheet);
+    }, [sheet]);
+
+    // A sheet started offline has no session id until the server has actually seen it. Best-effort: look it up
+    // by its own uuid (the endpoint also matches on that), so the id appears once connectivity allows the
+    // first row through — even if that happened via a background retry rather than the save that's on screen.
+    useEffect(() => {
+        if (!sheet || sheet.sessionId || sheet.rows.length === 0) return;
+        let cancelled = false;
+        stockSheetApi
+            .getSession(sheet.uuid)
+            .then(({ session_id }) => {
+                if (!cancelled && session_id) setSheet((s) => (s && !s.sessionId ? { ...s, sessionId: session_id } : s));
+            })
+            .catch(() => {
+                // Offline, or the first row hasn't reached the server yet — fine, try again next time.
+            });
+        return () => {
+            cancelled = true;
+        };
     }, [sheet]);
 
     const recent = (pick: (r: SheetRow) => string | null) => {
         const seen: string[] = [];
-        for (const r of [...sheet.rows].reverse()) {
+        for (const r of [...(sheet?.rows ?? [])].reverse()) {
             const v = pick(r);
             if (v && !seen.includes(v)) seen.push(v);
             if (seen.length === 4) break;
         }
         return seen;
     };
-    const totals = useMemo(() => ({ chs: sheet.rows.reduce((a, r) => a + (r.chs ?? 0), 0), kg: sheet.rows.reduce((a, r) => a + (r.actual_weight ?? 0), 0) }), [sheet.rows]);
+    const totals = useMemo(() => ({ chs: (sheet?.rows ?? []).reduce((a, r) => a + (r.chs ?? 0), 0), kg: (sheet?.rows ?? []).reduce((a, r) => a + (r.actual_weight ?? 0), 0) }), [sheet]);
 
     const reset = (keep?: RowDraft) => {
         setEditing(null);
@@ -70,6 +78,7 @@ export default function StockSheetForm() {
     };
 
     const submit = async () => {
+        if (!sheet) return;
         const read = readDraft(draft);
         if ('error' in read) return setError(read.error);
         setBusy(true);
@@ -77,12 +86,12 @@ export default function StockSheetForm() {
         try {
             if (editing) {
                 await stockSheetApi.updateRow(editing, read.fields);
-                setSheet((s) => ({ ...s, rows: s.rows.map((r) => (r.client_uuid === editing ? { ...r, ...read.fields } : r)) }));
+                setSheet((s) => (s ? { ...s, rows: s.rows.map((r) => (r.client_uuid === editing ? { ...r, ...read.fields } : r)) } : s));
                 reset();
             } else {
                 const row: SheetRow = { client_uuid: newUuid(), ...read.fields };
                 await stockSheetApi.addRow(sheet, row);
-                setSheet((s) => ({ ...s, rows: [...s.rows, row] }));
+                setSheet((s) => (s ? { ...s, rows: [...s.rows, row] } : s));
                 reset(draft);
             }
         } catch (e) {
@@ -97,36 +106,32 @@ export default function StockSheetForm() {
         setBusy(true);
         try {
             await stockSheetApi.deleteRow(editing);
-            setSheet((s) => ({ ...s, rows: s.rows.filter((r) => r.client_uuid !== editing) }));
+            setSheet((s) => (s ? { ...s, rows: s.rows.filter((r) => r.client_uuid !== editing) } : s));
             reset();
         } catch (e) {
             setError((e as Error).message);
         } finally {
             setBusy(false);
-            setConfirm(null);
+            setConfirmDelete(false);
         }
     };
 
-    const startNew = () => {
-        setSheet({ uuid: newUuid(), date: today(), leader: auth.user.name, rows: [] });
-        reset();
-        setConfirm(null);
-    };
+    if (!sheet) return null; // redirecting to the session page
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4">
             <Card>
                 <CardHeader>
                     <CardTitle>Stock sheet</CardTitle>
-                    <CardDescription>Recorded by {sheet.leader}</CardDescription>
+                    <CardDescription>{[sheet.sessionId && `Session ${sheet.sessionId}`, `Recorded by ${sheet.leader}`].filter(Boolean).join(' · ')}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-end gap-4">
                     <div className="space-y-1.5">
                         <Label htmlFor="sheet-date">Sheet date</Label>
-                        <Input id="sheet-date" type="date" value={sheet.date} onChange={(e) => setSheet({ ...sheet, date: e.target.value || today() })} className="w-44" />
+                        <Input id="sheet-date" type="date" value={sheet.date} onChange={(e) => setSheet((s) => (s ? { ...s, date: e.target.value || stockSheetToday() } : s))} className="w-44" />
                     </div>
-                    <Button variant="outline" onClick={() => (sheet.rows.length > 0 ? setConfirm('new') : startNew())}>
-                        <FilePlusIcon /> Start new sheet
+                    <Button variant="outline" onClick={() => router.visit(stockSheetSession())}>
+                        <ArrowLeftRightIcon /> Change session
                     </Button>
                 </CardContent>
             </Card>
@@ -151,7 +156,7 @@ export default function StockSheetForm() {
                                 <Button variant="outline" onClick={() => reset()} disabled={busy}>
                                     Cancel
                                 </Button>
-                                <Button variant="destructive" onClick={() => setConfirm('delete')} disabled={busy}>
+                                <Button variant="destructive" onClick={() => setConfirmDelete(true)} disabled={busy}>
                                     <Trash2Icon /> Delete row
                                 </Button>
                             </>
@@ -203,17 +208,15 @@ export default function StockSheetForm() {
                 )}
             </Card>
 
-            <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
+            <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>{confirm === 'new' ? 'Start a new sheet?' : 'Delete this row?'}</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {confirm === 'new' ? `The ${sheet.rows.length} rows on this sheet are already saved. You will begin an empty sheet.` : 'It will be removed from the sheet.'}
-                        </AlertDialogDescription>
+                        <AlertDialogTitle>Delete this row?</AlertDialogTitle>
+                        <AlertDialogDescription>It will be removed from the sheet.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirm === 'new' ? startNew : removeEditing}>{confirm === 'new' ? 'Start new sheet' : 'Delete row'}</AlertDialogAction>
+                        <AlertDialogAction onClick={() => void removeEditing()}>Delete row</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

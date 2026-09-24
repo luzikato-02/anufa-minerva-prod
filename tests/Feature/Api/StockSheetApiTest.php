@@ -148,4 +148,69 @@ class StockSheetApiTest extends TestCase
         $this->assertSame('2026-09-20', StockSheet::first()->sheet_date->toDateString());
         $this->assertSame(1, StockSheet::count());
     }
+
+    public function test_the_first_row_assigns_a_session_id_that_a_second_device_can_resume_with(): void
+    {
+        $u = $this->user();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row())->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+        $this->assertNotEmpty($sessionId);
+        $this->assertSame(6, strlen($sessionId));
+
+        // A second device, with no sheet_client_uuid of its own, resumes by session id alone.
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', ['session_id' => $sessionId, 'material_code' => 'M2', 'batch' => 'B2'])
+            ->assertCreated()->assertJsonPath('data.line_no', 2);
+
+        $this->assertSame(1, StockSheet::count());
+        $this->assertSame(2, StockSheetRow::count());
+    }
+
+    public function test_getSession_finds_the_sheet_by_its_session_id_or_numeric_id_and_404s_when_unknown(): void
+    {
+        $u = $this->user();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row())->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+        $sheetId = StockSheet::first()->id;
+
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/session/{$sessionId}")->assertOk()->assertJsonCount(1, 'data.rows');
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/session/{$sheetId}")->assertOk()->assertJsonCount(1, 'data.rows');
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/stock-sheets/session/000000')->assertNotFound();
+    }
+
+    public function test_resuming_by_session_id_does_not_require_or_change_the_header_fields(): void
+    {
+        $u = $this->user();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['leader' => 'Ana']))->assertCreated();
+        $sessionId = $created->json('data.sheet.session_id');
+
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', ['session_id' => $sessionId, 'material_code' => 'M2', 'batch' => 'B2', 'leader' => 'Someone Else'])
+            ->assertCreated();
+
+        $this->assertSame('Ana', StockSheet::first()->leader);
+    }
+
+    public function test_an_unknown_session_id_is_rejected_rather_than_silently_starting_a_new_sheet(): void
+    {
+        $u = $this->user();
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', ['session_id' => '999999', 'material_code' => 'M', 'batch' => 'B'])
+            ->assertNotFound();
+        $this->assertSame(0, StockSheet::count());
+    }
+
+    public function test_a_session_lookup_never_compares_a_mismatched_id_against_a_typed_column(): void
+    {
+        // Regression: forSessionOrId used to compare `id`/`client_uuid` unconditionally, which sqlite tolerates
+        // for a mismatched string but Postgres (dev/prod) rejects outright as a type error — a numeric session
+        // id against the uuid column, or a uuid against the bigint id column, on a bigint/uuid-typed column.
+        $u = $this->user();
+        $created = $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row())->assertCreated();
+        $uuid = $created->json('data.sheet.client_uuid');
+        $sessionId = $created->json('data.sheet.session_id');
+        $this->assertNotEmpty($uuid);
+        $this->assertNotEmpty($sessionId);
+
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/session/{$uuid}")->assertOk(); // a uuid against client_uuid
+        $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/session/{$sessionId}")->assertOk(); // a numeric id against session_id
+        $this->actingAs($u, 'sanctum')->getJson('/api/v1/stock-sheets/session/not-a-real-id-or-uuid')->assertNotFound(); // matches nothing typed
+    }
 }

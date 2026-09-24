@@ -72,24 +72,38 @@ String sheetDay(DateTime d) => _day(d);
 
 /// The sheet being filled in on this device.
 class ActiveSheet {
-  const ActiveSheet({required this.uuid, required this.date, required this.leader, this.rows = const []});
+  const ActiveSheet({required this.uuid, required this.date, required this.leader, this.sessionId, this.rows = const []});
 
   final String uuid;
   final DateTime date;
   final String leader;
+
+  /// Set once the first row is saved (or immediately, when resumed by typing an existing session id).
+  final String? sessionId;
   final List<SheetRow> rows;
 
   int get totalChs => rows.fold(0, (a, r) => a + (r.chs ?? 0));
   double get totalWeight => rows.fold(0.0, (a, r) => a + (r.weight ?? 0));
 
-  ActiveSheet copyWith({DateTime? date, String? leader, List<SheetRow>? rows}) => ActiveSheet(uuid: uuid, date: date ?? this.date, leader: leader ?? this.leader, rows: rows ?? this.rows);
+  ActiveSheet copyWith({DateTime? date, String? leader, String? sessionId, List<SheetRow>? rows}) => ActiveSheet(uuid: uuid, date: date ?? this.date, leader: leader ?? this.leader, sessionId: sessionId ?? this.sessionId, rows: rows ?? this.rows);
 
-  Map<String, dynamic> toJson() => {'uuid': uuid, 'date': _day(date), 'leader': leader, 'rows': [for (final r in rows) r.toJson()]};
+  Map<String, dynamic> toJson() => {'uuid': uuid, 'date': _day(date), 'leader': leader, 'sessionId': sessionId, 'rows': [for (final r in rows) r.toJson()]};
 
   factory ActiveSheet.fromJson(Map<String, dynamic> j) => ActiveSheet(
         uuid: '${j['uuid']}',
         date: DateTime.tryParse('${j['date']}') ?? DateTime.now(),
         leader: '${j['leader'] ?? ''}',
+        sessionId: j['sessionId'] as String?,
         rows: [if (j['rows'] is List) for (final r in j['rows'] as List) SheetRow.fromJson(asMap(r))],
+      );
+
+  /// From the server's sheet+rows response (`show` or `session/{id}`), for resuming on another device.
+  /// Server rows carry a numeric id, reused as the "uuid" here since the row routes accept either.
+  factory ActiveSheet.fromServer(Map<String, dynamic> j, {required String localUuid}) => ActiveSheet(
+        uuid: localUuid,
+        date: DateTime.tryParse('${j['sheet_date']}') ?? DateTime.now(),
+        leader: '${j['leader'] ?? ''}',
+        sessionId: j['session_id'] as String?,
+        rows: [if (j['rows'] is List) for (final r in j['rows'] as List) SheetRow.fromJson({...asMap(r), 'uuid': asMap(r)['id']})],
       );
 }

@@ -21,6 +21,7 @@ import '../features/stock/stock_recording_screen.dart';
 import '../features/stock/stock_records_screen.dart';
 import '../features/stock_sheet/stock_sheet_detail_screen.dart';
 import '../features/stock_sheet/stock_sheet_screen.dart';
+import '../features/stock_sheet/stock_sheet_session_screen.dart';
 import '../features/stock_sheet/stock_sheets_screen.dart';
 import '../features/torque_check/creel_type_settings_screen.dart';
 import '../features/torque_check/torque_check_detail_screen.dart';
@@ -102,6 +103,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/weaving-tension', builder: (_, _) => const WeavingScreen()),
       GoRoute(path: '/stock-taking', builder: (_, _) => const StockRecordingScreen()),
       GoRoute(path: '/stock-sheet', builder: (_, _) => const StockSheetScreen()),
+      GoRoute(path: '/stock-sheet/session', builder: (_, _) => const StockSheetSessionScreen()),
       GoRoute(path: '/stock-sheets', builder: (_, _) => const StockSheetsScreen()),
       GoRoute(path: '/stock-sheets/:id', builder: (_, s) => StockSheetDetailScreen(id: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/stock-take-records', builder: (_, _) => const StockRecordsScreen()),

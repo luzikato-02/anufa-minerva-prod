@@ -34,6 +34,7 @@ class ServerSheet {
   int get id => (raw['id'] as num).toInt();
   DateTime? get date => DateTime.tryParse('${raw['sheet_date']}');
   String get leader => '${raw['leader'] ?? ''}';
+  String? get sessionId => raw['session_id'] as String?;
   List<SheetRow> get rows => [
         if (raw['rows'] is List)
           for (final r in raw['rows'] as List) SheetRow.fromJson({...asMap(r), 'uuid': asMap(r)['id']}),
@@ -119,7 +120,7 @@ class _StockSheetDetailScreenState extends ConsumerState<StockSheetDetailScreen>
           builder: (s) => ListView(padding: const EdgeInsets.all(16), children: [
             AppCard(
               title: 'Summary',
-              description: 'Recorded by ${s.leader}',
+              description: [if (s.sessionId != null) 'Session ${s.sessionId}', 'Recorded by ${s.leader}'].join(' · '),
               child: Text('${s.rows.length} ${s.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(s.totalChs)} cheeses · ${_number.format(s.totalWeight)} kg', style: TextStyle(color: t.mutedForeground)),
             ),
             const SizedBox(height: 16),

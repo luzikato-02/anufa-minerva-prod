@@ -64,6 +64,7 @@ export function StockSheetsTable() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead>Session</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Recorded by</TableHead>
                             <TableHead className="text-right">Rows</TableHead>
@@ -74,13 +75,14 @@ export function StockSheetsTable() {
                     <TableBody>
                         {rows.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                                     {loading ? 'Loading…' : 'No stock sheets yet.'}
                                 </TableCell>
                             </TableRow>
                         ) : (
                             rows.map((s) => (
                                 <TableRow key={s.id} className="cursor-pointer" tabIndex={0} onClick={() => setOpenId(s.id)} onKeyDown={(e) => e.key === 'Enter' && setOpenId(s.id)}>
+                                    <TableCell className="font-mono text-sm">{s.session_id ?? '—'}</TableCell>
                                     <TableCell className="font-medium">{day(s.sheet_date)}</TableCell>
                                     <TableCell>{s.leader}</TableCell>
                                     <TableCell className="text-right">{s.rows_count}</TableCell>
@@ -165,7 +167,7 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                     <DialogHeader>
                         <DialogTitle>{sheet ? day(sheet.sheet_date) : 'Stock sheet'}</DialogTitle>
                         <DialogDescription>
-                            {sheet ? `Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} cheeses · ${formatNumber(kg)} kg` : 'Loading…'}
+                            {sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} cheeses · ${formatNumber(kg)} kg` : 'Loading…'}
                         </DialogDescription>
                     </DialogHeader>
                     {error && (

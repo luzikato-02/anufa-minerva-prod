@@ -46,19 +46,20 @@ class _SheetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final date = DateTime.tryParse('${r['sheet_date']}');
+    final sessionId = r['session_id'] as String?;
     final rows = (r['rows_count'] as num?)?.toInt() ?? 0;
     final chs = (num.tryParse('${r['total_chs'] ?? 0}') ?? 0).toInt();
     final kg = num.tryParse('${r['total_weight'] ?? 0}') ?? 0;
     return Semantics(
       button: true,
-      label: 'Stock sheet ${date == null ? '' : DateFormat('d MMM y').format(date)}, ${r['leader']}, $rows rows',
+      label: 'Stock sheet ${date == null ? '' : DateFormat('d MMM y').format(date)}, ${sessionId == null ? '' : 'session $sessionId, '}${r['leader']}, $rows rows',
       excludeSemantics: true,
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.lg + 4),
         onTap: () => context.push('/stock-sheets/${r['id']}'),
         child: AppCard(
           title: date == null ? 'Stock sheet' : DateFormat('EEE d MMM y').format(date),
-          description: 'Recorded by ${r['leader']}',
+          description: [if (sessionId != null) 'Session $sessionId', 'Recorded by ${r['leader']}'].join(' · '),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text('$rows ${rows == 1 ? 'row' : 'rows'} · ${_number.format(chs)} cheeses · ${_number.format(kg)} kg', style: TextStyle(fontSize: 13, color: t.mutedForeground)),

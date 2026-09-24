@@ -77,6 +77,7 @@ Route::name('v1.')->group(function () {
             Route::get('stock-sheets', [StockSheetController::class, 'index']);
             Route::get('stock-sheets/{stockSheet}', [StockSheetController::class, 'show'])->whereNumber('stockSheet');
             Route::get('stock-sheets/{stockSheet}/download', [StockSheetController::class, 'downloadCsv'])->whereNumber('stockSheet');
+            Route::get('stock-sheets/session/{sessionId}', [StockSheetController::class, 'getSession']);
         });
         Route::post('stock-sheets/rows', [StockSheetController::class, 'storeRow'])->middleware('permission:stock-take.create');
         Route::patch('stock-sheets/rows/{row}', [StockSheetController::class, 'updateRow'])->middleware('permission:stock-take.edit');

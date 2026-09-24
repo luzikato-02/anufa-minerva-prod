@@ -71,9 +71,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('stock-sheets', [StockSheetController::class, 'index']);
         Route::get('stock-sheets/{stockSheet}', [StockSheetController::class, 'show'])->whereNumber('stockSheet');
         Route::get('stock-sheets/{stockSheet}/download', [StockSheetController::class, 'downloadCsv'])->whereNumber('stockSheet');
+        Route::get('stock-sheets/session/{sessionId}', [StockSheetController::class, 'getSession']);
     });
 
     Route::middleware('permission:stock-take.create')->group(function () {
+        Route::get('stock-sheet-session', function () {
+            return Inertia::render('stock-sheet-session');
+        })->name('stock-sheet-session');
+
         Route::get('stock-sheet-main', function () {
             return Inertia::render('stock-sheet-record');
         })->name('stock-sheet-main');

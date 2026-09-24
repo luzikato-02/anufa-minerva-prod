@@ -26,9 +26,11 @@ class StockSheetWebTest extends TestCase
         $viewer = $this->user(['stock-take.view']);
         $this->actingAs($viewer)->get('/stock-sheets-main')->assertOk();
         $this->actingAs($viewer)->get('/stock-sheet-main')->assertForbidden();
+        $this->actingAs($viewer)->get('/stock-sheet-session')->assertForbidden();
 
         $recorder = $this->user(['stock-take.create']);
         $this->actingAs($recorder)->get('/stock-sheet-main')->assertOk();
+        $this->actingAs($recorder)->get('/stock-sheet-session')->assertOk();
         $this->actingAs($recorder)->get('/stock-sheets-main')->assertForbidden();
     }
 

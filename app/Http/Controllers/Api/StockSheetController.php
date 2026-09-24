@@ -56,16 +56,40 @@ class StockSheetController extends Controller
         return response()->json(['status' => 'success', 'data' => $stockSheet->load('rows')]);
     }
 
+    /** Looks up a sheet by the session id it was assigned on its first row, so it can be resumed on another device. */
+    public function getSession(string $sessionId): JsonResponse
+    {
+        $sheet = StockSheet::forSessionOrId($sessionId)->first();
+
+        if (! $sheet) {
+            return response()->json(['success' => false, 'message' => 'Session not found'], 404);
+        }
+
+        return response()->json(['success' => true, 'data' => $sheet->load('rows')]);
+    }
+
+    private function generateUniqueSessionId(): string
+    {
+        do {
+            $sessionId = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        } while (StockSheet::where('session_id', $sessionId)->exists());
+
+        return $sessionId;
+    }
+
     /**
-     * Records one row. The sheet is created on the first row (found by its client uuid), so every queued
-     * upload stands on its own and a rejected one cannot orphan the rows that follow it.
+     * Records one row. `session_id` continues an existing sheet (typed in on another device, or resumed
+     * after a reload); it must already exist. Without it, the sheet is created on the first row, found by
+     * its client uuid — so every queued upload stands on its own — and assigned a fresh session id for the
+     * operator to note down.
      */
     public function storeRow(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'sheet_client_uuid' => 'required|uuid',
-            'sheet_date' => 'required|date',
-            'leader' => 'required|string|max:255',
+            'session_id' => 'nullable|string',
+            'sheet_client_uuid' => 'required_without:session_id|uuid',
+            'sheet_date' => 'required_without:session_id|date',
+            'leader' => 'required_without:session_id|string|max:255',
             'client_uuid' => 'nullable|uuid',
         ] + $this->rowRules());
 
@@ -77,13 +101,25 @@ class StockSheetController extends Controller
         }
 
         $row = DB::transaction(function () use ($data, $request) {
-            $sheet = StockSheet::firstOrCreate(
-                ['client_uuid' => $data['sheet_client_uuid']],
-                ['sheet_date' => $data['sheet_date'], 'leader' => $data['leader'], 'user_id' => $request->user()->id],
-            );
+            if (! empty($data['session_id'])) {
+                $sheet = StockSheet::forSessionOrId($data['session_id'])->first();
+                abort_if(! $sheet, 404, 'Session not found');
+            } else {
+                // Two near-simultaneous first-row submits (a double tap, a retry racing the original) can both
+                // find nothing and try to create the sheet; `firstOrCreate` catches that itself in the common
+                // case, but under load its own re-fetch can still lose narrowly — so fall back to one more here.
+                try {
+                    $sheet = StockSheet::firstOrCreate(
+                        ['client_uuid' => $data['sheet_client_uuid']],
+                        ['sheet_date' => $data['sheet_date'], 'leader' => $data['leader'], 'session_id' => $this->generateUniqueSessionId(), 'user_id' => $request->user()->id],
+                    );
+                } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                    $sheet = StockSheet::where('client_uuid', $data['sheet_client_uuid'])->firstOrFail();
+                }
+            }
 
             // The date follows the latest row, so changing it on the sheet after the first row still takes effect.
-            if (! $sheet->wasRecentlyCreated && $sheet->sheet_date->toDateString() !== Carbon::parse($data['sheet_date'])->toDateString()) {
+            if (! empty($data['sheet_date']) && $sheet->sheet_date->toDateString() !== Carbon::parse($data['sheet_date'])->toDateString()) {
                 $sheet->update(['sheet_date' => $data['sheet_date']]);
             }
 
@@ -95,7 +131,7 @@ class StockSheetController extends Controller
             );
         });
 
-        return response()->json(['success' => true, 'message' => 'Row recorded', 'data' => $row->load('sheet:id,client_uuid')], 201);
+        return response()->json(['success' => true, 'message' => 'Row recorded', 'data' => $row->load('sheet:id,client_uuid,session_id')], 201);
     }
 
     public function updateRow(Request $request, StockSheetRow $row): JsonResponse
