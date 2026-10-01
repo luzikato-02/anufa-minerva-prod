@@ -100,7 +100,25 @@ void main() {
     final store = MemoryTokenStore('stale');
     await pumpApp(tester, bad, store);
     expect(find.text('Log in to your account'), findsOneWidget);
+    expect(find.text('Your session has expired'), findsOneWidget);
     expect(store.token, isNull);
+  });
+
+  testWidgets('a 401 in the middle of a session explains why the user is back at login', (tester) async {
+    final adapter = FakeAdapter({
+      'GET /auth/me': (_) => (status: 200, body: sessionJson()),
+      'GET /dashboard': (_) => (status: 401, body: {'message': 'Unauthenticated.'}),
+    });
+    final store = MemoryTokenStore('t');
+    await pumpApp(tester, adapter, store);
+    expect(find.text('Log in to your account'), findsOneWidget);
+    expect(find.text('Your session has expired'), findsOneWidget);
+    expect(store.token, isNull);
+  });
+
+  testWidgets('a plain signed-out start does not claim the session expired', (tester) async {
+    await pumpApp(tester, FakeAdapter({}), MemoryTokenStore());
+    expect(find.text('Your session has expired'), findsNothing);
   });
 
   testWidgets('routes are permission-guarded', (tester) async {

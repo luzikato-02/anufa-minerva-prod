@@ -124,7 +124,8 @@ class SyncQueue extends Notifier<SyncState> {
 
   String newId() => _uuid.v4();
 
-  /// Tries the request now. Offline → queues it (once) and reports [SubmitResult.queued].
+  /// Tries the request now. Offline, or signed out by an expired session → queues it (once) and reports
+  /// [SubmitResult.queued]; it uploads after the user logs in again.
   /// Server-side errors are thrown so the caller can show them; nothing is queued for those.
   Future<SubmitResult> submit({required String method, required String path, required Map<String, dynamic> data, required String label, String? id}) async {
     final op = SyncOp(id: id ?? newId(), method: method, path: path, data: data, label: label);
@@ -133,7 +134,7 @@ class SyncQueue extends Notifier<SyncState> {
       return SubmitResult.sent;
     } catch (e) {
       final err = ApiException.from(e);
-      if (!err.isOffline) throw err;
+      if (!err.isOffline && !err.isUnauthorized) throw err;
       state = SyncState(ops: [...state.ops, op], flushing: state.flushing, loaded: state.loaded);
       await _persist();
       return SubmitResult.queued;

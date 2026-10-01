@@ -55,6 +55,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       subtitle: 'Enter your email or username and password',
       child: AutofillGroup(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (ref.watch(sessionExpiredProvider)) ...[
+            const AppAlert(
+              destructive: false,
+              title: 'Your session has expired',
+              message: 'Log in again to continue. Entries that had not uploaded yet are kept on this device and upload once you are back in.',
+            ),
+            const SizedBox(height: 16),
+          ],
           if (_error != null && _error!.fieldErrors.isEmpty) ...[AppAlert(message: _error!.message), const SizedBox(height: 16)],
           AppTextField(
             label: 'Email or username',

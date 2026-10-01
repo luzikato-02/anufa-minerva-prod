@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../sync/sync_queue.dart';
 import 'session.dart';
 
 /// Result of the first login step: either signed in, or a 2FA challenge is pending.
@@ -13,13 +16,23 @@ class LoginOutcome {
   bool get needsTwoFactor => challenge != null;
 }
 
+/// True when the last sign-out was forced by an expired/revoked token rather than chosen by the user.
+/// The login screen reads it to explain why the user is back there.
+class SessionExpiredNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool v) => state = v;
+}
+
+final sessionExpiredProvider = NotifierProvider<SessionExpiredNotifier, bool>(SessionExpiredNotifier.new);
+
 /// `null` = signed out. `loading` on cold start while the stored token is validated.
 class AuthController extends AsyncNotifier<Session?> {
   Dio get _dio => ref.read(dioProvider);
 
   @override
   Future<Session?> build() async {
-    ref.read(unauthorizedHandlerProvider).onUnauthorized = _clearLocal;
+    ref.read(unauthorizedHandlerProvider).onUnauthorized = _expire;
     final token = await ref.read(tokenStoreProvider).read();
     if (token == null) return null;
     try {
@@ -28,6 +41,7 @@ class AuthController extends AsyncNotifier<Session?> {
       final err = ApiException.from(e);
       if (err.isOffline) rethrow; // keep the token; caller can retry
       await ref.read(tokenStoreProvider).clear();
+      if (err.isUnauthorized) ref.read(sessionExpiredProvider.notifier).set(true);
       return null;
     }
   }
@@ -64,7 +78,10 @@ class AuthController extends AsyncNotifier<Session?> {
 
   Future<void> _accept(Map<String, dynamic> data) async {
     await ref.read(tokenStoreProvider).write(data['token'] as String);
+    ref.read(sessionExpiredProvider.notifier).set(false);
     state = AsyncData(Session.fromJson(data));
+    // Entries held back by an expired session go out now that there is a token again.
+    unawaited(ref.read(syncQueueProvider.notifier).flush());
   }
 
   /// Re-reads the user (after profile / 2FA changes).
@@ -76,6 +93,13 @@ class AuthController extends AsyncNotifier<Session?> {
     try {
       await _dio.post('/auth/logout');
     } catch (_) {/* token may already be invalid; still sign out locally */}
+    await _clearLocal();
+  }
+
+  /// A request came back 401 with a token attached: flag it so the login screen can say why.
+  Future<void> _expire() async {
+    if (state.value == null) return; // several in-flight requests can 401 together
+    ref.read(sessionExpiredProvider.notifier).set(true);
     await _clearLocal();
   }
 

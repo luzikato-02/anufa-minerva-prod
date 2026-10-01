@@ -53,6 +53,19 @@ void main() {
     expect((a.requests.last.data as Map)['client_uuid'], 'id-1');
   });
 
+  test('a 401 (expired session) keeps the entry queued instead of dropping it', () async {
+    final a = FakeAdapter({'POST /tension-records': (_) => (status: 401, body: {'message': 'Unauthenticated.'})});
+    final storage = MemoryQueueStorage();
+    final c = _container(a, storage: storage);
+    final q = c.read(syncQueueProvider.notifier);
+    await _settle();
+
+    expect(await q.submit(method: 'POST', path: '/tension-records', data: {'x': 1}, label: 'Twisting T-01', id: 'id-9'), SubmitResult.queued);
+    expect(c.read(syncQueueProvider).pending, 1);
+    expect(c.read(syncQueueProvider).failed, 0); // not "rejected": nothing is wrong with the entry
+    expect(storage.saved.single['id'], 'id-9');
+  });
+
   test('queued work survives an app restart', () async {
     final storage = MemoryQueueStorage();
     final off = FakeAdapter({})..offline = true;
