@@ -37,7 +37,7 @@ Finder _byLabel(String label) => find.descendant(of: find.widgetWithText(AppText
 /// The field whose current text is [value].
 Finder _field(String value) => find.widgetWithText(TextField, value);
 
-Future<void> _fill(WidgetTester t, {String material = 'TY022002756', String batch = 'TA0092565', String? color, String? chs, String? weight, String? position, String? remark}) async {
+Future<void> _fill(WidgetTester t, {String material = 'TY022002756', String batch = 'TA0092565', String? color, String? original, String? total, String? chs, String? weight, String? position, String? remark}) async {
   Future<void> type(String hint, String? v) async {
     if (v == null) return;
     await t.enterText(find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == hint), v);
@@ -46,7 +46,7 @@ Future<void> _fill(WidgetTester t, {String material = 'TY022002756', String batc
   await type('e.g. TY022002756', material);
   await type('TA… or a note', batch);
   await type('e.g. White orange green', color);
-  final labelled = {'Cheeses': chs, 'Weight (kg)': weight, 'Position': position};
+  final labelled = {'Original weight (kg)': original, 'Total bobbins': total, 'Actual bobbins': chs, 'Actual weight (kg)': weight, 'Position': position};
   for (final e in labelled.entries) {
     if (e.value != null) await t.enterText(_byLabel(e.key), e.value!);
   }
@@ -92,10 +92,10 @@ void main() {
   });
 
   test('a row keeps the sheet columns and round-trips through the device copy', () {
-    final row = SheetRow(uuid: 'u1', color: 'Pink blue yellow', materialCode: 'TY0220004540', batch: 'kupasan', prodDate: DateTime(2026, 8, 14), chs: 20, weight: 76, position: 44, remark: 'ex WV');
-    expect(row.toFields(), {'color': 'Pink blue yellow', 'material_code': 'TY0220004540', 'batch': 'kupasan', 'prod_date': '2026-08-14', 'chs': 20, 'actual_weight': 76.0, 'position': 44, 'remark': 'ex WV'});
+    final row = SheetRow(uuid: 'u1', color: 'Pink blue yellow', materialCode: 'TY0220004540', batch: 'kupasan', prodDate: DateTime(2026, 8, 14), originalWeight: 100, totalBobbins: 26, chs: 20, weight: 76, position: 44, remark: 'ex WV');
+    expect(row.toFields(), {'color': 'Pink blue yellow', 'material_code': 'TY0220004540', 'batch': 'kupasan', 'prod_date': '2026-08-14', 'original_weight': 100.0, 'total_bobbins': 26, 'chs': 20, 'actual_weight': 76.0, 'position': 44, 'remark': 'ex WV'});
     final back = SheetRow.fromJson(row.toJson());
-    expect((back.batch, back.chs, back.weight, back.position, back.prodDate), ('kupasan', 20, 76.0, 44, DateTime(2026, 8, 14)));
+    expect((back.batch, back.originalWeight, back.totalBobbins, back.chs, back.weight, back.position, back.prodDate), ('kupasan', 100.0, 26, 20, 76.0, 44, DateTime(2026, 8, 14)));
     expect(SheetRow(uuid: 'u2', materialCode: 'M', batch: 'B').toFields()['remark'], isNull); // blanks are sent as null
   });
 
@@ -112,9 +112,20 @@ void main() {
     expect(body['sheet_client_uuid'], isNotEmpty);
     expect(body['client_uuid'], isNotEmpty);
     expect(find.text('TA0092565'), findsOneWidget); // now in the Rows list
-    expect(find.textContaining('1 row · 28 cheeses · 146.8 kg'), findsOneWidget);
+    expect(find.textContaining('1 row · 28 bobbins · 146.8 kg'), findsOneWidget);
     expect(find.text('Add row 2'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'TA0092565'), findsNothing); // batch cleared
+  });
+
+  testWidgets('the actual weight is worked out from the original weight, total bobbins and bobbins counted', (tester) async {
+    final adapter = await _open(tester);
+    await _fill(tester, original: '150', total: '30', chs: '28');
+    expect(find.text('Actual weight (kg) · calculated'), findsOneWidget);
+    expect(_field('140'), findsOneWidget);
+    await _add(tester);
+
+    final body = adapter.requests.singleWhere((r) => r.method == 'POST' && r.path.endsWith('/stock-sheets/rows')).data as Map;
+    expect((body['original_weight'], body['total_bobbins'], body['chs'], body['actual_weight']), (150, 30, 28, 140));
   });
 
   testWidgets('position and remark carry over to the next row; everything else is cleared', (tester) async {
@@ -171,7 +182,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'stock-sheet-active': '{"uuid":"s1","date":"2026-09-19","leader":"Ana","rows":[{"uuid":"r1","material_code":"M","batch":"TA9","chs":2}]}'});
     await pumpSignedIn(tester, permissions: _perms, path: '/stock-sheet', routes: _routes);
     expect(find.text('TA9'), findsOneWidget);
-    expect(find.textContaining('1 row · 2 cheeses'), findsOneWidget);
+    expect(find.textContaining('1 row · 2 bobbins'), findsOneWidget);
     expect(find.text('Add row 2'), findsOneWidget);
   });
 
@@ -191,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit row 1'), findsOneWidget);
     expect(_field('1'), findsWidgets); // weight shows as typed, not "1.0"
-    await tester.enterText(_byLabel('Weight (kg)'), '2.5');
+    await tester.enterText(_byLabel('Actual weight (kg)'), '2.5');
     await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
@@ -260,7 +271,7 @@ void main() {
     });
     expect(find.text('Sat 19 Sep 2026'), findsOneWidget);
     expect(find.text('Recorded by Ana'), findsOneWidget);
-    expect(find.text('2 rows · 48 cheeses · 222.8 kg'), findsOneWidget);
+    expect(find.text('2 rows · 48 bobbins · 222.8 kg'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'kupasan');
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
@@ -275,7 +286,7 @@ void main() {
     });
     expect(find.text('TA0092565'), findsOneWidget);
     expect(find.text('kupasan'), findsOneWidget);
-    expect(find.text('2 rows · 48 cheeses · 222.8 kg'), findsOneWidget);
+    expect(find.text('2 rows · 48 bobbins · 222.8 kg'), findsOneWidget);
     await tester.tap(find.text('kupasan'));
     await tester.pumpAndSettle();
     expect(find.text('Edit row'), findsNothing); // no edit permission
@@ -298,7 +309,7 @@ void main() {
     await tester.tap(find.text('kupasan'));
     await tester.pumpAndSettle();
     expect(find.text('Edit row'), findsOneWidget);
-    await tester.enterText(_byLabel('Weight (kg)'), '80.5');
+    await tester.enterText(_byLabel('Actual weight (kg)'), '80.5');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     final patch = adapter.requests.singleWhere((r) => r.method == 'PATCH');

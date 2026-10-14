@@ -121,7 +121,7 @@ class _StockSheetDetailScreenState extends ConsumerState<StockSheetDetailScreen>
             AppCard(
               title: 'Summary',
               description: [if (s.sessionId != null) 'Session ${s.sessionId}', 'Recorded by ${s.leader}'].join(' · '),
-              child: Text('${s.rows.length} ${s.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(s.totalChs)} cheeses · ${_number.format(s.totalWeight)} kg', style: TextStyle(color: t.mutedForeground)),
+              child: Text('${s.rows.length} ${s.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(s.totalChs)} bobbins · ${_number.format(s.totalWeight)} kg', style: TextStyle(color: t.mutedForeground)),
             ),
             const SizedBox(height: 16),
             if (s.rows.isEmpty)
@@ -167,8 +167,9 @@ class _RowCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Wrap(spacing: 16, runSpacing: 2, children: [
                     Text('Prod ${row.prodDate == null ? '—' : DateFormat('d MMM y').format(row.prodDate!)}', style: const TextStyle(fontSize: 13)),
-                    Text('Cheeses ${v(row.chs)}', style: const TextStyle(fontSize: 13)),
-                    Text('Weight ${row.weight == null ? '—' : '${_number.format(row.weight)} kg'}', style: const TextStyle(fontSize: 13)),
+                    Text('Original ${row.originalWeight == null ? '—' : '${_number.format(row.originalWeight)} kg'} / ${v(row.totalBobbins)} bobbins', style: const TextStyle(fontSize: 13)),
+                    Text('Actual bobbins ${v(row.chs)}', style: const TextStyle(fontSize: 13)),
+                    Text('Actual weight ${row.weight == null ? '—' : '${_number.format(row.weight)} kg'}', style: const TextStyle(fontSize: 13)),
                     Text('Position ${v(row.position)}', style: const TextStyle(fontSize: 13)),
                     if (row.remark.isNotEmpty) Text(row.remark, style: const TextStyle(fontSize: 13)),
                   ]),
@@ -196,6 +197,8 @@ class _RowFormState extends ConsumerState<_RowForm> {
   late final _color = TextEditingController(text: widget.row.color);
   late final _material = TextEditingController(text: widget.row.materialCode);
   late final _batch = TextEditingController(text: widget.row.batch);
+  late final _originalWeight = TextEditingController(text: widget.row.originalWeight == null ? '' : _number.format(widget.row.originalWeight).replaceAll(',', ''));
+  late final _totalBobbins = TextEditingController(text: widget.row.totalBobbins?.toString() ?? '');
   late final _chs = TextEditingController(text: widget.row.chs?.toString() ?? '');
   late final _weight = TextEditingController(text: widget.row.weight == null ? '' : _number.format(widget.row.weight).replaceAll(',', ''));
   late final _position = TextEditingController(text: widget.row.position?.toString() ?? '');
@@ -204,9 +207,26 @@ class _RowFormState extends ConsumerState<_RowForm> {
   bool _busy = false;
   String? _error;
 
+  /// Worked out from the original weight, total bobbins and bobbins counted; null until all three are known.
+  double? get _calculatedWeight => actualWeightFor(double.tryParse(_originalWeight.text.trim().replaceAll(',', '.')), int.tryParse(_totalBobbins.text.trim()), int.tryParse(_chs.text.trim()));
+
+  void _recalculate() {
+    final w = _calculatedWeight;
+    if (w != null) _weight.text = w == w.roundToDouble() ? w.toStringAsFixed(0) : '$w';
+    setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final c in [_originalWeight, _totalBobbins, _chs]) {
+      c.addListener(_recalculate);
+    }
+  }
+
   @override
   void dispose() {
-    for (final c in [_color, _material, _batch, _chs, _weight, _position, _remark]) {
+    for (final c in [_color, _material, _batch, _originalWeight, _totalBobbins, _chs, _weight, _position, _remark]) {
       c.dispose();
     }
     super.dispose();
@@ -214,13 +234,17 @@ class _RowFormState extends ConsumerState<_RowForm> {
 
   Future<void> _save() async {
     if (_material.text.trim().isEmpty || _batch.text.trim().isEmpty) return setState(() => _error = 'Material code and batch are required.');
-    final weight = double.tryParse(_weight.text.trim());
+    final original = double.tryParse(_originalWeight.text.trim().replaceAll(',', '.'));
+    final total = int.tryParse(_totalBobbins.text.trim());
     final chs = int.tryParse(_chs.text.trim());
+    final weight = actualWeightFor(original, total, chs) ?? double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     final position = int.tryParse(_position.text.trim());
     if (_weight.text.trim().isNotEmpty && (weight == null || weight < 0)) return setState(() => _error = 'Weight must be a number, like 146.8.');
-    if (_chs.text.trim().isNotEmpty && (chs == null || chs < 0)) return setState(() => _error = 'Cheeses must be a whole number.');
+    if (_originalWeight.text.trim().isNotEmpty && (original == null || original < 0)) return setState(() => _error = 'Original weight must be a number, like 150.5.');
+    if (_totalBobbins.text.trim().isNotEmpty && (total == null || total < 1)) return setState(() => _error = 'Total bobbins must be a whole number above 0.');
+    if (_chs.text.trim().isNotEmpty && (chs == null || chs < 0)) return setState(() => _error = 'Actual bobbins must be a whole number.');
     if (_position.text.trim().isNotEmpty && (position == null || position < 0 || position > 999)) return setState(() => _error = 'Position must be a number from 0 to 999.');
-    final row = widget.row.copyWith(color: _color.text.trim(), materialCode: _material.text.trim(), batch: _batch.text.trim(), prodDate: _date, clearDate: _date == null, chs: chs, clearChs: chs == null, weight: weight, clearWeight: weight == null, position: position, clearPosition: position == null, remark: _remark.text.trim());
+    final row = widget.row.copyWith(color: _color.text.trim(), materialCode: _material.text.trim(), batch: _batch.text.trim(), prodDate: _date, clearDate: _date == null, originalWeight: original, clearOriginalWeight: original == null, totalBobbins: total, clearTotalBobbins: total == null, chs: chs, clearChs: chs == null, weight: weight, clearWeight: weight == null, position: position, clearPosition: position == null, remark: _remark.text.trim());
     await _send(() => ref.read(dioProvider).patch('/stock-sheets/rows/${row.uuid}', data: row.toFields()));
   }
 
@@ -265,9 +289,15 @@ class _RowFormState extends ConsumerState<_RowForm> {
         ),
         const SizedBox(height: 12),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: AppTextField(label: 'Cheeses', controller: _chs, keyboardType: TextInputType.number)),
+          Expanded(child: AppTextField(label: 'Original weight (kg)', controller: _originalWeight, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
           const SizedBox(width: 12),
-          Expanded(child: AppTextField(label: 'Weight (kg)', controller: _weight, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+          Expanded(child: AppTextField(label: 'Total bobbins', controller: _totalBobbins, keyboardType: TextInputType.number)),
+        ]),
+        const SizedBox(height: 12),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: AppTextField(label: 'Actual bobbins', controller: _chs, keyboardType: TextInputType.number)),
+          const SizedBox(width: 12),
+          Expanded(child: AppTextField(label: _calculatedWeight == null ? 'Actual weight (kg)' : 'Actual weight (kg) · calculated', controller: _weight, enabled: _calculatedWeight == null, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
         ]),
         const SizedBox(height: 12),
         AppTextField(label: 'Position', controller: _position, keyboardType: TextInputType.number),

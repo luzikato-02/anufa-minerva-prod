@@ -68,7 +68,7 @@ export function StockSheetsTable() {
                             <TableHead>Date</TableHead>
                             <TableHead>Recorded by</TableHead>
                             <TableHead className="text-right">Rows</TableHead>
-                            <TableHead className="text-right">Cheeses</TableHead>
+                            <TableHead className="text-right">Bobbins</TableHead>
                             <TableHead className="text-right">Weight (kg)</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -167,7 +167,7 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                     <DialogHeader>
                         <DialogTitle>{sheet ? day(sheet.sheet_date) : 'Stock sheet'}</DialogTitle>
                         <DialogDescription>
-                            {sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} cheeses · ${formatNumber(kg)} kg` : 'Loading…'}
+                            {sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} bobbins · ${formatNumber(kg)} kg` : 'Loading…'}
                         </DialogDescription>
                     </DialogHeader>
                     {error && (
@@ -183,8 +183,10 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                                 <TableHead>Material</TableHead>
                                 <TableHead>Batch</TableHead>
                                 <TableHead>Prod date</TableHead>
-                                <TableHead className="text-right">Chs</TableHead>
-                                <TableHead className="text-right">Weight (kg)</TableHead>
+                                <TableHead className="text-right">Original (kg)</TableHead>
+                                <TableHead className="text-right">Total bobbins</TableHead>
+                                <TableHead className="text-right">Actual bobbins</TableHead>
+                                <TableHead className="text-right">Actual (kg)</TableHead>
                                 <TableHead className="text-right">Position</TableHead>
                                 <TableHead>Remark</TableHead>
                                 {canEdit && <TableHead className="w-12"><span className="sr-only">Edit</span></TableHead>}
@@ -198,6 +200,8 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                                     <TableCell>{r.material_code}</TableCell>
                                     <TableCell>{r.batch}</TableCell>
                                     <TableCell>{r.prod_date ? r.prod_date.slice(0, 10) : '—'}</TableCell>
+                                    <TableCell className="text-right">{formatNumber(r.original_weight)}</TableCell>
+                                    <TableCell className="text-right">{formatNumber(r.total_bobbins)}</TableCell>
                                     <TableCell className="text-right">{formatNumber(r.chs)}</TableCell>
                                     <TableCell className="text-right">{formatNumber(r.actual_weight)}</TableCell>
                                     <TableCell className="text-right">{r.position ?? '—'}</TableCell>

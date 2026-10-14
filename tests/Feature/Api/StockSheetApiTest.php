@@ -62,6 +62,21 @@ class StockSheetApiTest extends TestCase
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['batch' => 'kupasan', 'color' => null, 'prod_date' => null, 'position' => null]))->assertCreated();
     }
 
+    public function test_actual_weight_is_worked_out_from_the_original_weight_and_bobbins(): void
+    {
+        $u = $this->user();
+        // 150 kg over 30 bobbins = 5 kg each; 28 counted = 140 kg, whatever weight the client sent.
+        $res = $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['original_weight' => 150, 'total_bobbins' => 30, 'chs' => 28, 'actual_weight' => 1]))->assertCreated();
+        $res->assertJsonPath('data.actual_weight', 140);
+
+        $row = StockSheetRow::first();
+        $this->actingAs($u, 'sanctum')->patchJson("/api/v1/stock-sheets/rows/{$row->id}", ['chs' => 20])->assertOk()->assertJsonPath('data.actual_weight', 100);
+
+        // Without the original figures, a typed weight is kept as before.
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['batch' => 'old', 'actual_weight' => 12.5]))->assertCreated()->assertJsonPath('data.actual_weight', 12.5);
+        $this->actingAs($u, 'sanctum')->postJson('/api/v1/stock-sheets/rows', $this->row(['batch' => 'bad', 'total_bobbins' => 0]))->assertUnprocessable()->assertJsonValidationErrors('total_bobbins');
+    }
+
     public function test_deleting_a_row_renumbers_the_rest(): void
     {
         $u = $this->user();
@@ -106,7 +121,7 @@ class StockSheetApiTest extends TestCase
         $sheet = StockSheet::first();
 
         $res = $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/{$sheet->id}/download")->assertOk();
-        $this->assertSame(['NO', 'WARNA', 'KODE MATERIAL', 'BATCH', 'PROD DATE', 'CHS', 'BERAT ACTUAL', 'POSITION', 'REMARK'], array_keys($res->json('summary.0')));
+        $this->assertSame(['NO', 'WARNA', 'KODE MATERIAL', 'BATCH', 'PROD DATE', 'BERAT ORIGINAL', 'TOTAL BOBBIN', 'CHS', 'BERAT ACTUAL', 'POSITION', 'REMARK'], array_keys($res->json('summary.0')));
 
         $empty = StockSheet::create(['sheet_date' => '2026-09-19', 'leader' => 'Ana']);
         $this->actingAs($u, 'sanctum')->getJson("/api/v1/stock-sheets/{$empty->id}/download")->assertNotFound();

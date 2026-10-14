@@ -62,7 +62,7 @@ class _SheetCard extends StatelessWidget {
           description: [if (sessionId != null) 'Session $sessionId', 'Recorded by ${r['leader']}'].join(' · '),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
-            child: Text('$rows ${rows == 1 ? 'row' : 'rows'} · ${_number.format(chs)} cheeses · ${_number.format(kg)} kg', style: TextStyle(fontSize: 13, color: t.mutedForeground)),
+            child: Text('$rows ${rows == 1 ? 'row' : 'rows'} · ${_number.format(chs)} bobbins · ${_number.format(kg)} kg', style: TextStyle(fontSize: 13, color: t.mutedForeground)),
           ),
         ),
       ),

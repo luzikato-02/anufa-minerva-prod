@@ -1,5 +1,6 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,22 @@ import { router } from '@inertiajs/react';
 import { ArrowLeftRightIcon, CheckIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+/** Whether the browser reports a connection. */
+function useOnline() {
+    const [online, setOnline] = useState(() => navigator.onLine);
+    useEffect(() => {
+        const on = () => setOnline(true);
+        const off = () => setOnline(false);
+        window.addEventListener('online', on);
+        window.addEventListener('offline', off);
+        return () => {
+            window.removeEventListener('online', on);
+            window.removeEventListener('offline', off);
+        };
+    }, []);
+    return online;
+}
+
 /** Record the paper stock sheet, one row at a time. Starting or resuming a sheet happens on a separate page
  *  (stock-sheet-session); this screen always assumes one is already active, and bounces back there if it
  *  finds nothing to work with (e.g. a direct/first visit). Every row is saved on the server as it is added. */
@@ -31,6 +48,7 @@ export default function StockSheetForm() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const online = useOnline();
 
     useEffect(() => {
         if (!sheet) router.visit(stockSheetSession());
@@ -133,6 +151,12 @@ export default function StockSheetForm() {
                     <Button variant="outline" onClick={() => router.visit(stockSheetSession())}>
                         <ArrowLeftRightIcon /> Change session
                     </Button>
+                    <div className="flex flex-wrap items-center gap-2" role="status" aria-live="polite">
+                        <Badge variant={online ? 'secondary' : 'destructive'}>{online ? 'Online' : 'Offline'}</Badge>
+                        <Badge variant={sheet.sessionId ? 'secondary' : 'outline'}>{sheet.sessionId ? 'Session connected' : 'Session starts with the first row'}</Badge>
+                        <Badge variant="outline">{sheet.rows.length} saved</Badge>
+                        {busy && <Badge variant="outline">Saving…</Badge>}
+                    </div>
                 </CardContent>
             </Card>
 
@@ -169,7 +193,7 @@ export default function StockSheetForm() {
                 <CardHeader>
                     <CardTitle>Rows</CardTitle>
                     <CardDescription>
-                        {sheet.rows.length === 0 ? 'Rows you add appear here.' : `${sheet.rows.length} ${sheet.rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(totals.chs)} cheeses · ${formatNumber(totals.kg)} kg`}
+                        {sheet.rows.length === 0 ? 'Rows you add appear here.' : `${sheet.rows.length} ${sheet.rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(totals.chs)} bobbins · ${formatNumber(totals.kg)} kg`}
                     </CardDescription>
                 </CardHeader>
                 {sheet.rows.length > 0 && (
@@ -182,8 +206,10 @@ export default function StockSheetForm() {
                                     <TableHead>Material</TableHead>
                                     <TableHead>Batch</TableHead>
                                     <TableHead>Prod date</TableHead>
-                                    <TableHead className="text-right">Chs</TableHead>
-                                    <TableHead className="text-right">Weight (kg)</TableHead>
+                                    <TableHead className="text-right">Original (kg)</TableHead>
+                                    <TableHead className="text-right">Total bobbins</TableHead>
+                                    <TableHead className="text-right">Actual bobbins</TableHead>
+                                    <TableHead className="text-right">Actual (kg)</TableHead>
                                     <TableHead className="text-right">Position</TableHead>
                                     <TableHead>Remark</TableHead>
                                 </TableRow>
@@ -196,6 +222,8 @@ export default function StockSheetForm() {
                                         <TableCell>{r.material_code}</TableCell>
                                         <TableCell>{r.batch}</TableCell>
                                         <TableCell>{r.prod_date ?? '—'}</TableCell>
+                                        <TableCell className="text-right">{formatNumber(r.original_weight)}</TableCell>
+                                        <TableCell className="text-right">{formatNumber(r.total_bobbins)}</TableCell>
                                         <TableCell className="text-right">{formatNumber(r.chs)}</TableCell>
                                         <TableCell className="text-right">{formatNumber(r.actual_weight)}</TableCell>
                                         <TableCell className="text-right">{r.position ?? '—'}</TableCell>

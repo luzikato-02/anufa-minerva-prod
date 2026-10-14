@@ -8,6 +8,8 @@ class SheetRow {
     required this.batch,
     this.color = '',
     this.prodDate,
+    this.originalWeight,
+    this.totalBobbins,
     this.chs,
     this.weight,
     this.position,
@@ -22,17 +24,25 @@ class SheetRow {
   /// Free text: usually a TA… batch number, but the sheet also holds entries like "kupasan".
   final String batch;
   final DateTime? prodDate;
+
+  /// What the batch weighed originally, and how many bobbins it had; [weight] follows from them and [chs].
+  final double? originalWeight;
+  final int? totalBobbins;
+
+  /// The bobbins actually counted.
   final int? chs;
   final double? weight;
   final int? position;
   final String remark;
 
-  SheetRow copyWith({String? color, String? materialCode, String? batch, DateTime? prodDate, bool clearDate = false, int? chs, bool clearChs = false, double? weight, bool clearWeight = false, int? position, bool clearPosition = false, String? remark}) => SheetRow(
+  SheetRow copyWith({String? color, String? materialCode, String? batch, DateTime? prodDate, bool clearDate = false, double? originalWeight, bool clearOriginalWeight = false, int? totalBobbins, bool clearTotalBobbins = false, int? chs, bool clearChs = false, double? weight, bool clearWeight = false, int? position, bool clearPosition = false, String? remark}) => SheetRow(
         uuid: uuid,
         color: color ?? this.color,
         materialCode: materialCode ?? this.materialCode,
         batch: batch ?? this.batch,
         prodDate: clearDate ? null : prodDate ?? this.prodDate,
+        originalWeight: clearOriginalWeight ? null : originalWeight ?? this.originalWeight,
+        totalBobbins: clearTotalBobbins ? null : totalBobbins ?? this.totalBobbins,
         chs: clearChs ? null : chs ?? this.chs,
         weight: clearWeight ? null : weight ?? this.weight,
         position: clearPosition ? null : position ?? this.position,
@@ -45,6 +55,8 @@ class SheetRow {
         'material_code': materialCode,
         'batch': batch,
         'prod_date': prodDate == null ? null : _day(prodDate!),
+        'original_weight': originalWeight,
+        'total_bobbins': totalBobbins,
         'chs': chs,
         'actual_weight': weight,
         'position': position,
@@ -59,11 +71,20 @@ class SheetRow {
         materialCode: '${j['material_code'] ?? ''}',
         batch: '${j['batch'] ?? ''}',
         prodDate: DateTime.tryParse('${j['prod_date']}'),
+        originalWeight: (j['original_weight'] as num?)?.toDouble() ?? double.tryParse('${j['original_weight']}'),
+        totalBobbins: (j['total_bobbins'] as num?)?.toInt(),
         chs: (j['chs'] as num?)?.toInt(),
         weight: (j['actual_weight'] as num?)?.toDouble(),
         position: (j['position'] as num?)?.toInt(),
         remark: '${j['remark'] ?? ''}',
       );
+}
+
+/// The weight of the bobbins counted: original weight over total bobbins, times the bobbins found. Null until
+/// all three are known. Mirrors the server, which has the final say.
+double? actualWeightFor(double? originalWeight, int? totalBobbins, int? actualBobbins) {
+  if (originalWeight == null || totalBobbins == null || totalBobbins <= 0 || actualBobbins == null) return null;
+  return (originalWeight / totalBobbins * actualBobbins * 100).roundToDouble() / 100;
 }
 
 String _day(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

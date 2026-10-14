@@ -9,6 +9,10 @@ export interface SheetRow {
     material_code: string;
     batch: string;
     prod_date: string | null;
+    /** What the batch weighed originally, and how many bobbins it had. */
+    original_weight: number | null;
+    total_bobbins: number | null;
+    /** The bobbins actually counted. */
     chs: number | null;
     actual_weight: number | null;
     position: number | null;
@@ -145,6 +149,12 @@ export function parseNumber(text: string, opts: { integer?: boolean; max?: numbe
     if (opts.integer && !Number.isInteger(n)) return undefined;
     if (opts.max !== undefined && n > opts.max) return undefined;
     return n;
+}
+
+/** The weight of the bobbins counted: original weight over total bobbins, times the bobbins found. Mirrors the server. */
+export function actualWeightFor(originalWeight: number | null, totalBobbins: number | null, actualBobbins: number | null): number | null {
+    if (originalWeight === null || !totalBobbins || actualBobbins === null) return null;
+    return Math.round((originalWeight / totalBobbins) * actualBobbins * 100) / 100;
 }
 
 export const formatNumber = (n: number | string | null | undefined) =>

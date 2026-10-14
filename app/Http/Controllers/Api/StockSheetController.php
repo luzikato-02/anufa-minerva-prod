@@ -22,11 +22,29 @@ class StockSheetController extends Controller
             'material_code' => "{$req}|string|max:255",
             'batch' => "{$req}|string|max:255",
             'prod_date' => 'nullable|date',
+            'original_weight' => 'nullable|numeric|min:0',
+            'total_bobbins' => 'nullable|integer|min:1',
             'chs' => 'nullable|integer|min:0',
             'actual_weight' => 'nullable|numeric|min:0',
             'position' => 'nullable|integer|min:0|max:999',
             'remark' => 'nullable|string|max:255',
         ];
+    }
+
+    /**
+     * Fills `actual_weight` from the batch's original weight and total bobbins when they are known; a row
+     * without them (an older entry) keeps whatever weight it was given.
+     */
+    private function withActualWeight(array $fields, ?StockSheetRow $current = null): array
+    {
+        $pick = fn (string $k) => array_key_exists($k, $fields) ? $fields[$k] : $current?->{$k};
+        $weight = StockSheetRow::actualWeightFor(
+            $pick('original_weight') === null ? null : (float) $pick('original_weight'),
+            $pick('total_bobbins') === null ? null : (int) $pick('total_bobbins'),
+            $pick('chs') === null ? null : (int) $pick('chs'),
+        );
+
+        return $weight === null ? $fields : ['actual_weight' => $weight] + $fields;
     }
 
     public function index(Request $request): JsonResponse
@@ -126,7 +144,7 @@ class StockSheetController extends Controller
             $next = (int) StockSheetRow::where('stock_sheet_id', $sheet->id)->max('line_no') + 1;
 
             return StockSheetRow::create(
-                collect($data)->only(['color', 'material_code', 'batch', 'prod_date', 'chs', 'actual_weight', 'position', 'remark', 'client_uuid'])->all()
+                $this->withActualWeight(collect($data)->only(['color', 'material_code', 'batch', 'prod_date', 'original_weight', 'total_bobbins', 'chs', 'actual_weight', 'position', 'remark', 'client_uuid'])->all())
                 + ['stock_sheet_id' => $sheet->id, 'line_no' => $next, 'user_id' => $request->user()->id]
             );
         });
@@ -136,7 +154,7 @@ class StockSheetController extends Controller
 
     public function updateRow(Request $request, StockSheetRow $row): JsonResponse
     {
-        $row->update($request->validate($this->rowRules(partial: true)));
+        $row->update($this->withActualWeight($request->validate($this->rowRules(partial: true)), $row));
 
         return response()->json(['status' => 'success', 'data' => $row->fresh()]);
     }
@@ -192,6 +210,8 @@ class StockSheetController extends Controller
                 'KODE MATERIAL' => $r->material_code,
                 'BATCH' => $r->batch,
                 'PROD DATE' => $r->prod_date?->toDateString(),
+                'BERAT ORIGINAL' => $r->original_weight,
+                'TOTAL BOBBIN' => $r->total_bobbins,
                 'CHS' => $r->chs,
                 'BERAT ACTUAL' => $r->actual_weight,
                 'POSITION' => $r->position,

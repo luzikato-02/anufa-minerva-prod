@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { type RowFields, parseNumber } from '@/lib/stock-sheets';
+import { type RowFields, actualWeightFor, formatNumber, parseNumber } from '@/lib/stock-sheets';
 
 /** The row form as the user types it: every field is text until it is checked. */
 export interface RowDraft {
@@ -9,13 +9,15 @@ export interface RowDraft {
     material_code: string;
     batch: string;
     prod_date: string;
+    original_weight: string;
+    total_bobbins: string;
     chs: string;
     actual_weight: string;
     position: string;
     remark: string;
 }
 
-export const emptyDraft: RowDraft = { color: '', material_code: '', batch: '', prod_date: '', chs: '', actual_weight: '', position: '', remark: '' };
+export const emptyDraft: RowDraft = { color: '', material_code: '', batch: '', prod_date: '', original_weight: '', total_bobbins: '', chs: '', actual_weight: '', position: '', remark: '' };
 
 export function draftFrom(row: RowFields): RowDraft {
     return {
@@ -23,6 +25,8 @@ export function draftFrom(row: RowFields): RowDraft {
         material_code: row.material_code,
         batch: row.batch,
         prod_date: row.prod_date ?? '',
+        original_weight: row.original_weight === null ? '' : String(row.original_weight),
+        total_bobbins: row.total_bobbins === null ? '' : String(row.total_bobbins),
         chs: row.chs === null ? '' : String(row.chs),
         actual_weight: row.actual_weight === null ? '' : String(row.actual_weight),
         position: row.position === null ? '' : String(row.position),
@@ -34,10 +38,16 @@ export function draftFrom(row: RowFields): RowDraft {
 export function readDraft(d: RowDraft): { fields: RowFields } | { error: string } {
     if (d.material_code.trim() === '') return { error: 'Enter the material code.' };
     if (d.batch.trim() === '') return { error: 'Enter the batch.' };
+    const originalWeight = parseNumber(d.original_weight);
+    const totalBobbins = parseNumber(d.total_bobbins, { integer: true });
     const chs = parseNumber(d.chs, { integer: true });
-    const weight = parseNumber(d.actual_weight);
+    // With the batch's original figures the weight is worked out; without them it is typed, as on the paper.
+    const typedWeight = parseNumber(d.actual_weight);
+    const weight = actualWeightFor(originalWeight ?? null, totalBobbins ?? null, chs ?? null) ?? typedWeight;
     const position = parseNumber(d.position, { integer: true, max: 999 });
-    if (chs === undefined) return { error: 'Cheeses must be a whole number.' };
+    if (originalWeight === undefined) return { error: 'Original weight must be a number, like 150.5.' };
+    if (totalBobbins === undefined || totalBobbins === 0) return { error: 'Total bobbins must be a whole number above 0.' };
+    if (chs === undefined) return { error: 'Actual bobbins must be a whole number.' };
     if (weight === undefined) return { error: 'Weight must be a number, like 146.8.' };
     if (position === undefined) return { error: 'Position must be a number from 0 to 999.' };
     return {
@@ -46,6 +56,8 @@ export function readDraft(d: RowDraft): { fields: RowFields } | { error: string 
             material_code: d.material_code.trim(),
             batch: d.batch.trim(),
             prod_date: d.prod_date || null,
+            original_weight: originalWeight,
+            total_bobbins: totalBobbins,
             chs,
             actual_weight: weight,
             position,
@@ -87,6 +99,7 @@ function Chips({ values, onPick }: { values: string[]; onPick: (v: string) => vo
 export function RowFieldsForm({ draft, onChange, recentColors = [], recentRemarks = [], idPrefix }: Props) {
     const set = (k: keyof RowDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
     const id = (k: string) => `${idPrefix}-${k}`;
+    const calculated = actualWeightFor(parseNumber(draft.original_weight) ?? null, parseNumber(draft.total_bobbins, { integer: true }) ?? null, parseNumber(draft.chs, { integer: true }) ?? null);
     return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2 sm:col-span-2">
@@ -104,11 +117,23 @@ export function RowFieldsForm({ draft, onChange, recentColors = [], recentRemark
             <Field id={id('date')} label="Production date">
                 <Input id={id('date')} type="date" value={draft.prod_date} onChange={set('prod_date')} />
             </Field>
-            <Field id={id('chs')} label="Cheeses">
+            <Field id={id('original-weight')} label="Original weight (kg)">
+                <Input id={id('original-weight')} inputMode="decimal" value={draft.original_weight} onChange={set('original_weight')} />
+            </Field>
+            <Field id={id('total-bobbins')} label="Total bobbins">
+                <Input id={id('total-bobbins')} inputMode="numeric" value={draft.total_bobbins} onChange={set('total_bobbins')} />
+            </Field>
+            <Field id={id('chs')} label="Actual bobbins">
                 <Input id={id('chs')} inputMode="numeric" value={draft.chs} onChange={set('chs')} />
             </Field>
-            <Field id={id('weight')} label="Weight (kg)">
-                <Input id={id('weight')} inputMode="decimal" value={draft.actual_weight} onChange={set('actual_weight')} />
+            <Field id={id('weight')} label={calculated === null ? 'Actual weight (kg)' : 'Actual weight (kg) · calculated'}>
+                <Input
+                    id={id('weight')}
+                    inputMode="decimal"
+                    value={calculated === null ? draft.actual_weight : formatNumber(calculated)}
+                    readOnly={calculated !== null}
+                    onChange={set('actual_weight')}
+                />
             </Field>
             <Field id={id('position')} label="Position">
                 <Input id={id('position')} inputMode="numeric" value={draft.position} onChange={set('position')} />

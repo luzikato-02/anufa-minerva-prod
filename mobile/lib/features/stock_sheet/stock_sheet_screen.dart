@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/sync/online_state.dart';
 import '../../core/sync/sync_queue.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/ui/app_alert.dart';
@@ -20,6 +21,8 @@ import 'stock_sheet_models.dart';
 
 final _number = NumberFormat('#,##0.##');
 
+String _plain(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+
 /// "Record: Stock Sheet": the paper stock list, one row at a time.
 class StockSheetScreen extends ConsumerStatefulWidget {
   const StockSheetScreen({super.key});
@@ -32,6 +35,8 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
   final _color = TextEditingController();
   final _material = TextEditingController();
   final _batch = TextEditingController();
+  final _originalWeight = TextEditingController();
+  final _totalBobbins = TextEditingController();
   final _chs = TextEditingController();
   final _weight = TextEditingController();
   final _position = TextEditingController();
@@ -41,9 +46,22 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
   bool _busy = false;
   String? _error;
 
+  /// The weight worked out from the batch's original weight, total bobbins and the bobbins counted; null
+  /// until all three are filled in, in which case the weight is typed as before.
+  double? get _calculatedWeight => actualWeightFor(double.tryParse(_originalWeight.text.trim().replaceAll(',', '.')), int.tryParse(_totalBobbins.text.trim()), int.tryParse(_chs.text.trim()));
+
+  void _recalculate() {
+    final w = _calculatedWeight;
+    if (w != null) _weight.text = w == w.roundToDouble() ? w.toStringAsFixed(0) : '$w';
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    for (final c in [_originalWeight, _totalBobbins, _chs]) {
+      c.addListener(_recalculate);
+    }
     Future.microtask(() async {
       await ref.read(stockSheetProvider.notifier).open();
       // Nothing active on this device (a first or direct visit) — starting or resuming a sheet happens there.
@@ -53,7 +71,7 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
 
   @override
   void dispose() {
-    for (final c in [_color, _material, _batch, _chs, _weight, _position, _remark]) {
+    for (final c in [_color, _material, _batch, _originalWeight, _totalBobbins, _chs, _weight, _position, _remark]) {
       c.dispose();
     }
     super.dispose();
@@ -73,14 +91,21 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
   /// Builds the row from the form, or sets [_error] and returns null.
   SheetRow? _read(String uuid) {
     String? bad;
+    final originalText = _originalWeight.text.trim().replaceAll(',', '.'), totalText = _totalBobbins.text.trim();
     final chsText = _chs.text.trim(), weightText = _weight.text.trim().replaceAll(',', '.'), positionText = _position.text.trim();
-    final chs = int.tryParse(chsText), weight = double.tryParse(weightText), position = int.tryParse(positionText);
+    final original = double.tryParse(originalText), total = int.tryParse(totalText);
+    final chs = int.tryParse(chsText), position = int.tryParse(positionText);
+    final weight = actualWeightFor(original, total, chs) ?? double.tryParse(weightText);
     if (_material.text.trim().isEmpty) {
       bad = 'Enter the material code.';
     } else if (_batch.text.trim().isEmpty) {
       bad = 'Enter the batch.';
+    } else if (originalText.isNotEmpty && (original == null || original < 0)) {
+      bad = 'Original weight must be a number, like 150.5.';
+    } else if (totalText.isNotEmpty && (total == null || total < 1)) {
+      bad = 'Total bobbins must be a whole number above 0.';
     } else if (chsText.isNotEmpty && (chs == null || chs < 0)) {
-      bad = 'Cheeses must be a whole number.';
+      bad = 'Actual bobbins must be a whole number.';
     } else if (weightText.isNotEmpty && (weight == null || weight < 0)) {
       bad = 'Weight must be a number, like 146.8.';
     } else if (positionText.isNotEmpty && (position == null || position < 0 || position > 999)) {
@@ -90,7 +115,7 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
       setState(() => _error = bad);
       return null;
     }
-    return SheetRow(uuid: uuid, color: _color.text.trim(), materialCode: _material.text.trim(), batch: _batch.text.trim(), prodDate: _prodDate, chs: chs, weight: weight, position: position, remark: _remark.text.trim());
+    return SheetRow(uuid: uuid, color: _color.text.trim(), materialCode: _material.text.trim(), batch: _batch.text.trim(), prodDate: _prodDate, originalWeight: original, totalBobbins: total, chs: chs, weight: weight, position: position, remark: _remark.text.trim());
   }
 
   Future<void> _submit() async {
@@ -120,7 +145,7 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
       _editing = null;
       _error = null;
       _prodDate = null;
-      for (final c in [_color, _material, _batch, _chs, _weight]) {
+      for (final c in [_color, _material, _batch, _originalWeight, _totalBobbins, _chs, _weight]) {
         c.clear();
       }
       _position.text = keep?.position?.toString() ?? '';
@@ -136,8 +161,10 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
       _material.text = r.materialCode;
       _batch.text = r.batch;
       _prodDate = r.prodDate;
+      _originalWeight.text = r.originalWeight == null ? '' : _plain(r.originalWeight!);
+      _totalBobbins.text = r.totalBobbins?.toString() ?? '';
       _chs.text = r.chs?.toString() ?? '';
-      _weight.text = r.weight == null ? '' : (r.weight! == r.weight!.roundToDouble() ? r.weight!.toStringAsFixed(0) : '${r.weight}');
+      _weight.text = r.weight == null ? '' : _plain(r.weight!);
       _position.text = r.position?.toString() ?? '';
       _remark.text = r.remark;
     });
@@ -190,10 +217,11 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
           title: dayFmt.format(sheet.date),
           description: [if (sheet.sessionId != null) 'Session ${sheet.sessionId}', 'Recorded by ${sheet.leader}'].join(' · '),
           action: AppButton(label: 'Change date', size: AppButtonSize.sm, variant: AppButtonVariant.outline, onPressed: () => _pickDate(current: sheet.date, onPicked: ref.read(stockSheetProvider.notifier).setDate)),
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: AppButton(label: 'Change session', icon: LucideIcons.arrowLeftRight, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => context.go('/stock-sheet/session')),
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _status(sheet, waiting),
+            const SizedBox(height: 8),
+            AppButton(label: 'Change session', icon: LucideIcons.arrowLeftRight, size: AppButtonSize.sm, variant: AppButtonVariant.ghost, onPressed: () => context.go('/stock-sheet/session')),
+          ]),
         ),
         const SizedBox(height: 16),
         AppCard(
@@ -210,9 +238,15 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
             _dateField(),
             const SizedBox(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: AppTextField(label: 'Cheeses', controller: _chs, keyboardType: TextInputType.number)),
+              Expanded(child: AppTextField(label: 'Original weight (kg)', controller: _originalWeight, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
               const SizedBox(width: 12),
-              Expanded(child: AppTextField(label: 'Weight (kg)', controller: _weight, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              Expanded(child: AppTextField(label: 'Total bobbins', controller: _totalBobbins, keyboardType: TextInputType.number)),
+            ]),
+            const SizedBox(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: AppTextField(label: 'Actual bobbins', controller: _chs, keyboardType: TextInputType.number)),
+              const SizedBox(width: 12),
+              Expanded(child: AppTextField(label: _calculatedWeight == null ? 'Actual weight (kg)' : 'Actual weight (kg) · calculated', controller: _weight, enabled: _calculatedWeight == null, keyboardType: const TextInputType.numberWithOptions(decimal: true))),
             ]),
             const SizedBox(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -236,13 +270,26 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
         const SizedBox(height: 16),
         AppCard(
           title: 'Rows',
-          description: sheet.rows.isEmpty ? 'Rows you add appear here.' : '${sheet.rows.length} ${sheet.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(sheet.totalChs)} cheeses · ${_number.format(sheet.totalWeight)} kg',
+          description: sheet.rows.isEmpty ? 'Rows you add appear here.' : '${sheet.rows.length} ${sheet.rows.length == 1 ? 'row' : 'rows'} · ${_number.format(sheet.totalChs)} bobbins · ${_number.format(sheet.totalWeight)} kg',
           child: Column(children: [
             for (var i = 0; i < sheet.rows.length; i++) _RowTile(number: i + 1, row: sheet.rows[i], waiting: waiting.contains(sheet.rows[i].uuid), selected: editing?.uuid == sheet.rows[i].uuid, onTap: () => _edit(sheet.rows[i])),
           ]),
         ),
       ]),
     );
+  }
+
+  /// Where the sheet stands: connection, how many rows the server has, how many are still on this device.
+  Widget _status(ActiveSheet sheet, Set<String> waiting) {
+    final online = ref.watch(onlineProvider).value ?? true;
+    final pending = sheet.rows.where((r) => waiting.contains(r.uuid)).length;
+    final saved = sheet.rows.length - pending;
+    return Wrap(spacing: 8, runSpacing: 6, children: [
+      AppBadge(online ? 'Online' : 'Offline', variant: online ? AppBadgeVariant.success : AppBadgeVariant.warning),
+      AppBadge(sheet.sessionId != null ? 'Session connected' : 'Session starts with the first row', variant: sheet.sessionId != null ? AppBadgeVariant.success : AppBadgeVariant.outline),
+      AppBadge('$saved saved', variant: AppBadgeVariant.secondary),
+      if (pending > 0) AppBadge('$pending waiting to upload', variant: AppBadgeVariant.warning),
+    ]);
   }
 
   Widget _scanField(String label, TextEditingController c, {required String hint}) => Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -284,7 +331,8 @@ class _RowTile extends StatelessWidget {
     final t = context.tokens;
     final detail = [
       if (row.materialCode.isNotEmpty) row.materialCode,
-      if (row.chs != null) '${row.chs} chs',
+      if (row.originalWeight != null && row.totalBobbins != null) 'of ${_number.format(row.totalBobbins)} bobbins (${_number.format(row.originalWeight)} kg)',
+      if (row.chs != null) '${row.chs} bobbins',
       if (row.weight != null) '${_number.format(row.weight)} kg',
       if (row.position != null) 'pos ${row.position}',
       if (row.remark.isNotEmpty) row.remark,
