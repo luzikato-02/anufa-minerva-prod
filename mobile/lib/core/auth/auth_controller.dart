@@ -28,6 +28,10 @@ final sessionExpiredProvider = NotifierProvider<SessionExpiredNotifier, bool>(Se
 
 /// `null` = signed out. `loading` on cold start while the stored token is validated.
 class AuthController extends AsyncNotifier<Session?> {
+  /// The most recent signed-in session, so screens still on the stack can finish the frame in which the user is
+  /// signed out (a 401) without reading a missing session, before the router sends them to login.
+  Session? lastSession;
+
   Dio get _dio => ref.read(dioProvider);
 
   @override
@@ -112,4 +116,9 @@ class AuthController extends AsyncNotifier<Session?> {
 final authProvider = AsyncNotifierProvider<AuthController, Session?>(AuthController.new);
 
 /// Current session; only valid inside authenticated routes.
-final sessionProvider = Provider<Session>((ref) => ref.watch(authProvider).requireValue!);
+final sessionProvider = Provider<Session>((ref) {
+  final controller = ref.read(authProvider.notifier);
+  final current = ref.watch(authProvider).value;
+  if (current != null) return controller.lastSession = current;
+  return controller.lastSession!;
+});

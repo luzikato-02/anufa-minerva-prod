@@ -74,6 +74,12 @@ List<Override> overridesFor(FakeAdapter adapter, MemoryTokenStore store, {Memory
           final t = await store.read();
           if (t != null) o.headers['Authorization'] = 'Bearer $t';
           h.next(o);
+        }, onError: (e, h) {
+          // Same hook as the real client: a 401 with a token attached signs the user out.
+          if (e.response?.statusCode == 401 && e.requestOptions.headers.containsKey('Authorization')) {
+            ref.read(unauthorizedHandlerProvider).onUnauthorized?.call();
+          }
+          h.next(e);
         }));
         return dio;
       }),
