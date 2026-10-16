@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\ControlPlans;
 
+use App\ControlPlans\PdfExport;
 use App\ControlPlans\PrintSheet;
 use App\ControlPlans\WordExport;
 use App\Http\Controllers\Controller;
 use App\Models\ControlPlanRevision;
 use App\Models\ControlPlanSetting;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -35,9 +35,7 @@ class ControlPlanExportController extends Controller
         $name = self::fileName($revision, $format);
 
         if ($format === 'pdf') {
-            return Pdf::loadView('control-plans.sheet', ['s' => $sheet, 'screen' => false])
-                ->setPaper('A4', 'landscape')
-                ->download($name);
+            return PdfExport::make($sheet)->download($name);
         }
 
         return response()->download(WordExport::save($sheet), $name)->deleteFileAfterSend();
