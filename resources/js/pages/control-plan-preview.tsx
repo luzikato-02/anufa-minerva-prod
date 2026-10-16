@@ -5,11 +5,12 @@ import { type PlanRef, type Revision } from '@/lib/control-plans';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ChevronLeftIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * The document exactly as it exports: the server renders the same page the PDF is made from, shown here in a
- * frame that grows to its full height.
+ * frame that grows to its full height. The page is fetched and passed in as srcDoc rather than loaded by URL,
+ * because the server sends X-Frame-Options: DENY on every response, which stops even a same-origin frame.
  */
 export default function ControlPlanPreview({
     plan,
@@ -22,7 +23,27 @@ export default function ControlPlanPreview({
         revision.status !== 'released' && revision.status !== 'superseded';
     const [watermark, setWatermark] = useState(true);
     const [height, setHeight] = useState(1600);
+    const [html, setHtml] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const src = `/control-plan-revisions/${revision.id}/print?watermark=${watermark ? 1 : 0}`;
+
+    useEffect(() => {
+        let cancelled = false;
+        setError(null);
+        fetch(src, { credentials: 'include', headers: { Accept: 'text/html' } })
+            .then((res) => {
+                if (!res.ok)
+                    throw new Error(
+                        `The preview could not be loaded (${res.status}). Reload the page to try again.`,
+                    );
+                return res.text();
+            })
+            .then((text) => !cancelled && setHtml(text))
+            .catch((e) => !cancelled && setError((e as Error).message));
+        return () => {
+            cancelled = true;
+        };
+    }, [src]);
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Control Plans', href: '/control-plans' },
@@ -75,9 +96,23 @@ export default function ControlPlanPreview({
                     </Button>
                 </div>
             </div>
+            {error && (
+                <p
+                    role="alert"
+                    className="p-4 text-center text-sm text-destructive"
+                >
+                    {error}
+                </p>
+            )}
+            {html === null && !error && (
+                <p className="p-4 text-center text-sm text-muted-foreground">
+                    Loading preview…
+                </p>
+            )}
             <iframe
                 title={`${plan.doc_no} Rev ${revision.rev}, print preview`}
-                src={src}
+                srcDoc={html ?? ''}
+                hidden={html === null}
                 className="w-full border-0"
                 style={{ height }}
                 onLoad={(e) => {
