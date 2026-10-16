@@ -25,13 +25,14 @@ import { usePermissions } from '@/lib/permissions';
 import { activityLog, batchStockTakingMain, creelTypeSettings, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockSheetMain, stockSheetsMain, stockTakeRecordsMain, tensionRecordsDisplay, torqueCheckMain, torqueChecksMain, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, FileCheck2, Library } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
 import { InventoryNav } from './inventory-nav';
 import { LoomNav } from './loom-nav';
 import { ProcessParams } from './process-parameters';
+import { QualityNav } from './quality-nav';
 
 const mainNavItems: NavItem[] = [
     {
@@ -156,6 +157,27 @@ const loomNavItems: NavItem[] = [
     },
 ];
 
+const qualityNavItems: NavItem[] = [
+    {
+        title: 'Control Plans',
+        href: '/control-plans',
+        icon: FileCheck2,
+        permission: 'control-plans.view',
+    },
+    {
+        title: 'Reference Library',
+        href: '/control-plan-references',
+        icon: Library,
+        permission: 'control-plans.view',
+    },
+    {
+        title: 'Control Plan Settings',
+        href: '/control-plan-settings',
+        icon: Settings2,
+        permission: 'control-plans.settings',
+    },
+];
+
 const administrationNavItems: NavItem[] = [
     {
         title: 'User & Role Management',
@@ -219,6 +241,7 @@ export function AppSidebar() {
                     <ProcessParams items={filterByPermission(processParamsNavItems)} />
                     <InventoryNav items={filterByPermission(inventoryNavItems)} />
                     <LoomNav items={filterByPermission(loomNavItems)} />
+                    <QualityNav items={filterByPermission(qualityNavItems)} />
                     {visibleAdminItems.length > 0 && <AdminNav items={visibleAdminItems} />}
                 </SidebarContent>
 

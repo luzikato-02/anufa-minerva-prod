@@ -41,6 +41,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'torque-checks.delete',
             'creel-types.view',
             'creel-types.manage',
+            'control-plans.view',
+            'control-plans.author',
+            'control-plans.review',
+            'control-plans.approve',
+            'control-plans.settings',
             'users.view',
             'users.manage',
             'roles.manage',
@@ -78,6 +83,8 @@ class RolesAndPermissionsSeeder extends Seeder
                 'torque-checks.delete',
                 'creel-types.view',
                 'creel-types.manage',
+                'control-plans.view',
+                'control-plans.author',
                 'activity-log.view',
             ],
             'analyst' => [
@@ -88,6 +95,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'machine-maintenance.view',
                 'torque-checks.view',
                 'creel-types.view',
+                'control-plans.view',
                 'activity-log.view',
             ],
             'operator' => [
@@ -107,6 +115,16 @@ class RolesAndPermissionsSeeder extends Seeder
                 'torque-checks.create',
                 'torque-checks.edit',
                 'creel-types.view',
+                'control-plans.view',
+            ],
+            // Control plan workflow: QA reviews a submitted revision, the approver (mill manager) releases it.
+            'qa-reviewer' => [
+                'control-plans.view',
+                'control-plans.review',
+            ],
+            'approver' => [
+                'control-plans.view',
+                'control-plans.approve',
             ],
         ];
 

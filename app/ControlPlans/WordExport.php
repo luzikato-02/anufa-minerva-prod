@@ -1,0 +1,204 @@
+<?php
+
+namespace App\ControlPlans;
+
+use PhpOffice\PhpWord\Element\Section;
+use PhpOffice\PhpWord\Element\Table;
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Shared\Converter;
+
+/** Writes a PrintSheet as a Word document in the W-WSD layout: A4 landscape, revision history page, then the plan. */
+class WordExport
+{
+    private const FONT = 'Arial';
+
+    private const CELL = ['borderSize' => 4, 'borderColor' => '1F1F1F', 'valign' => 'top'];
+
+    private const HEAD_CELL = self::CELL + ['bgColor' => 'F2F2F2', 'valign' => 'center'];
+
+    /** Widths of the 15 characteristics columns, in twips; they add up to the A4 landscape text width. */
+    private const MAIN_WIDTHS = [560, 420, 1300, 1100, 380, 1100, 900, 620, 1500, 1200, 520, 900, 1250, 700, 1250];
+
+    /** Saves the document to a temporary file and returns its path. */
+    public static function save(array $s): string
+    {
+        $word = new PhpWord;
+        $word->setDefaultFontName(self::FONT);
+        $word->setDefaultFontSize(8);
+
+        foreach ([1, 2] as $page) {
+            $section = $word->addSection([
+                'orientation' => 'landscape',
+                'pageSizeW' => Converter::cmToTwip(29.7),
+                'pageSizeH' => Converter::cmToTwip(21),
+                'marginTop' => Converter::cmToTwip(1),
+                'marginBottom' => Converter::cmToTwip(1),
+                'marginLeft' => Converter::cmToTwip(1),
+                'marginRight' => Converter::cmToTwip(1),
+            ]);
+            if ($s['watermark']) {
+                $section->addHeader()->addText('DRAFT · not for the shop floor', ['bold' => true, 'color' => 'B3261E', 'size' => 10], ['alignment' => 'right']);
+            }
+            self::pageHeader($section, $s, $page);
+            $page === 1 ? self::history($section, $s) : self::plan($section, $s);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'cp').'.docx';
+        IOFactory::createWriter($word, 'Word2007')->save($path);
+
+        return $path;
+    }
+
+    private static function pageHeader(Section $section, array $s, int $page): void
+    {
+        $section->addText($s['mill']);
+        $section->addText($s['doc_no']);
+        $section->addText('WORK STATION DOCUMENT', ['bold' => true, 'size' => 11], ['alignment' => 'center', 'spaceAfter' => 120]);
+
+        $rows = [
+            ['Referensi SP', $s['sp_ref'], 'Tanggal diterbitkan', $s['issued']],
+            ['Tanggal Diterbitkan SP', $s['sp_date'], 'No. Revisi/Tanggal Revisi terakhir', $s['rev_label']],
+            ['', '', 'Tanggal Review berikutnya', $s['next_review']],
+            ['', '', 'Halaman', $page.' dari '.PrintSheet::PAGES],
+        ];
+        $table = $section->addTable(['cellMargin' => 20]);
+        foreach ($rows as $r) {
+            $table->addRow();
+            $table->addCell(2800)->addText($r[0]);
+            $table->addCell(200)->addText($r[0] !== '' ? ':' : '');
+            $table->addCell(3400)->addText($r[1]);
+            $table->addCell(4000)->addText($r[2]);
+            $table->addCell(200)->addText(':');
+            $table->addCell(5000)->addText($r[3]);
+        }
+    }
+
+    private static function history(Section $section, array $s): void
+    {
+        $section->addText('REVISION HISTORY', ['bold' => true, 'size' => 10], ['alignment' => 'center', 'spaceBefore' => 200, 'spaceAfter' => 120]);
+        $table = self::grid($section);
+        $widths = [1100, 2300, 1400, 8000, 2800];
+        $table->addRow(null, ['tblHeader' => true]);
+        foreach (['Page', 'Date of Revision', 'Revision No', 'Description', 'Revised by'] as $i => $label) {
+            self::headCell($table, $widths[$i], $label);
+        }
+        foreach ($s['history'] as $h) {
+            $table->addRow(null, ['cantSplit' => true]);
+            $table->addCell($widths[0], self::CELL)->addText($h['page']);
+            $table->addCell($widths[1], self::CELL)->addText($h['date']);
+            $table->addCell($widths[2], self::CELL)->addText($h['rev']);
+            $desc = $table->addCell($widths[3], self::CELL);
+            if (count($h['description']) > 1) {
+                foreach ($h['description'] as $d) {
+                    $desc->addListItem($d, 0, null, ['listType' => \PhpOffice\PhpWord\Style\ListItem::TYPE_BULLET_FILLED]);
+                }
+            } else {
+                $desc->addText($h['description'][0] ?? '');
+            }
+            $table->addCell($widths[4], self::CELL)->addText($h['revised_by']);
+        }
+        if (! $s['history']) {
+            $table->addRow();
+            $table->addCell(array_sum($widths), self::CELL + ['gridSpan' => 5])->addText('No revision history yet.', ['italic' => true, 'color' => '6B6F73']);
+        }
+    }
+
+    private static function plan(Section $section, array $s): void
+    {
+        $info = $s['info'];
+        $phases = collect($s['phases'])->map(fn ($label, $key) => '['.(($info['phase'] ?? '') === $key ? 'X' : ' ').'] '.$label)->implode('    ');
+        $head = $section->addTable();
+        $head->addRow();
+        $head->addCell(5200, ['valign' => 'center'])->addText($phases);
+        $head->addCell(5200, ['valign' => 'center'])->addText($s['title'], ['bold' => true, 'size' => 10], ['alignment' => 'center']);
+        $head->addCell(5200);
+
+        $field = fn (string $label, string $value) => [$label, $value];
+        $approval = fn (string $name, string $date) => trim(($info[$name] ?? '').' '.($info[$date] ?? ''));
+        $planApproval = in_array($s['status'], ['released', 'superseded'], true) ? $s['release_date'] : '';
+        $rows = [
+            [[2, $field('Control Plan Number: ', $s['doc_no'])], [1, $field('Key Contact/Phone: ', $info['key_contact'] ?? '')], [2, $field('Date (Orig.): ', $s['issued'])], [1, $field('Date (Rev.): ', $s['release_date'])]],
+            [[2, $field('Part Number / Latest Change Level: ', $info['part_number'] ?? '')], [1, $field('Core Team: ', $info['core_team'] ?? '')], [1, $field('', '')], [2, $field("Customer Engineering Approval/Date (If Req'd.) ", $approval('cust_eng_name', 'cust_eng_date'))]],
+            [[2, $field('Part Name / Description: ', $info['part_name'] ?? '')], [1, $field('Organization/Plan Approval/Date: ', $planApproval)], [1, $field('', '')], [2, $field("Customer Quality Approval/Date (If Req'd.) ", $approval('cust_qual_name', 'cust_qual_date'))]],
+            [[1, $field('Organization/Plant: ', $info['org_plant'] ?? '')], [1, $field('Organization Code: ', $info['org_code'] ?? '')], [1, $field("Other Approval/Date (If Req'd.) ", $approval('other1_name', 'other1_date'))], [1, $field('', '')], [2, $field("Other Approval (If Req'd.) ", $approval('other2_name', 'other2_date'))]],
+        ];
+        $unit = 2600;
+        $infoTable = self::grid($section);
+        foreach ($rows as $row) {
+            $infoTable->addRow();
+            foreach ($row as [$span, [$label, $value]]) {
+                $run = $infoTable->addCell($unit * $span, self::CELL + ($span > 1 ? ['gridSpan' => $span] : []))->addTextRun();
+                $run->addText($label, ['bold' => true]);
+                $run->addText($value);
+            }
+        }
+
+        $section->addTextBreak(1, ['size' => 4]);
+        $w = self::MAIN_WIDTHS;
+        $table = self::grid($section);
+        $font = ['size' => 7];
+        $th = fn (int $width, string $label, array $extra = []) => self::headCell($table, $width, $label, $extra, $font);
+
+        $table->addRow(null, ['tblHeader' => true]);
+        $th($w[0], 'Process No.', ['vMerge' => 'restart']);
+        $th($w[1] + $w[2], 'Process Name', ['vMerge' => 'restart', 'gridSpan' => 2]);
+        $th($w[3], 'Machine, Device, Jig, Tools for MFG', ['vMerge' => 'restart']);
+        $th($w[4] + $w[5] + $w[6], 'Characteristic', ['gridSpan' => 3]);
+        $th($w[7], 'Special Char. Class', ['vMerge' => 'restart']);
+        $th(array_sum(array_slice($w, 8, 6)), 'Methods', ['gridSpan' => 6]);
+        $th($w[14], 'Reaction Plan', ['vMerge' => 'restart']);
+
+        $table->addRow(null, ['tblHeader' => true]);
+        $table->addCell($w[0], self::HEAD_CELL + ['vMerge' => 'continue']);
+        $table->addCell($w[1] + $w[2], self::HEAD_CELL + ['vMerge' => 'continue', 'gridSpan' => 2]);
+        $table->addCell($w[3], self::HEAD_CELL + ['vMerge' => 'continue']);
+        $th($w[4], 'No.', ['vMerge' => 'restart']);
+        $th($w[5], 'Product', ['vMerge' => 'restart']);
+        $th($w[6], 'Process', ['vMerge' => 'restart']);
+        $table->addCell($w[7], self::HEAD_CELL + ['vMerge' => 'continue']);
+        $th($w[8], 'Product/Process Specification/ Tolerance', ['vMerge' => 'restart']);
+        $th($w[9], 'Evaluation/ Measurement technique', ['vMerge' => 'restart']);
+        $th($w[10] + $w[11], 'Sample', ['gridSpan' => 2]);
+        $th($w[12], 'Control Method', ['vMerge' => 'restart']);
+        $th($w[13], 'PIC', ['vMerge' => 'restart']);
+        $table->addCell($w[14], self::HEAD_CELL + ['vMerge' => 'continue']);
+
+        $table->addRow(null, ['tblHeader' => true]);
+        $table->addCell($w[0], self::HEAD_CELL + ['vMerge' => 'continue']);
+        $table->addCell($w[1] + $w[2], self::HEAD_CELL + ['vMerge' => 'continue', 'gridSpan' => 2]);
+        $table->addCell($w[3], self::HEAD_CELL + ['vMerge' => 'continue']);
+        foreach ([4, 5, 6, 7, 8, 9] as $i) {
+            $table->addCell($w[$i], self::HEAD_CELL + ['vMerge' => 'continue']);
+        }
+        $th($w[10], 'Size');
+        $th($w[11], 'Freq');
+        foreach ([12, 13, 14] as $i) {
+            $table->addCell($w[$i], self::HEAD_CELL + ['vMerge' => 'continue']);
+        }
+
+        foreach ($s['rows'] as $row) {
+            $table->addRow(null, ['cantSplit' => true]);
+            foreach ($row as $i => $cell) {
+                $center = in_array($i, [0, 4, 7, 10], true) ? ['alignment' => 'center'] : [];
+                if (! empty($cell['covered'])) {
+                    $table->addCell($w[$i], self::CELL + ['vMerge' => 'continue']);
+
+                    continue;
+                }
+                $style = self::CELL + (($cell['rowspan'] ?? 1) > 1 ? ['vMerge' => 'restart'] : []);
+                $table->addCell($w[$i], $style)->addText($cell['text'], $font, $center);
+            }
+        }
+    }
+
+    private static function grid(Section $section): Table
+    {
+        return $section->addTable(['borderSize' => 4, 'borderColor' => '1F1F1F', 'cellMargin' => 40, 'width' => 100 * 50, 'unit' => 'pct']);
+    }
+
+    private static function headCell(Table $table, int $width, string $label, array $extra = [], array $font = []): void
+    {
+        $table->addCell($width, self::HEAD_CELL + $extra)->addText($label, ['bold' => true] + $font, ['alignment' => 'center']);
+    }
+}

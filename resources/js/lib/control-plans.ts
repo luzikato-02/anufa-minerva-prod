@@ -1,0 +1,289 @@
+/** Client and shared types for the control plan module (W-WSD work station documents). */
+
+export type RevisionStatus =
+    | 'draft'
+    | 'in_review'
+    | 'changes_requested'
+    | 'approved'
+    | 'released'
+    | 'superseded';
+
+export type Phase = 'prototype' | 'pre_launch' | 'production';
+
+export interface Step {
+    id: string;
+    no: string;
+    group: string;
+    name: string;
+    machine: string;
+}
+
+export interface Line {
+    id: string;
+    step_id: string;
+    product: string;
+    process: string;
+    sc: string;
+    spec: string;
+    measurement: string;
+    size: string;
+    frequency: string;
+    control: string;
+    pic: string;
+    reaction: string;
+    reaction_ref: string;
+}
+
+export interface Content {
+    steps: Step[];
+    lines: Line[];
+}
+
+export interface DocHeader {
+    mill: string;
+    sp_ref: string;
+    sp_date: string;
+    issued: string;
+}
+
+export interface PlanInfo {
+    phase: Phase;
+    title: string;
+    key_contact: string;
+    core_team: string;
+    part_number: string;
+    part_name: string;
+    org_plant: string;
+    org_code: string;
+    cust_eng_name: string;
+    cust_eng_date: string;
+    cust_qual_name: string;
+    cust_qual_date: string;
+    other1_name: string;
+    other1_date: string;
+    other2_name: string;
+    other2_date: string;
+}
+
+export interface HistoryEntry {
+    pages: string;
+    description: string;
+}
+
+export interface Revision {
+    id: number;
+    rev_no: number;
+    /** Two-digit revision number as printed: "09", "12". */
+    rev: string;
+    status: RevisionStatus;
+    editable: boolean;
+    header: DocHeader;
+    info: PlanInfo;
+    content: Content;
+    history: HistoryEntry[];
+    author: string | null;
+    author_id: number | null;
+    submitted_by: number | null;
+    submitter: string | null;
+    /** Printed in the configured date format, e.g. "15 Oktober 2026". */
+    release_date: string | null;
+    next_review: string | null;
+    updated_at: string | null;
+}
+
+export interface PlanRef {
+    id: number;
+    doc_no: string;
+}
+
+export const LINE_FIELDS = [
+    'product',
+    'process',
+    'sc',
+    'spec',
+    'measurement',
+    'size',
+    'frequency',
+    'control',
+    'pic',
+    'reaction',
+    'reaction_ref',
+] as const;
+export const STEP_FIELDS = ['no', 'group', 'name', 'machine'] as const;
+
+export type LineField = (typeof LINE_FIELDS)[number];
+export type StepField = (typeof STEP_FIELDS)[number];
+
+export const LINE_LABELS: Record<LineField, string> = {
+    product: 'Product',
+    process: 'Process',
+    sc: 'Class',
+    spec: 'Specification',
+    measurement: 'Measurement',
+    size: 'Size',
+    frequency: 'Freq',
+    control: 'Control method',
+    pic: 'PIC',
+    reaction: 'Reaction plan',
+    reaction_ref: 'Reaction plan reference',
+};
+
+export const PHASES: { value: Phase; label: string }[] = [
+    { value: 'prototype', label: 'Prototype' },
+    { value: 'pre_launch', label: 'Pre-launch' },
+    { value: 'production', label: 'Production' },
+];
+
+/** A whole value that is one document code (QA-IK-14, T-WSD-W-3…). Matches the server's ReferenceCodes::EXACT. */
+export const REF_CODE = /^[A-Z]+(?:-[A-Z0-9]+)+$/;
+
+/** Codes inside longer text. Matches the server's ReferenceCodes::PATTERN. */
+export const REF_CODE_IN_TEXT =
+    /(?<![A-Za-z0-9-])[A-Z]+(?:-[A-Z0-9]+)+(?![A-Za-z0-9-])/g;
+
+export const blank = (v: string | null | undefined) => (v ?? '').trim() === '';
+
+/** A special characteristic class is anything but blank or "-". */
+export const hasClass = (v: string) => !blank(v) && v.trim() !== '-';
+
+/** Lines in print order (steps in order, each step's lines in order), each with its step. */
+export function orderedLines(content: Content): { step: Step; line: Line }[] {
+    const out: { step: Step; line: Line }[] = [];
+    for (const step of content.steps) {
+        for (const line of content.lines) {
+            if (line.step_id === step.id) out.push({ step, line });
+        }
+    }
+    return out;
+}
+
+export function newId(): string {
+    return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function emptyLine(stepId: string): Line {
+    return {
+        id: newId(),
+        step_id: stepId,
+        product: '',
+        process: '-',
+        sc: '-',
+        spec: '',
+        measurement: '',
+        size: '',
+        frequency: '',
+        control: '',
+        pic: '',
+        reaction: '',
+        reaction_ref: '',
+    };
+}
+
+async function request<T>(
+    url: string,
+    method: string,
+    body?: unknown,
+): Promise<T> {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (method !== 'GET') {
+        const { csrfToken } = await (
+            await fetch('/csrf-token', { credentials: 'include' })
+        ).json();
+        headers['X-CSRF-TOKEN'] = csrfToken;
+        headers['Content-Type'] = 'application/json';
+    }
+    const res = await fetch(url, {
+        method,
+        headers,
+        credentials: 'include',
+        body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const first = json.errors
+            ? (Object.values(json.errors)[0] as string[])[0]
+            : undefined;
+        throw new Error(
+            first ?? json.message ?? 'The request failed. Try again.',
+        );
+    }
+    return json as T;
+}
+
+export interface ReferenceFields {
+    code: string;
+    title: string;
+    type: string;
+    revision: string;
+    link: string;
+}
+
+export interface Settings {
+    mill: string | null;
+    org_plant: string | null;
+    org_code: string | null;
+    date_format: 'id' | 'en';
+    review_period_years: number;
+}
+
+export const controlPlanApi = {
+    create: (fields: { doc_no: string; title: string; rev_no: number }) =>
+        request<{ data: { plan_id: number; revision_id: number } }>(
+            '/control-plans',
+            'POST',
+            fields,
+        ).then((r) => r.data),
+    startRevision: (planId: number) =>
+        request<{ data: { revision_id: number } }>(
+            `/control-plans/${planId}/revisions`,
+            'POST',
+        ).then((r) => r.data),
+    save: (
+        revisionId: number,
+        doc: {
+            doc_no: string;
+            header: DocHeader;
+            info: PlanInfo;
+            content: Content;
+        },
+    ) =>
+        request<{ data: Revision }>(
+            `/control-plan-revisions/${revisionId}`,
+            'PUT',
+            doc,
+        ).then((r) => r.data),
+    discard: (revisionId: number) =>
+        request(`/control-plan-revisions/${revisionId}`, 'DELETE'),
+    submit: (revisionId: number, history: HistoryEntry[]) =>
+        request(`/control-plan-revisions/${revisionId}/submit`, 'POST', {
+            history,
+        }),
+    withdraw: (revisionId: number) =>
+        request(`/control-plan-revisions/${revisionId}/withdraw`, 'POST'),
+    requestChanges: (revisionId: number, body: string) =>
+        request(
+            `/control-plan-revisions/${revisionId}/request-changes`,
+            'POST',
+            { body },
+        ),
+    approve: (revisionId: number) =>
+        request(`/control-plan-revisions/${revisionId}/approve`, 'POST'),
+    release: (revisionId: number) =>
+        request(`/control-plan-revisions/${revisionId}/release`, 'POST'),
+    comment: (revisionId: number, body: string) =>
+        request(`/control-plan-revisions/${revisionId}/comments`, 'POST', {
+            body,
+        }),
+    createReference: (fields: ReferenceFields) =>
+        request<{ data: { id: number } }>(
+            '/control-plan-references',
+            'POST',
+            fields,
+        ).then((r) => r.data),
+    updateReference: (id: number, fields: ReferenceFields) =>
+        request(`/control-plan-references/${id}`, 'PATCH', fields),
+    saveSettings: (fields: Settings) =>
+        request('/control-plan-settings', 'PUT', fields),
+};

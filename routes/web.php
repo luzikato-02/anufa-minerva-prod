@@ -13,6 +13,11 @@ use App\Http\Controllers\Api\TorqueCheckController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\ControlPlans\ControlPlanController;
+use App\Http\Controllers\ControlPlans\ControlPlanExportController;
+use App\Http\Controllers\ControlPlans\ControlPlanPageController;
+use App\Http\Controllers\ControlPlans\ControlPlanReferenceController;
+use App\Http\Controllers\ControlPlans\ControlPlanSettingController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -326,6 +331,45 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('document-intelligence', fn () => Inertia::render('document-intelligence'))
         ->name('document-intelligence');
     Route::post('document-intelligence/process', [DocumentIntelligenceController::class, 'process']);
+
+    // ---- CONTROL PLANS (W-WSD work station documents) ----
+    // Viewing released revisions needs control-plans.view; revisions still in progress also need one of
+    // author/review/approve, checked per revision in the controllers.
+    Route::middleware('permission:control-plans.view')->group(function () {
+        Route::get('control-plans', [ControlPlanPageController::class, 'index'])->name('control-plans');
+        Route::get('control-plans/{controlPlan}', [ControlPlanPageController::class, 'editor'])->whereNumber('controlPlan')->name('control-plans.show');
+        Route::get('control-plans/{controlPlan}/viewer', [ControlPlanPageController::class, 'viewer'])->whereNumber('controlPlan')->name('control-plans.viewer');
+        Route::get('control-plans/{controlPlan}/export', [ControlPlanPageController::class, 'export'])->whereNumber('controlPlan')->name('control-plans.export');
+        Route::get('control-plan-revisions/{revision}/review', [ControlPlanPageController::class, 'review'])->name('control-plan-revisions.review');
+        Route::get('control-plan-revisions/{revision}/preview', [ControlPlanPageController::class, 'preview'])->name('control-plan-revisions.preview');
+        Route::get('control-plan-revisions/{revision}/print', [ControlPlanExportController::class, 'print']);
+        Route::get('control-plan-revisions/{revision}/download/{format}', [ControlPlanExportController::class, 'download']);
+        Route::get('control-plan-references', [ControlPlanPageController::class, 'references'])->name('control-plan-references');
+        Route::post('control-plan-revisions/{revision}/comments', [ControlPlanController::class, 'comment']);
+    });
+
+    Route::middleware('permission:control-plans.author')->group(function () {
+        Route::post('control-plans', [ControlPlanController::class, 'store']);
+        Route::post('control-plans/{controlPlan}/revisions', [ControlPlanController::class, 'startRevision'])->whereNumber('controlPlan');
+        Route::put('control-plan-revisions/{revision}', [ControlPlanController::class, 'update']);
+        Route::delete('control-plan-revisions/{revision}', [ControlPlanController::class, 'destroy']);
+        Route::post('control-plan-revisions/{revision}/submit', [ControlPlanController::class, 'submit']);
+        Route::post('control-plan-revisions/{revision}/withdraw', [ControlPlanController::class, 'withdraw']);
+        Route::post('control-plan-references', [ControlPlanReferenceController::class, 'store']);
+        Route::patch('control-plan-references/{reference}', [ControlPlanReferenceController::class, 'update']);
+    });
+
+    Route::middleware('permission:control-plans.review')->group(function () {
+        Route::post('control-plan-revisions/{revision}/request-changes', [ControlPlanController::class, 'requestChanges']);
+        Route::post('control-plan-revisions/{revision}/approve', [ControlPlanController::class, 'approve']);
+    });
+
+    Route::post('control-plan-revisions/{revision}/release', [ControlPlanController::class, 'release'])->middleware('permission:control-plans.approve');
+
+    Route::middleware('permission:control-plans.settings')->group(function () {
+        Route::get('control-plan-settings', [ControlPlanPageController::class, 'settings'])->name('control-plan-settings');
+        Route::put('control-plan-settings', [ControlPlanSettingController::class, 'update']);
+    });
 });
 
 require __DIR__.'/settings.php';
