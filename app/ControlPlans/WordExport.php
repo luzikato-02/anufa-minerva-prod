@@ -63,15 +63,18 @@ class WordExport
             ['', '', 'Halaman', $page.' dari '.PrintSheet::PAGES],
         ];
         $table = $section->addTable(['cellMargin' => 20]);
-        foreach ($rows as $r) {
+        foreach ($rows as $i => $r) {
+            // The last row carries the rule that separates the header block from the page body.
+            $cell = $i === count($rows) - 1 ? ['borderBottomSize' => 6, 'borderBottomColor' => '1F1F1F'] : [];
             $table->addRow();
-            $table->addCell(2800)->addText($r[0]);
-            $table->addCell(200)->addText($r[0] !== '' ? ':' : '');
-            $table->addCell(3400)->addText($r[1]);
-            $table->addCell(4000)->addText($r[2]);
-            $table->addCell(200)->addText(':');
-            $table->addCell(5000)->addText($r[3]);
+            $table->addCell(2800, $cell)->addText($r[0]);
+            $table->addCell(200, $cell)->addText($r[0] !== '' ? ':' : '');
+            $table->addCell(3400, $cell)->addText($r[1]);
+            $table->addCell(4000, $cell)->addText($r[2]);
+            $table->addCell(200, $cell)->addText(':');
+            $table->addCell(5000, $cell)->addText($r[3]);
         }
+        $section->addTextBreak(1, ['size' => 4]);
     }
 
     private static function history(Section $section, array $s): void

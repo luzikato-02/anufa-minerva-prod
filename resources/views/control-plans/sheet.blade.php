@@ -18,6 +18,9 @@
     table { width: 100%; border-collapse: collapse; }
     .head td { padding: 1px 4px; border: 0; vertical-align: top; }
     .head .colon { width: 8px; }
+    /* The rule under the header block. On the last row's cells, not the table: dompdf draws cell borders reliably. */
+    .head tr.last td { padding-bottom: 5px; border-bottom: 0.6pt solid #1f1f1f; }
+    .head { margin-bottom: 4px; }
     .section { margin: 10px 0 6px; text-align: center; font-size: 10pt; font-weight: bold; }
     .grid th, .grid td { border: 0.6pt solid #1f1f1f; padding: 2px 3px; vertical-align: top; text-align: left; }
     .grid th { text-align: center; vertical-align: middle; font-weight: bold; background: #f2f2f2; }
@@ -63,7 +66,7 @@
         <p class="title">WORK STATION DOCUMENT</p>
         <table class="head">
             @foreach ($headerRows($page) as $r)
-                <tr>
+                <tr @class(['last' => $loop->last])>
                     <td style="width: 18%">{{ $r[0] }}</td><td class="colon">{{ $r[0] !== '' ? ':' : '' }}</td><td style="width: 22%">{{ $r[1] }}</td>
                     <td style="width: 26%">{{ $r[2] }}</td><td class="colon">:</td><td>{{ $r[3] }}</td>
                 </tr>
