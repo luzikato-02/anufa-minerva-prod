@@ -57,6 +57,9 @@
 @php
     $info = $s['info'];
     $pages = $s['pages'] ?? \App\ControlPlans\PrintSheet::PAGES;
+    // Rows that start a new PDF page (found by a first render, see PdfExport): a merged step cell continuing onto
+    // that page repeats its text there and closes with a border at the bottom of the page before.
+    $s['page_starts'] ??= [];
     // Escapes the text, then keeps each word holding a document code on one line, brackets and commas included.
     $text = fn (string $t) => preg_replace_callback('/\S*[A-Z]+(?:-[A-Z0-9]+)+\S*/', fn ($m) => '<span class="nw">'.$m[0].'</span>', e($t));
     // Column widths of the characteristics table, in percent of the page width (they add up to 100). dompdf ignores
@@ -156,11 +159,16 @@
                     <tr><th>Size</th><th>Freq</th></tr>
                 </thead>
                 <tbody>
+                    @php($merged = [])
                     @forelse ($s['rows'] as $r => $row)
-                        <tr>
+                        @php($top = in_array($r, $s['page_starts'], true))
+                        @php($nextTop = in_array($r + 1, $s['page_starts'], true))
+                        <tr data-row="{{ $r }}">
                             @foreach ($row as $i => $cell)
-                                @php($continues = ! empty($s['rows'][$r + 1][$i]['covered']))
-                                <td style="{{ $cw($i) }}" @class(['center' => in_array($i, [0, 4, 7, 10], true), 'cont' => ! empty($cell['covered']), 'more' => $continues])>@if (empty($cell['covered'])){!! $text($cell['text']) !!}@endif</td>
+                                @php($covered = ! empty($cell['covered']))
+                                @php($covered || $merged[$i] = $cell['text'])
+                                @php($continues = ! empty($s['rows'][$r + 1][$i]['covered']) && ! $nextTop)
+                                <td style="{{ $cw($i) }}" @class(['center' => in_array($i, [0, 4, 7, 10], true), 'cont' => $covered && ! $top, 'more' => $continues])>@if (! $covered || $top){!! $text($covered ? $merged[$i] : $cell['text']) !!}@endif</td>
                             @endforeach
                         </tr>
                     @empty
