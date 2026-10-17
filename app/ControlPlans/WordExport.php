@@ -52,6 +52,9 @@ class WordExport
 
     private static function pageHeader(Section $section, array $s, int $page): void
     {
+        if ($s['logo_file']) {
+            $section->addImage($s['logo_file'], ['height' => Converter::cmToPoint(1.2), 'spaceAfter' => 60]);
+        }
         $section->addText($s['mill']);
         $section->addText($s['doc_no']);
         $section->addText('WORK STATION DOCUMENT', ['bold' => true, 'size' => 11], ['alignment' => 'center', 'spaceAfter' => 120]);
@@ -191,6 +194,52 @@ class WordExport
                 }
                 $style = self::CELL + (($cell['rowspan'] ?? 1) > 1 ? ['vMerge' => 'restart'] : []);
                 $table->addCell($w[$i], $style)->addText($cell['text'], $font, $center);
+            }
+        }
+
+        self::footer($section, $s);
+    }
+
+    /** The notes under the characteristics table, then the "Dibuat oleh" / "Disetujui oleh" signature boxes. */
+    private static function footer(Section $section, array $s): void
+    {
+        foreach ($s['notes'] as $i => $note) {
+            $section->addText($note, ['size' => 7], ['spaceBefore' => $i === 0 ? 80 : 0, 'spaceAfter' => 0]);
+        }
+        $groups = array_filter(['Dibuat oleh' => $s['signatures']['prepared'], 'Disetujui oleh' => $s['signatures']['approved']]);
+        if (! $groups) {
+            return;
+        }
+
+        $section->addTextBreak(1, ['size' => 6]);
+        $box = 2400;
+        $gap = 340;
+        $sign = $section->addTable(['cellMargin' => 40, 'alignment' => 'right']);
+        $none = ['borderSize' => 0, 'borderColor' => 'FFFFFF'];
+        $rows = [
+            'role' => ['height' => null, 'cell' => self::HEAD_CELL],
+            'space' => ['height' => Converter::cmToTwip(1.8), 'cell' => self::CELL],
+            'who' => ['height' => null, 'cell' => self::CELL + ['borderBottomSize' => 0, 'borderBottomColor' => 'FFFFFF']],
+            'pos' => ['height' => null, 'cell' => self::CELL + ['borderTopSize' => 0, 'borderTopColor' => 'FFFFFF']],
+        ];
+        foreach ($rows as $part => $row) {
+            $sign->addRow($row['height'], ['cantSplit' => true]);
+            $first = true;
+            foreach ($groups as $label => $people) {
+                if (! $first) {
+                    $sign->addCell($gap, $none);
+                }
+                $first = false;
+                if ($part === 'role') {
+                    $sign->addCell($box * count($people), $row['cell'] + ['gridSpan' => count($people)])
+                        ->addText($label, ['bold' => true], ['alignment' => 'center']);
+
+                    continue;
+                }
+                foreach ($people as $p) {
+                    $text = $part === 'who' ? $p['name'] : ($part === 'pos' ? $p['position'] : '');
+                    $sign->addCell($box, $row['cell'])->addText($text, $part === 'who' ? ['bold' => true] : ['size' => 7], ['alignment' => 'center']);
+                }
             }
         }
     }

@@ -203,8 +203,11 @@ class ControlPlanPageController extends Controller
                 ])),
             ]);
 
+        $settings = ControlPlanSetting::current();
+
         return Inertia::render('control-plan-settings', [
-            'settings' => ControlPlanSetting::current()->only(['mill', 'org_plant', 'org_code', 'date_format', 'review_period_years']),
+            'settings' => $settings->only(['mill', 'org_plant', 'org_code', 'date_format', 'review_period_years']),
+            'logo' => $settings->logoDataUri(),
             'users' => $users,
         ]);
     }
@@ -222,7 +225,7 @@ class ControlPlanPageController extends Controller
             'editable' => $r->isEditable(),
             'header' => $r->header ?? [],
             'info' => $r->info ?? [],
-            'content' => ['steps' => $r->content['steps'] ?? [], 'lines' => $r->content['lines'] ?? []],
+            'content' => ['steps' => $r->content['steps'] ?? [], 'lines' => $r->content['lines'] ?? []] + ControlPlanRevision::footer($r->content),
             'history' => $r->history ?? [],
             'author' => $r->author?->name,
             'author_id' => $r->author_id,

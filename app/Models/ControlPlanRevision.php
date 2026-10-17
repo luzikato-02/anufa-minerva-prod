@@ -44,6 +44,11 @@ class ControlPlanRevision extends Model
 
     public const STEP_FIELDS = ['no', 'group', 'name', 'machine'];
 
+    /** The signature block under the plan: who prepared it ("Dibuat oleh") and who approved it ("Disetujui oleh"). */
+    public const SIGNATURE_GROUPS = ['prepared', 'approved'];
+
+    public const SIGNER_FIELDS = ['name', 'position'];
+
     public const LINE_FIELDS = ['product', 'process', 'sc', 'spec', 'measurement', 'size', 'frequency', 'control', 'pic', 'reaction', 'reaction_ref'];
 
     protected $fillable = [
@@ -62,6 +67,26 @@ class ControlPlanRevision extends Model
         'release_date' => 'date:Y-m-d',
         'next_review_date' => 'date:Y-m-d',
     ];
+
+    /**
+     * The notes and signature block under the characteristics table, with defaults for content saved before they
+     * existed: notes are free text, one note per line; each signature group is a list of {id, name, position}.
+     *
+     * @return array{notes: string, signatures: array{prepared: list<array{id: string, name: string, position: string}>, approved: list<array{id: string, name: string, position: string}>}}
+     */
+    public static function footer(?array $content): array
+    {
+        $signatures = [];
+        foreach (self::SIGNATURE_GROUPS as $group) {
+            $signatures[$group] = array_values(array_map(fn ($s) => [
+                'id' => (string) ($s['id'] ?? ''),
+                'name' => (string) ($s['name'] ?? ''),
+                'position' => (string) ($s['position'] ?? ''),
+            ], $content['signatures'][$group] ?? []));
+        }
+
+        return ['notes' => (string) ($content['notes'] ?? ''), 'signatures' => $signatures];
+    }
 
     public function plan(): BelongsTo
     {

@@ -8,7 +8,7 @@ use App\Models\ControlPlanSetting;
 /**
  * Everything the W-WSD work station document prints for one revision, laid out once for every output (the print
  * preview, the PDF and the Word file): the page header, the revision history page, the control plan information
- * block and the characteristics table with its merged cells.
+ * block, the characteristics table with its merged cells, and the notes and signature block under it.
  */
 class PrintSheet
 {
@@ -23,6 +23,7 @@ class PrintSheet
         $header = $revision->header ?? [];
         $info = $revision->info ?? [];
         $released = $revision->release_date !== null;
+        $footer = ControlPlanRevision::footer($revision->content);
 
         $releaseDate = $released ? PlanDates::format($revision->release_date, $fmt) : '[set on release]';
         $nextReview = $revision->next_review_date
@@ -46,6 +47,10 @@ class PrintSheet
             'phases' => self::PHASES,
             'title' => trim((string) ($info['title'] ?? '')) !== '' ? $info['title'] : '[CONTROL PLAN TITLE]',
             'rows' => self::rows($revision->content ?? []),
+            'notes' => self::bullets($footer['notes']),
+            'signatures' => $footer['signatures'],
+            'logo' => $settings->logoDataUri(),
+            'logo_file' => $settings->logoFile(),
         ];
     }
 

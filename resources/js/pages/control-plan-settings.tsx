@@ -10,7 +10,7 @@ import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Quality Documents', href: '#' },
@@ -35,9 +35,12 @@ const toForm = (s: Settings): Form => ({
 
 export default function ControlPlanSettings({
     settings,
+    logo,
     users,
 }: {
     settings: Settings;
+    /** The company logo as a data: URI, or null when none is uploaded. */
+    logo: string | null;
     users: { id: number; name: string; roles: string[] }[];
 }) {
     const { can } = usePermissions();
@@ -94,6 +97,8 @@ export default function ControlPlanSettings({
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     )}
+
+                    <LogoCard initial={logo} />
 
                     <Card className="gap-3 py-4">
                         <CardHeader className="px-4">
@@ -321,5 +326,110 @@ export default function ControlPlanSettings({
                 </div>
             </div>
         </AppLayout>
+    );
+}
+
+/** Uploads or removes the company logo printed above the mill name on every page. Saves straight away. */
+function LogoCard({ initial }: { initial: string | null }) {
+    const [logo, setLogo] = useState(initial);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const input = useRef<HTMLInputElement>(null);
+
+    const run = async (fn: () => Promise<void>) => {
+        setBusy(true);
+        setError(null);
+        try {
+            await fn();
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setBusy(false);
+            if (input.current) input.current.value = '';
+        }
+    };
+
+    return (
+        <Card className="gap-3 py-4">
+            <CardHeader className="px-4">
+                <CardTitle className="text-base">Company logo</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                    Printed above the mill / department on every page of every
+                    control plan, in the preview, the PDF and the Word file. PNG
+                    or JPG, up to 2 MB; a wide logo on a white or transparent
+                    background prints best.
+                </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 px-4">
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="grid h-20 w-60 place-items-center rounded-md border bg-white p-2">
+                        {logo ? (
+                            <img
+                                src={logo}
+                                alt="Current company logo"
+                                className="max-h-full max-w-full object-contain"
+                            />
+                        ) : (
+                            <span className="text-sm text-neutral-500">
+                                No logo
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <input
+                            ref={input}
+                            id="s-logo"
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            className="sr-only"
+                            disabled={busy}
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file)
+                                    void run(async () =>
+                                        setLogo(
+                                            await controlPlanApi.uploadLogo(
+                                                file,
+                                            ),
+                                        ),
+                                    );
+                            }}
+                        />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => input.current?.click()}
+                        >
+                            {busy
+                                ? 'Saving…'
+                                : logo
+                                  ? 'Replace logo'
+                                  : 'Upload logo'}
+                        </Button>
+                        {logo && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() =>
+                                    void run(async () => {
+                                        await controlPlanApi.deleteLogo();
+                                        setLogo(null);
+                                    })
+                                }
+                            >
+                                Remove
+                            </Button>
+                        )}
+                    </div>
+                </div>
+                {error && (
+                    <p role="alert" className="text-sm text-destructive">
+                        {error}
+                    </p>
+                )}
+            </CardContent>
+        </Card>
     );
 }

@@ -5,6 +5,10 @@ import {
 } from '@/components/control-plans/editor-dialogs';
 import { LinePanel } from '@/components/control-plans/line-panel';
 import { PlanDetails } from '@/components/control-plans/plan-details';
+import {
+    footerChanges,
+    PlanFooter,
+} from '@/components/control-plans/plan-footer';
 import { PlanGrid } from '@/components/control-plans/plan-grid';
 import {
     StatusBadge,
@@ -97,7 +101,7 @@ function countChanges(doc: Doc, base: Doc): number {
     n +=
         base.content.lines.filter((l) => !lineIds.has(l.id)).length +
         base.content.steps.filter((s) => !stepIds.has(s.id)).length;
-    return n;
+    return n + footerChanges(doc.content, base.content);
 }
 
 export default function ControlPlanEditor({
@@ -208,7 +212,7 @@ export default function ControlPlanEditor({
                     ? steps.findIndex((x) => x.id === cur.step.id) + 1
                     : steps.length;
             steps.splice(at, 0, step);
-            return { steps, lines: [...c.lines, line] };
+            return { ...c, steps, lines: [...c.lines, line] };
         });
         setSel(line.id);
         setAddingStep(false);
@@ -222,7 +226,7 @@ export default function ControlPlanEditor({
             const steps = lines.some((l) => l.step_id === cur.step.id)
                 ? c.steps
                 : c.steps.filter((s) => s.id !== cur.step.id);
-            return { steps, lines };
+            return { ...c, steps, lines };
         });
         setSel(next?.line.id ?? null);
     };
@@ -584,6 +588,15 @@ export default function ControlPlanEditor({
                             cells yellow, until you save the draft.
                         </p>
                     )}
+                    <PlanFooter
+                        footer={doc.content}
+                        base={editable ? base.content : null}
+                        onChange={
+                            editable
+                                ? (f) => setContent((c) => ({ ...c, ...f }))
+                                : undefined
+                        }
+                    />
                 </main>
 
                 {editable && cur && (

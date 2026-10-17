@@ -34,9 +34,29 @@ export interface Line {
     reaction_ref: string;
 }
 
+/** One person in the signature block under the plan. */
+export interface Signer {
+    id: string;
+    name: string;
+    position: string;
+}
+
+export type SignatureGroup = 'prepared' | 'approved';
+
+export const SIGNATURE_GROUPS: { key: SignatureGroup; label: string }[] = [
+    { key: 'prepared', label: 'Dibuat oleh' },
+    { key: 'approved', label: 'Disetujui oleh' },
+];
+
+/** Signers per group; the server accepts at most this many. */
+export const MAX_SIGNERS = 8;
+
 export interface Content {
     steps: Step[];
     lines: Line[];
+    /** Notes printed under the table, one per line ("* …", "** …"). */
+    notes: string;
+    signatures: Record<SignatureGroup, Signer[]>;
 }
 
 export interface DocHeader {
@@ -286,4 +306,26 @@ export const controlPlanApi = {
         request(`/control-plan-references/${id}`, 'PATCH', fields),
     saveSettings: (fields: Settings) =>
         request('/control-plan-settings', 'PUT', fields),
+    uploadLogo: async (file: File) => {
+        const { csrfToken } = await (
+            await fetch('/csrf-token', { credentials: 'include' })
+        ).json();
+        const body = new FormData();
+        body.append('logo', file);
+        const res = await fetch('/control-plan-settings/logo', {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            credentials: 'include',
+            body,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok)
+            throw new Error(
+                json.errors?.logo?.[0] ??
+                    json.message ??
+                    'The logo could not be uploaded. Try again.',
+            );
+        return json.data.logo as string;
+    },
+    deleteLogo: () => request('/control-plan-settings/logo', 'DELETE'),
 };

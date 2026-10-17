@@ -12,6 +12,8 @@ use App\Models\ControlPlanSetting;
 use App\Models\User;
 use Database\Seeders\ControlPlanSampleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -288,5 +290,61 @@ class ControlPlanTest extends TestCase
         $this->assertSame('[release date + 3 years]', $s['next_review']);
         $released = $draft->plan->revisions()->where('rev_no', 11)->first();
         $this->assertSame('15 October 2026', PrintSheet::build($released, ControlPlanSetting::current())['release_date']);
+    }
+
+    public function test_notes_and_signers_are_saved_printed_and_shown_as_changed_in_review(): void
+    {
+        $plan = $this->sample();
+        $draft = $this->draftOf($plan);
+        $author = $this->author();
+        $doc = $this->document($draft);
+        $doc['content']['notes'] = "* Sesuai spesifikasi produk\n** Permintaan customer";
+        $doc['content']['signatures'] = [
+            'prepared' => [['id' => 'a', 'name' => 'Budi Santoso', 'position' => 'Weaving Engineer', 'bogus' => 'x']],
+            'approved' => [['id' => 'b', 'name' => 'Dewi Lestari', 'position' => 'QA Manager'], ['id' => 'c', 'name' => 'Hendra Gunawan', 'position' => 'Mill Manager']],
+        ];
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk();
+
+        $saved = $draft->fresh()->content;
+        $this->assertSame(['id' => 'a', 'name' => 'Budi Santoso', 'position' => 'Weaving Engineer'], $saved['signatures']['prepared'][0]);
+        $this->assertCount(2, $saved['signatures']['approved']);
+
+        $this->actingAs($author)->get("/control-plan-revisions/{$draft->id}/print")->assertOk()
+            ->assertSee('** Permintaan customer')
+            ->assertSee('Dibuat oleh')
+            ->assertSee('Disetujui oleh')
+            ->assertSee('Hendra Gunawan');
+
+        $s = PrintSheet::build($draft->fresh(), ControlPlanSetting::current());
+        $this->assertSame(['* Sesuai spesifikasi produk', '** Permintaan customer'], $s['notes']);
+
+        // The released Rev 11 has neither, so the review flags both as changed.
+        $this->actingAs($author)->get("/control-plan-revisions/{$draft->id}/review")->assertOk()
+            ->assertInertia(fn ($page) => $page->where('diff.notes_changed', true)->where('diff.signatures_changed', true));
+
+        $tooMany = $doc;
+        $tooMany['content']['signatures']['approved'] = array_map(fn ($n) => ['id' => "p$n", 'name' => "P$n", 'position' => ''], range(1, 9));
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $tooMany)->assertUnprocessable();
+    }
+
+    public function test_the_company_logo_is_uploaded_printed_and_removed(): void
+    {
+        Storage::fake('local');
+        $admin = $this->user(['control-plans.view', 'control-plans.settings']);
+        $this->actingAs($this->author())->postJson('/control-plan-settings/logo', ['logo' => UploadedFile::fake()->image('logo.png')])->assertForbidden();
+        $this->actingAs($admin)->postJson('/control-plan-settings/logo', ['logo' => UploadedFile::fake()->create('logo.pdf', 10, 'application/pdf')])->assertUnprocessable();
+
+        $res = $this->actingAs($admin)->postJson('/control-plan-settings/logo', ['logo' => UploadedFile::fake()->image('logo.png', 300, 80)])->assertOk();
+        $this->assertStringStartsWith('data:image/png;base64,', $res->json('data.logo'));
+        $path = ControlPlanSetting::current()->logo_path;
+        Storage::disk('local')->assertExists($path);
+
+        $draft = $this->draftOf($this->sample());
+        $this->actingAs($this->author())->get("/control-plan-revisions/{$draft->id}/print")->assertOk()->assertSee('class="logo"', false);
+        $this->assertNotNull(PrintSheet::build($draft, ControlPlanSetting::current())['logo_file']);
+
+        $this->actingAs($admin)->deleteJson('/control-plan-settings/logo')->assertOk();
+        Storage::disk('local')->assertMissing($path);
+        $this->assertNull(ControlPlanSetting::current()->logo_path);
     }
 }

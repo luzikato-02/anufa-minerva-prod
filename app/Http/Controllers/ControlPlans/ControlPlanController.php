@@ -224,6 +224,11 @@ class ControlPlanController extends Controller
         return [
             'steps' => [['id' => $step, 'no' => '1', 'group' => '', 'name' => '', 'machine' => '']],
             'lines' => [array_fill_keys(ControlPlanRevision::LINE_FIELDS, '') + ['id' => Str::uuid()->toString(), 'step_id' => $step]],
+            'notes' => '',
+            // One blank signer in each group, so a new plan prints the signature boxes to fill by hand.
+            'signatures' => collect(ControlPlanRevision::SIGNATURE_GROUPS)
+                ->mapWithKeys(fn ($g) => [$g => [['id' => Str::uuid()->toString(), 'name' => '', 'position' => '']]])
+                ->all(),
         ];
     }
 
@@ -248,6 +253,13 @@ class ControlPlanController extends Controller
             'content.lines.*.id' => 'required|string|max:64|distinct',
             'content.lines.*.step_id' => 'required|string|max:64',
             'content.lines.*.*' => 'nullable|string|max:2000',
+            'content.notes' => 'nullable|string|max:5000',
+            'content.signatures' => 'nullable|array',
+            'content.signatures.prepared' => 'nullable|array|max:8',
+            'content.signatures.approved' => 'nullable|array|max:8',
+            'content.signatures.*.*.id' => 'required|string|max:64',
+            'content.signatures.*.*.name' => 'nullable|string|max:255',
+            'content.signatures.*.*.position' => 'nullable|string|max:255',
         ]);
 
         $str = fn ($v) => (string) ($v ?? '');
@@ -271,7 +283,7 @@ class ControlPlanController extends Controller
             'doc_no' => $request->has('doc_no') ? trim($request->input('doc_no')) : null,
             'header' => $pick(ControlPlanRevision::HEADER_FIELDS, 'header'),
             'info' => $pick(ControlPlanRevision::INFO_FIELDS, 'info'),
-            'content' => ['steps' => $steps, 'lines' => $lines],
+            'content' => ['steps' => $steps, 'lines' => $lines] + ControlPlanRevision::footer($request->input('content')),
         ];
     }
 }

@@ -9,10 +9,12 @@
     each logical page draws its own copy.
 --}}
 <style>
-    @page { size: A4 landscape; margin: 50mm 10mm 10mm 10mm; }
+    /* The page header sits in the top margin; a logo above the mill name makes it 14mm taller. */
+    @page { size: A4 landscape; margin: {{ $s['logo'] ? 64 : 50 }}mm 10mm 10mm 10mm; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: DejaVu Sans, Arial, sans-serif; font-size: 8pt; color: #111; background: #fff; }
-    .pagehead { position: fixed; top: -42mm; left: 0; right: 0; height: 40mm; }
+    .pagehead { position: fixed; top: -{{ $s['logo'] ? 56 : 42 }}mm; left: 0; right: 0; height: {{ $s['logo'] ? 54 : 40 }}mm; }
+    .logo { display: block; height: 12mm; max-width: 60mm; margin-bottom: 2mm; }
     .pageno:before { content: counter(page); }
     .break { page-break-before: always; }
     .screen { background: #ebe9e3; padding: 24px 0; }
@@ -48,6 +50,16 @@
     .main td.cont { border-top: none; }
     /* Document codes never break at their hyphens (QA-IK-14 must not wrap as "QA-IK-" / "14"). */
     .nw { white-space: nowrap; }
+    .notes { margin: 4px 0 0; font-size: 7pt; }
+    .notes p { margin: 0 0 1px; }
+    /* Signature block: "Dibuat oleh" and "Disetujui oleh", one box per person, never split across pages. */
+    .sign { width: auto; margin: 10px 0 0 auto; page-break-inside: avoid; }
+    .sign td { border: 0.6pt solid #1f1f1f; padding: 2px 4px; text-align: center; vertical-align: top; width: 42mm; }
+    .sign tr.role td { font-weight: bold; background: #f2f2f2; }
+    .sign td.gap, .sign tr.role td.gap { border: 0; width: 6mm; background: none; }
+    .sign tr.space td { height: 18mm; }
+    .sign tr.who td { border-bottom: none; font-weight: bold; }
+    .sign tr.pos td { border-top: none; font-size: 7pt; }
     .placeholder { color: #6b6f73; font-style: italic; }
     .watermark { position: fixed; top: 22%; left: 18%; width: 64%; text-align: center; font-size: 110pt; font-weight: bold; color: rgba(179, 38, 30, 0.10); transform: rotate(-24deg); z-index: 0; }
     .screen .watermark { position: absolute; top: 38%; }
@@ -176,6 +188,32 @@
                     @endforelse
                 </tbody>
             </table>
+            @php($signGroups = array_filter(['Dibuat oleh' => $s['signatures']['prepared'], 'Disetujui oleh' => $s['signatures']['approved']]))
+            @if ($s['notes'] || $signGroups)
+                <div>
+                    @if ($s['notes'])
+                        <div class="notes">@foreach ($s['notes'] as $note)<p>{!! $text($note) !!}</p>@endforeach</div>
+                    @endif
+                    @if ($signGroups)
+                        <table class="sign">
+                            @foreach (['role', 'space', 'who', 'pos'] as $part)
+                                <tr class="{{ $part }}">
+                                    @foreach ($signGroups as $label => $people)
+                                        @if (! $loop->first)<td class="gap"></td>@endif
+                                        @if ($part === 'role')
+                                            <td colspan="{{ count($people) }}">{{ $label }}</td>
+                                        @else
+                                            @foreach ($people as $p)
+                                                <td>{{ $part === 'who' ? $p['name'] : ($part === 'pos' ? $p['position'] : '') }}</td>
+                                            @endforeach
+                                        @endif
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </table>
+                    @endif
+                </div>
+            @endif
         @endif
     </div>
 @endforeach

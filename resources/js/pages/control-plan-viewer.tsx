@@ -173,6 +173,14 @@ export default function ControlPlanViewer({
                                     </article>
                                 );
                             })}
+                            {revision.content.notes.trim() && (
+                                <aside
+                                    aria-label="Notes"
+                                    className="rounded-lg border bg-muted px-3 py-2 text-[13px] whitespace-pre-line"
+                                >
+                                    {revision.content.notes.trim()}
+                                </aside>
+                            )}
                         </main>
 
                         <footer className="border-t px-4 py-2.5 text-xs text-muted-foreground">

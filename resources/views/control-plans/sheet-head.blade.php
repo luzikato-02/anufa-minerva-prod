@@ -1,5 +1,8 @@
 {{-- The document header printed at the top of every page. $pageNo is trusted markup (a number, or the PDF's page counter). --}}
 <div class="pagehead">
+    @if ($s['logo'])
+        <img class="logo" src="{{ $s['logo'] }}" alt="">
+    @endif
     <div class="mill">{{ $s['mill'] }}<br>{{ $s['doc_no'] }}</div>
     <p class="title">WORK STATION DOCUMENT</p>
     <table class="head">

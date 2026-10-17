@@ -12,7 +12,7 @@ use App\Models\ControlPlanRevision;
 class RevisionDiff
 {
     /**
-     * @return array{rows: list<array{kind: string, step: array, line: array, old: array<string, string>}>, added: int, changed: int, removed: int}
+     * @return array{rows: list<array{kind: string, step: array, line: array, old: array<string, string>}>, added: int, changed: int, removed: int, notes_changed: bool, signatures_changed: bool}
      */
     public static function compare(?array $base, array $content): array
     {
@@ -57,7 +57,16 @@ class RevisionDiff
 
         $count = fn (string $kind) => count(array_filter($rows, fn ($r) => $r['kind'] === $kind));
 
-        return ['rows' => $rows, 'added' => $count('added'), 'changed' => $count('changed'), 'removed' => $count('removed')];
+        // The notes and signature block are compared as a whole; ids are left out so re-adding a signer is no change.
+        $was = ControlPlanRevision::footer($base);
+        $now = ControlPlanRevision::footer($content);
+        $people = fn (array $footer) => array_map(fn ($group) => array_map(fn ($s) => [trim($s['name']), trim($s['position'])], $group), $footer['signatures']);
+
+        return [
+            'rows' => $rows, 'added' => $count('added'), 'changed' => $count('changed'), 'removed' => $count('removed'),
+            'notes_changed' => $base !== null && trim($was['notes']) !== trim($now['notes']),
+            'signatures_changed' => $base !== null && $people($was) !== $people($now),
+        ];
     }
 
     /**

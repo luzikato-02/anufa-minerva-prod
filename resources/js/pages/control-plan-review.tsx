@@ -1,5 +1,10 @@
+import { PlanFooter } from '@/components/control-plans/plan-footer';
 import { RefChip, RefText } from '@/components/control-plans/ref-text';
-import { ScMark, StatusBadge } from '@/components/control-plans/status-badge';
+import {
+    ScMark,
+    StatusBadge,
+    ToneBadge,
+} from '@/components/control-plans/status-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,7 +60,14 @@ interface Props {
     plan: PlanRef;
     revision: Revision;
     base: { id: number; rev: string } | null;
-    diff: { rows: DiffRow[]; added: number; changed: number; removed: number };
+    diff: {
+        rows: DiffRow[];
+        added: number;
+        changed: number;
+        removed: number;
+        notes_changed: boolean;
+        signatures_changed: boolean;
+    };
     comments: Comment[];
 }
 
@@ -405,6 +417,24 @@ export default function ControlPlanReview({
                             </TableBody>
                         </Table>
                     </div>
+                    <PlanFooter
+                        footer={revision.content}
+                        base={null}
+                        badge={
+                            (diff.notes_changed || diff.signatures_changed) &&
+                            base && (
+                                <ToneBadge tone="draft">
+                                    {diff.notes_changed &&
+                                    diff.signatures_changed
+                                        ? 'Notes and signatures'
+                                        : diff.notes_changed
+                                          ? 'Notes'
+                                          : 'Signatures'}{' '}
+                                    changed since Rev {base.rev}
+                                </ToneBadge>
+                            )
+                        }
+                    />
                     <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" asChild>
                             <Link

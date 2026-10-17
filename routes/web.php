@@ -369,6 +369,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('permission:control-plans.settings')->group(function () {
         Route::get('control-plan-settings', [ControlPlanPageController::class, 'settings'])->name('control-plan-settings');
         Route::put('control-plan-settings', [ControlPlanSettingController::class, 'update']);
+        Route::post('control-plan-settings/logo', [ControlPlanSettingController::class, 'uploadLogo']);
+        Route::delete('control-plan-settings/logo', [ControlPlanSettingController::class, 'deleteLogo']);
     });
 });
 
