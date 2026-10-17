@@ -1,16 +1,27 @@
+import { SignatureDialog } from '@/components/control-plans/signature-pad';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
     type Content,
     MAX_SIGNERS,
     newId,
+    type Person,
+    type Signature,
     SIGNATURE_GROUPS,
     type SignatureGroup,
     type Signer,
 } from '@/lib/control-plans';
 import { cn } from '@/lib/utils';
-import { PlusIcon, XIcon } from 'lucide-react';
+import { CheckIcon, PenLineIcon, PlusIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 
 type Footer = Pick<Content, 'notes' | 'signatures'>;
 
@@ -21,7 +32,13 @@ export function footerChanges(doc: Footer, base: Footer): number {
         const was = new Map(base.signatures[key].map((s) => [s.id, s]));
         doc.signatures[key].forEach((s) => {
             const b = was.get(s.id);
-            n += !b || b.name !== s.name || b.position !== s.position ? 1 : 0;
+            n +=
+                !b ||
+                b.user_id !== s.user_id ||
+                b.name !== s.name ||
+                b.position !== s.position
+                    ? 1
+                    : 0;
         });
         const ids = new Set(doc.signatures[key].map((s) => s.id));
         n += base.signatures[key].filter((s) => !ids.has(s.id)).length;
@@ -37,10 +54,31 @@ interface Props {
     onChange?: (footer: Footer) => void;
     /** Shown beside the heading, e.g. on the review page when this block changed since the last release. */
     badge?: React.ReactNode;
+    /** Signatures by signer box id. */
+    signed: Record<string, Signature>;
+    /** Accounts a box can be given to; only needed when editing. */
+    people?: Person[];
+    /** Present on the review page while the revision can still be signed. */
+    signing?: Signing;
+}
+
+interface Signing {
+    me: number;
+    onSign: (signerId: string, image: string) => Promise<void>;
+    onUnsign: (signerId: string) => Promise<void>;
 }
 
 /** The notes and the "Dibuat oleh" / "Disetujui oleh" signature block printed under the characteristics table. */
-export function PlanFooter({ footer, base, onChange, badge }: Props) {
+export function PlanFooter({
+    footer,
+    base,
+    onChange,
+    badge,
+    signed,
+    people = [],
+    signing,
+}: Props) {
+    const signedCount = Object.keys(signed).length;
     const setSigners = (group: SignatureGroup, signers: Signer[]) =>
         onChange?.({
             ...footer,
@@ -105,25 +143,46 @@ export function PlanFooter({ footer, base, onChange, badge }: Props) {
                 </span>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-                {SIGNATURE_GROUPS.map(({ key, label }) => (
+            {onChange && signedCount > 0 && (
+                <p
+                    role="status"
+                    className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
+                >
+                    {signedCount === 1
+                        ? '1 person has'
+                        : `${signedCount} people have`}{' '}
+                    signed this revision. Saving any change to the plan removes
+                    every signature, and they will need to sign again.
+                </p>
+            )}
+            {SIGNATURE_GROUPS.map(({ key, label }) =>
+                onChange ? (
                     <SignerList
                         key={key}
                         label={label}
                         signers={footer.signatures[key]}
                         base={base?.signatures[key] ?? null}
-                        onChange={
-                            onChange
-                                ? (signers) => setSigners(key, signers)
-                                : undefined
-                        }
+                        signed={signed}
+                        people={people}
+                        onChange={(signers) => setSigners(key, signers)}
                     />
-                ))}
-            </div>
+                ) : (
+                    <SignatureBoxes
+                        key={key}
+                        label={label}
+                        signers={footer.signatures[key]}
+                        signed={signed}
+                        signing={signing}
+                    />
+                ),
+            )}
             {onChange && (
                 <span className="text-xs text-muted-foreground">
-                    Each person gets a box to sign on the printed copy. A group
-                    with nobody in it is left off the page.
+                    Give a box to someone&rsquo;s account and they sign it in
+                    the app, from the review page; their signature then prints
+                    in the box. A box with no account is left blank to sign by
+                    hand on paper. A group with nobody in it is left off the
+                    page.
                 </span>
             )}
         </section>
@@ -134,18 +193,22 @@ function SignerList({
     label,
     signers,
     base,
+    signed,
+    people,
     onChange,
 }: {
     label: string;
     signers: Signer[];
     base: Signer[] | null;
-    onChange?: (signers: Signer[]) => void;
+    signed: Record<string, Signature>;
+    people: Person[];
+    onChange: (signers: Signer[]) => void;
 }) {
     const was = new Map((base ?? []).map((s) => [s.id, s]));
-    const edit = (id: string, field: 'name' | 'position', value: string) =>
-        onChange?.(
-            signers.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
-        );
+    const edit = (id: string, patch: Partial<Signer>) =>
+        onChange(signers.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    const nameOf = (id: number | null) =>
+        people.find((p) => p.id === id)?.name ?? '';
 
     return (
         <fieldset className="flex min-w-0 flex-col gap-2">
@@ -158,58 +221,112 @@ function SignerList({
                 </span>
             </legend>
             {signers.length > 0 && (
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2">
-                    <span className="text-xs font-medium text-muted-foreground">
+                <div className="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_7rem_auto] sm:items-center">
+                    <span className="hidden text-xs font-medium text-muted-foreground sm:block">
+                        Signs in the app as
+                    </span>
+                    <span className="hidden text-xs font-medium text-muted-foreground sm:block">
                         Name
                     </span>
-                    <span className="text-xs font-medium text-muted-foreground">
+                    <span className="hidden text-xs font-medium text-muted-foreground sm:block">
                         Position (jabatan)
                     </span>
-                    <span />
+                    <span className="hidden text-xs font-medium text-muted-foreground sm:block">
+                        Signature
+                    </span>
+                    <span className="hidden sm:block" />
                     {signers.map((s, n) => {
                         const b = was.get(s.id);
+                        const who = `${label}, person ${n + 1}`;
+                        const sig = signed[s.id];
                         return [
+                            <Select
+                                key={`${s.id}-u`}
+                                value={s.user_id ? String(s.user_id) : 'none'}
+                                onValueChange={(v) => {
+                                    const id = v === 'none' ? null : Number(v);
+                                    // Follow the account's name unless the name was typed differently.
+                                    const keepName =
+                                        s.name.trim() !== '' &&
+                                        s.name !== nameOf(s.user_id);
+                                    edit(s.id, {
+                                        user_id: id,
+                                        name: keepName ? s.name : nameOf(id),
+                                    });
+                                }}
+                            >
+                                <SelectTrigger
+                                    aria-label={`${who}: account that signs`}
+                                    className={cn(
+                                        'h-8 w-full min-w-0',
+                                        !!base &&
+                                            (!b || b.user_id !== s.user_id) &&
+                                            'bg-amber-50 dark:bg-amber-500/10',
+                                    )}
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">
+                                        Nobody (sign on paper)
+                                    </SelectItem>
+                                    {people.map((p) => (
+                                        <SelectItem
+                                            key={p.id}
+                                            value={String(p.id)}
+                                        >
+                                            {p.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>,
                             <SignerInput
                                 key={`${s.id}-n`}
-                                ariaLabel={`${label}, person ${n + 1}: name`}
+                                ariaLabel={`${who}: name`}
                                 value={s.name}
                                 dirty={!!base && (!b || b.name !== s.name)}
-                                onChange={
-                                    onChange && ((v) => edit(s.id, 'name', v))
-                                }
+                                onChange={(v) => edit(s.id, { name: v })}
                             />,
                             <SignerInput
                                 key={`${s.id}-p`}
-                                ariaLabel={`${label}, person ${n + 1}: position`}
+                                ariaLabel={`${who}: position`}
                                 value={s.position}
                                 dirty={
                                     !!base && (!b || b.position !== s.position)
                                 }
-                                onChange={
-                                    onChange &&
-                                    ((v) => edit(s.id, 'position', v))
-                                }
+                                onChange={(v) => edit(s.id, { position: v })}
                             />,
-                            onChange ? (
-                                <Button
-                                    key={`${s.id}-x`}
-                                    size="icon"
-                                    variant="ghost"
-                                    className="size-8"
-                                    aria-label={`Remove ${s.name || `person ${n + 1}`} from ${label}`}
-                                    onClick={() =>
-                                        onChange(
-                                            signers.filter(
-                                                (x) => x.id !== s.id,
-                                            ),
-                                        )
-                                    }
-                                >
-                                    <XIcon />
-                                </Button>
-                            ) : (
-                                <span key={`${s.id}-x`} />
-                            ),
+                            <span
+                                key={`${s.id}-s`}
+                                className="flex items-center gap-1 text-xs text-muted-foreground"
+                            >
+                                {sig ? (
+                                    <>
+                                        <CheckIcon className="size-3.5 text-emerald-600" />
+                                        <span className="text-foreground">
+                                            Signed {sig.at}
+                                        </span>
+                                    </>
+                                ) : s.user_id ? (
+                                    'Not signed yet'
+                                ) : (
+                                    'On paper'
+                                )}
+                            </span>,
+                            <Button
+                                key={`${s.id}-x`}
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                aria-label={`Remove ${s.name || `person ${n + 1}`} from ${label}`}
+                                onClick={() =>
+                                    onChange(
+                                        signers.filter((x) => x.id !== s.id),
+                                    )
+                                }
+                            >
+                                <XIcon />
+                            </Button>,
                         ];
                     })}
                 </div>
@@ -219,28 +336,152 @@ function SignerList({
                     Nobody yet; not printed.
                 </p>
             )}
-            {onChange && (
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    className="self-start"
-                    disabled={signers.length >= MAX_SIGNERS}
-                    title={
-                        signers.length >= MAX_SIGNERS
-                            ? `At most ${MAX_SIGNERS} people per group`
-                            : undefined
-                    }
-                    onClick={() =>
-                        onChange([
-                            ...signers,
-                            { id: newId(), name: '', position: '' },
-                        ])
-                    }
-                >
-                    <PlusIcon /> Add person
-                </Button>
-            )}
+            <Button
+                size="sm"
+                variant="ghost"
+                className="self-start"
+                disabled={signers.length >= MAX_SIGNERS}
+                title={
+                    signers.length >= MAX_SIGNERS
+                        ? `At most ${MAX_SIGNERS} people per group`
+                        : undefined
+                }
+                onClick={() =>
+                    onChange([
+                        ...signers,
+                        { id: newId(), user_id: null, name: '', position: '' },
+                    ])
+                }
+            >
+                <PlusIcon /> Add person
+            </Button>
         </fieldset>
+    );
+}
+
+/** The signature boxes as they print, with Sign buttons for the person viewing when a box is theirs. */
+function SignatureBoxes({
+    label,
+    signers,
+    signed,
+    signing,
+}: {
+    label: string;
+    signers: Signer[];
+    signed: Record<string, Signature>;
+    signing?: Signing;
+}) {
+    const [pad, setPad] = useState<Signer | null>(null);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const unsign = async (id: string) => {
+        setBusy(id);
+        setError(null);
+        try {
+            await signing!.onUnsign(id);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    return (
+        <section className="flex min-w-0 flex-col gap-2" aria-label={label}>
+            <h3 className="text-sm font-semibold">
+                {label}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                    {signers.filter((s) => signed[s.id]).length} of{' '}
+                    {signers.length} signed
+                </span>
+            </h3>
+            {signers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                    Nobody; not printed.
+                </p>
+            ) : (
+                <ul className="flex flex-wrap gap-3">
+                    {signers.map((s) => {
+                        const sig = signed[s.id];
+                        const mine = !!signing && s.user_id === signing.me;
+                        return (
+                            <li
+                                key={s.id}
+                                className="flex w-48 flex-col overflow-hidden rounded-md border text-center"
+                            >
+                                <div className="grid h-20 place-items-center border-b bg-white px-2">
+                                    {sig ? (
+                                        <img
+                                            src={sig.image}
+                                            alt={`Signature of ${sig.by}`}
+                                            className="max-h-16 max-w-full"
+                                        />
+                                    ) : (
+                                        <span className="text-xs text-neutral-500">
+                                            {s.user_id
+                                                ? 'Not signed yet'
+                                                : 'Signed on paper'}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
+                                    <span className="truncate text-sm font-semibold">
+                                        {s.name || '—'}
+                                    </span>
+                                    <span className="truncate text-xs text-muted-foreground">
+                                        {s.position || '\u00a0'}
+                                    </span>
+                                    {sig && (
+                                        <span className="text-xs text-muted-foreground">
+                                            Signed {sig.at}
+                                        </span>
+                                    )}
+                                    {mine && (
+                                        <Button
+                                            size="sm"
+                                            variant={sig ? 'ghost' : 'default'}
+                                            className="mt-1"
+                                            disabled={busy === s.id}
+                                            onClick={() =>
+                                                sig
+                                                    ? void unsign(s.id)
+                                                    : setPad(s)
+                                            }
+                                        >
+                                            {sig ? (
+                                                'Remove my signature'
+                                            ) : (
+                                                <>
+                                                    <PenLineIcon /> Sign
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+            {error && (
+                <p role="alert" className="text-sm text-destructive">
+                    {error}
+                </p>
+            )}
+            {signing && (
+                <SignatureDialog
+                    open={!!pad}
+                    role={label}
+                    name={pad?.name ?? ''}
+                    onClose={() => setPad(null)}
+                    onSave={async (image) => {
+                        await signing.onSign(pad!.id, image);
+                        setPad(null);
+                    }}
+                />
+            )}
+        </section>
     );
 }
 

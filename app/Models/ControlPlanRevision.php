@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\ControlPlans\PlanDates;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -49,6 +50,8 @@ class ControlPlanRevision extends Model
 
     public const SIGNER_FIELDS = ['name', 'position'];
 
+    public const MAX_SIGNERS = 8;
+
     public const LINE_FIELDS = ['product', 'process', 'sc', 'spec', 'measurement', 'size', 'frequency', 'control', 'pic', 'reaction', 'reaction_ref'];
 
     protected $fillable = [
@@ -70,9 +73,10 @@ class ControlPlanRevision extends Model
 
     /**
      * The notes and signature block under the characteristics table, with defaults for content saved before they
-     * existed: notes are free text, one note per line; each signature group is a list of {id, name, position}.
+     * existed: notes are free text, one note per line; each signature group is a list of {id, user_id, name,
+     * position}, where user_id is the account that signs that box in the app (null: signed by hand on paper).
      *
-     * @return array{notes: string, signatures: array{prepared: list<array{id: string, name: string, position: string}>, approved: list<array{id: string, name: string, position: string}>}}
+     * @return array{notes: string, signatures: array{prepared: list<array{id: string, user_id: ?int, name: string, position: string}>, approved: list<array{id: string, user_id: ?int, name: string, position: string}>}}
      */
     public static function footer(?array $content): array
     {
@@ -80,6 +84,7 @@ class ControlPlanRevision extends Model
         foreach (self::SIGNATURE_GROUPS as $group) {
             $signatures[$group] = array_values(array_map(fn ($s) => [
                 'id' => (string) ($s['id'] ?? ''),
+                'user_id' => is_numeric($s['user_id'] ?? null) ? (int) $s['user_id'] : null,
                 'name' => (string) ($s['name'] ?? ''),
                 'position' => (string) ($s['position'] ?? ''),
             ], $content['signatures'][$group] ?? []));
@@ -96,6 +101,58 @@ class ControlPlanRevision extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(ControlPlanComment::class)->orderBy('id');
+    }
+
+    public function signatures(): HasMany
+    {
+        return $this->hasMany(ControlPlanSignature::class);
+    }
+
+    /** The box in the signature block with this id, or null. */
+    public function signer(string $signerId): ?array
+    {
+        foreach (self::footer($this->content)['signatures'] as $people) {
+            foreach ($people as $p) {
+                if ($p['id'] === $signerId) {
+                    return $p;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The revision's signatures by signature box id: the image, who signed and when. A signature whose box has
+     * since been given to someone else is left out.
+     *
+     * @return array<string, array{image: string, by: string, at: string}>
+     */
+    public function signed(string $fmt): array
+    {
+        $owners = collect(self::footer($this->content)['signatures'])->flatten(1)->pluck('user_id', 'id');
+        $out = [];
+        foreach ($this->signatures()->with('user:id,name')->get() as $sig) {
+            if (($owners[$sig->signer_id] ?? null) === $sig->user_id) {
+                $out[$sig->signer_id] = ['image' => $sig->image, 'by' => $sig->user?->name ?? '', 'at' => PlanDates::format($sig->created_at, $fmt)];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Whether the user has a box to sign in this revision's signature block. */
+    public function hasSigner(User $user): bool
+    {
+        foreach (self::footer($this->content)['signatures'] as $people) {
+            foreach ($people as $p) {
+                if ($p['user_id'] === $user->id) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public function author(): BelongsTo
@@ -130,7 +187,8 @@ class ControlPlanRevision extends Model
 
     /**
      * Released and superseded revisions are open to anyone who can view control plans; a revision still being
-     * worked on only to the people who write, review or release them ("drafts never show on the shop floor").
+     * worked on only to the people who write, review or release them ("drafts never show on the shop floor"), and
+     * to the people asked to sign it.
      */
     public function isVisibleTo(User $user): bool
     {
@@ -138,7 +196,7 @@ class ControlPlanRevision extends Model
             return false;
         }
 
-        return ! $this->isOpen() || self::canWork($user);
+        return ! $this->isOpen() || self::canWork($user) || $this->hasSigner($user);
     }
 
     public static function canWork(User $user): bool

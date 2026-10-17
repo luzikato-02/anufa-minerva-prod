@@ -53,6 +53,8 @@ interface RevisionSummary {
     status: RevisionStatus;
     mill: string;
     based_on: string | null;
+    /** The person viewing has a signature box in it that they have not signed. */
+    to_sign: boolean;
 }
 
 interface Props {
@@ -143,7 +145,8 @@ export default function ControlPlans({
                                     <p className="text-sm text-muted-foreground">
                                         Nothing is waiting for you. Revisions
                                         submitted for review show here for
-                                        reviewers and approvers.
+                                        reviewers and approvers, and plans you
+                                        are asked to sign for everyone.
                                     </p>
                                 ) : (
                                     waiting.map((d) => (
@@ -193,6 +196,24 @@ export default function ControlPlans({
                             </CardContent>
                         </Card>
                     </div>
+                )}
+                {!canWork && waiting.length > 0 && (
+                    <Card className="gap-3 py-4">
+                        <CardHeader className="px-4">
+                            <CardTitle className="text-base">
+                                Waiting for your signature
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-2 px-4">
+                            {waiting.map((d) => (
+                                <RevisionItem
+                                    key={d.id}
+                                    r={d}
+                                    href={`/control-plan-revisions/${d.id}/review`}
+                                />
+                            ))}
+                        </CardContent>
+                    </Card>
                 )}
 
                 <section
@@ -346,6 +367,9 @@ function RevisionItem({ r, href }: { r: RevisionSummary; href: string }) {
                     {r.doc_no} · Rev {r.rev}
                 </span>
                 <StatusBadge status={r.status} />
+                {r.to_sign && (
+                    <ToneBadge tone="review">Needs your signature</ToneBadge>
+                )}
             </span>
             <span className="text-xs text-muted-foreground">
                 {[

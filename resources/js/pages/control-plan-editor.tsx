@@ -37,6 +37,7 @@ import {
     type LineField,
     newId,
     orderedLines,
+    type Person,
     type PlanInfo,
     type PlanRef,
     type Revision,
@@ -55,6 +56,7 @@ interface Props {
     released: Revision | null;
     referenceCodes: string[];
     reviewPeriod: number;
+    people: Person[];
 }
 
 interface Doc {
@@ -110,6 +112,7 @@ export default function ControlPlanEditor({
     released,
     referenceCodes,
     reviewPeriod,
+    people,
 }: Props) {
     const { can } = usePermissions();
     const editable = revision.editable && can('control-plans.author');
@@ -124,6 +127,7 @@ export default function ControlPlanEditor({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [signed, setSigned] = useState(revision.signed);
     const leaving = useRef(false);
 
     const knownCodes = useMemo(() => new Set(referenceCodes), [referenceCodes]);
@@ -244,7 +248,15 @@ export default function ControlPlanEditor({
             };
             setDoc(fresh);
             setBase(fresh);
-            setNotice('Draft saved.');
+            const cleared =
+                Object.keys(signed).length > 0 &&
+                Object.keys(saved.signed).length === 0;
+            setSigned(saved.signed);
+            setNotice(
+                cleared
+                    ? 'Draft saved. The signatures were removed because the plan changed; the signers need to sign again.'
+                    : 'Draft saved.',
+            );
             return true;
         } catch (e) {
             setError((e as Error).message);
@@ -591,6 +603,8 @@ export default function ControlPlanEditor({
                     <PlanFooter
                         footer={doc.content}
                         base={editable ? base.content : null}
+                        signed={signed}
+                        people={people}
                         onChange={
                             editable
                                 ? (f) => setContent((c) => ({ ...c, ...f }))

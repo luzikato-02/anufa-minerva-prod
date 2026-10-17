@@ -37,6 +37,8 @@ export interface Line {
 /** One person in the signature block under the plan. */
 export interface Signer {
     id: string;
+    /** The account that signs this box in the app; null when it is signed by hand on paper. */
+    user_id: number | null;
     name: string;
     position: string;
 }
@@ -100,6 +102,8 @@ export interface Revision {
     header: DocHeader;
     info: PlanInfo;
     content: Content;
+    /** Signatures by signer box id. */
+    signed: Record<string, Signature>;
     history: HistoryEntry[];
     author: string | null;
     author_id: number | null;
@@ -109,6 +113,20 @@ export interface Revision {
     release_date: string | null;
     next_review: string | null;
     updated_at: string | null;
+}
+
+export interface Signature {
+    /** PNG data: URI. */
+    image: string;
+    by: string;
+    /** Printed in the configured date format. */
+    at: string;
+}
+
+/** An account a signature box can be given to. */
+export interface Person {
+    id: number;
+    name: string;
 }
 
 export interface PlanRef {
@@ -304,6 +322,17 @@ export const controlPlanApi = {
         ).then((r) => r.data),
     updateReference: (id: number, fields: ReferenceFields) =>
         request(`/control-plan-references/${id}`, 'PATCH', fields),
+    sign: (revisionId: number, signerId: string, image: string) =>
+        request(
+            `/control-plan-revisions/${revisionId}/signatures/${encodeURIComponent(signerId)}`,
+            'POST',
+            { image },
+        ),
+    unsign: (revisionId: number, signerId: string) =>
+        request(
+            `/control-plan-revisions/${revisionId}/signatures/${encodeURIComponent(signerId)}`,
+            'DELETE',
+        ),
     saveSettings: (fields: Settings) =>
         request('/control-plan-settings', 'PUT', fields),
     uploadLogo: async (file: File) => {

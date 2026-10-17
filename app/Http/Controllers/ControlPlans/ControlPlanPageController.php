@@ -23,7 +23,7 @@ class ControlPlanPageController extends Controller
     {
         $user = $request->user();
         $canWork = ControlPlanRevision::canWork($user);
-        $plans = ControlPlan::with(['released.submitter:id,name', 'open'])->orderBy('doc_no')->get();
+        $plans = ControlPlan::with(['released.submitter:id,name', 'open.signatures:id,control_plan_revision_id,signer_id'])->orderBy('doc_no')->get();
         $fmt = ControlPlanSetting::current()->date_format;
 
         $rows = $plans->map(function (ControlPlan $plan) use ($canWork, $fmt) {
@@ -42,8 +42,10 @@ class ControlPlanPageController extends Controller
             ];
         })->values();
 
-        $openRevisions = $canWork ? $plans->pluck('open')->filter() : collect();
-        $summary = function (ControlPlanRevision $r) use ($plans) {
+        $openRevisions = $plans->pluck('open')->filter();
+        $toSign = fn (ControlPlanRevision $r) => collect(ControlPlanRevision::footer($r->content)['signatures'])->flatten(1)
+            ->contains(fn ($p) => $p['user_id'] === $user->id && ! $r->signatures->contains('signer_id', $p['id']));
+        $summary = function (ControlPlanRevision $r) use ($plans, $toSign) {
             $base = $r->previousReleased();
 
             return [
@@ -54,19 +56,20 @@ class ControlPlanPageController extends Controller
                 'status' => $r->status,
                 'mill' => $r->header['mill'] ?? '',
                 'based_on' => $base ? PlanDates::rev($base->rev_no) : null,
+                'to_sign' => $toSign($r),
             ];
         };
 
         return Inertia::render('control-plans', [
             'plans' => $rows,
             'myDrafts' => $openRevisions
-                ->filter(fn ($r) => $r->author_id === $user->id && $r->isEditable())
+                ->filter(fn ($r) => $canWork && $r->author_id === $user->id && $r->isEditable())
                 ->map($summary)->values(),
             'waiting' => $openRevisions
-                ->filter(fn ($r) => $r->submitted_by !== $user->id && (
+                ->filter(fn ($r) => $toSign($r) || ($canWork && $r->submitted_by !== $user->id && (
                     ($r->status === ControlPlanRevision::IN_REVIEW && $user->can('control-plans.review'))
                     || ($r->status === ControlPlanRevision::APPROVED && $user->can('control-plans.approve'))
-                ))
+                )))
                 ->map($summary)->values(),
             'upcoming' => $rows->filter(fn ($r) => $r['next_review_raw'])->sortBy('next_review_raw')
                 ->map(fn ($r) => ['id' => $r['id'], 'doc_no' => $r['doc_no'], 'next_review' => $r['next_review'], 'overdue' => $r['next_review_raw'] < now()->toDateString()])
@@ -90,6 +93,7 @@ class ControlPlanPageController extends Controller
             'released' => $released ? self::revision($released, $settings->date_format) : null,
             'referenceCodes' => ControlPlanReference::orderBy('code')->pluck('code'),
             'reviewPeriod' => $settings->review_period_years,
+            'people' => self::people(),
         ]);
     }
 
@@ -212,6 +216,17 @@ class ControlPlanPageController extends Controller
         ]);
     }
 
+    /** The accounts a signature box can be given to: everyone who can view control plans. */
+    private static function people(): array
+    {
+        if (! Permission::where('name', 'control-plans.view')->exists()) {
+            return [];
+        }
+
+        return User::permission('control-plans.view')->orderBy('name')->get(['id', 'name'])
+            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->all();
+    }
+
     /** A revision as the pages use it, with its dates printed in the configured format. */
     public static function revision(ControlPlanRevision $r, string $fmt): array
     {
@@ -226,6 +241,7 @@ class ControlPlanPageController extends Controller
             'header' => $r->header ?? [],
             'info' => $r->info ?? [],
             'content' => ['steps' => $r->content['steps'] ?? [], 'lines' => $r->content['lines'] ?? []] + ControlPlanRevision::footer($r->content),
+            'signed' => (object) $r->signed($fmt),
             'history' => $r->history ?? [],
             'author' => $r->author?->name,
             'author_id' => $r->author_id,

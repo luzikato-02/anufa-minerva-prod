@@ -57,7 +57,9 @@
     .sign td { border: 0.6pt solid #1f1f1f; padding: 2px 4px; text-align: center; vertical-align: top; width: 42mm; }
     .sign tr.role td { font-weight: bold; background: #f2f2f2; }
     .sign td.gap, .sign tr.role td.gap { border: 0; width: 6mm; background: none; }
-    .sign tr.space td { height: 18mm; }
+    .sign tr.space td { height: 18mm; padding: 1px 2px; vertical-align: middle; }
+    .sign tr.space img { max-height: 15mm; max-width: 40mm; }
+    .sign .at { display: block; font-size: 6pt; color: #555; }
     .sign tr.who td { border-bottom: none; font-weight: bold; }
     .sign tr.pos td { border-top: none; font-size: 7pt; }
     .placeholder { color: #6b6f73; font-style: italic; }
@@ -204,7 +206,11 @@
                                             <td colspan="{{ count($people) }}">{{ $label }}</td>
                                         @else
                                             @foreach ($people as $p)
-                                                <td>{{ $part === 'who' ? $p['name'] : ($part === 'pos' ? $p['position'] : '') }}</td>
+                                                @if ($part === 'space')
+                                                    <td>@if ($sig = $s['signed'][$p['id']] ?? null)<img src="{{ $sig['image'] }}" alt="Signed by {{ $sig['by'] }}"><span class="at">{{ $sig['at'] }}</span>@endif</td>
+                                                @else
+                                                    <td>{{ $part === 'who' ? $p['name'] : $p['position'] }}</td>
+                                                @endif
                                             @endforeach
                                         @endif
                                     @endforeach

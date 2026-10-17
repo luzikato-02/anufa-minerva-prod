@@ -9,6 +9,7 @@ use App\Models\ControlPlanComment;
 use App\Models\ControlPlanReference;
 use App\Models\ControlPlanRevision;
 use App\Models\ControlPlanSetting;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +47,7 @@ class ControlPlanController extends Controller
                     'org_plant' => $settings->org_plant ?? '',
                     'org_code' => $settings->org_code ?? '',
                 ]),
-                'content' => self::emptyContent(),
+                'content' => self::emptyContent($request->user()),
                 'author_id' => $request->user()->id,
             ]);
         });
@@ -75,17 +76,26 @@ class ControlPlanController extends Controller
         return response()->json(['success' => true, 'data' => ['revision_id' => $revision->id]], 201);
     }
 
-    /** Saves the whole draft: document header, plan information, steps and characteristic lines. */
+    /**
+     * Saves the whole draft: document header, plan information, steps and characteristic lines. Anyone who signed
+     * signed the document as it was, so any change deletes every signature on it.
+     */
     public function update(Request $request, ControlPlanRevision $revision): JsonResponse
     {
         abort_unless($revision->isEditable(), 422, 'Only a draft can be edited. Withdraw the revision from review first.');
         $data = $this->validateDocument($request, $revision);
+        $before = self::canonical([$revision->plan->doc_no, $revision->header, $revision->info,
+            ['steps' => $revision->content['steps'] ?? [], 'lines' => $revision->content['lines'] ?? []] + ControlPlanRevision::footer($revision->content)]);
+        $after = self::canonical([$data['doc_no'] ?? $revision->plan->doc_no, $data['header'], $data['info'], $data['content']]);
 
-        DB::transaction(function () use ($data, $revision) {
+        DB::transaction(function () use ($data, $revision, $request, $before, $after) {
             if (isset($data['doc_no']) && $data['doc_no'] !== $revision->plan->doc_no) {
                 $revision->plan->update(['doc_no' => $data['doc_no']]);
             }
             $revision->update(['header' => $data['header'], 'info' => $data['info'], 'content' => $data['content']]);
+            if ($before !== $after && ($cleared = $revision->signatures()->delete()) > 0) {
+                $this->note($revision, $request, 'comment', 'Edited the plan after it was signed, so '.($cleared === 1 ? 'the signature was' : "all {$cleared} signatures were").' removed. They need to sign again.');
+            }
         });
 
         return response()->json(['success' => true, 'data' => ControlPlanPageController::revision($revision->fresh(), ControlPlanSetting::current()->date_format)]);
@@ -217,18 +227,34 @@ class ControlPlanController extends Controller
         return $revision->comments()->create(['user_id' => $request->user()->id, 'kind' => $kind, 'body' => $body]);
     }
 
-    public static function emptyContent(): array
+    /** A document as a string that only changes when its values do, whatever order its keys were saved in. */
+    private static function canonical(mixed $value): string
+    {
+        $sort = function (mixed $v) use (&$sort): mixed {
+            if (! is_array($v)) {
+                return $v === null ? '' : (string) $v;
+            }
+            if (! array_is_list($v)) {
+                ksort($v);
+            }
+
+            return array_map($sort, $v);
+        };
+
+        return json_encode($sort($value));
+    }
+
+    /** A new plan's content: one empty line, and one box in each signature group, the author's under "Dibuat oleh". */
+    public static function emptyContent(?User $author = null): array
     {
         $step = Str::uuid()->toString();
+        $box = fn (?User $u) => ['id' => Str::uuid()->toString(), 'user_id' => $u?->id, 'name' => $u?->name ?? '', 'position' => ''];
 
         return [
             'steps' => [['id' => $step, 'no' => '1', 'group' => '', 'name' => '', 'machine' => '']],
             'lines' => [array_fill_keys(ControlPlanRevision::LINE_FIELDS, '') + ['id' => Str::uuid()->toString(), 'step_id' => $step]],
             'notes' => '',
-            // One blank signer in each group, so a new plan prints the signature boxes to fill by hand.
-            'signatures' => collect(ControlPlanRevision::SIGNATURE_GROUPS)
-                ->mapWithKeys(fn ($g) => [$g => [['id' => Str::uuid()->toString(), 'name' => '', 'position' => '']]])
-                ->all(),
+            'signatures' => ['prepared' => [$box($author)], 'approved' => [$box(null)]],
         ];
     }
 
@@ -255,9 +281,10 @@ class ControlPlanController extends Controller
             'content.lines.*.*' => 'nullable|string|max:2000',
             'content.notes' => 'nullable|string|max:5000',
             'content.signatures' => 'nullable|array',
-            'content.signatures.prepared' => 'nullable|array|max:8',
-            'content.signatures.approved' => 'nullable|array|max:8',
+            'content.signatures.prepared' => 'nullable|array|max:'.ControlPlanRevision::MAX_SIGNERS,
+            'content.signatures.approved' => 'nullable|array|max:'.ControlPlanRevision::MAX_SIGNERS,
             'content.signatures.*.*.id' => 'required|string|max:64',
+            'content.signatures.*.*.user_id' => 'nullable|integer|exists:users,id',
             'content.signatures.*.*.name' => 'nullable|string|max:255',
             'content.signatures.*.*.position' => 'nullable|string|max:255',
         ]);

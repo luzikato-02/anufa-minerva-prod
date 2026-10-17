@@ -60,7 +60,7 @@ class RevisionDiff
         // The notes and signature block are compared as a whole; ids are left out so re-adding a signer is no change.
         $was = ControlPlanRevision::footer($base);
         $now = ControlPlanRevision::footer($content);
-        $people = fn (array $footer) => array_map(fn ($group) => array_map(fn ($s) => [trim($s['name']), trim($s['position'])], $group), $footer['signatures']);
+        $people = fn (array $footer) => array_map(fn ($group) => array_map(fn ($s) => [$s['user_id'], trim($s['name']), trim($s['position'])], $group), $footer['signatures']);
 
         return [
             'rows' => $rows, 'added' => $count('added'), 'changed' => $count('changed'), 'removed' => $count('removed'),

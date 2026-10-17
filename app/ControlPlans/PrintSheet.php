@@ -49,6 +49,7 @@ class PrintSheet
             'rows' => self::rows($revision->content ?? []),
             'notes' => self::bullets($footer['notes']),
             'signatures' => $footer['signatures'],
+            'signed' => $revision->signed($fmt),
             'logo' => $settings->logoDataUri(),
             'logo_file' => $settings->logoFile(),
         ];

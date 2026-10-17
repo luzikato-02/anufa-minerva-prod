@@ -306,7 +306,7 @@ class ControlPlanTest extends TestCase
         $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk();
 
         $saved = $draft->fresh()->content;
-        $this->assertSame(['id' => 'a', 'name' => 'Budi Santoso', 'position' => 'Weaving Engineer'], $saved['signatures']['prepared'][0]);
+        $this->assertSame(['id' => 'a', 'user_id' => null, 'name' => 'Budi Santoso', 'position' => 'Weaving Engineer'], $saved['signatures']['prepared'][0]);
         $this->assertCount(2, $saved['signatures']['approved']);
 
         $this->actingAs($author)->get("/control-plan-revisions/{$draft->id}/print")->assertOk()
@@ -325,6 +325,71 @@ class ControlPlanTest extends TestCase
         $tooMany = $doc;
         $tooMany['content']['signatures']['approved'] = array_map(fn ($n) => ['id' => "p$n", 'name' => "P$n", 'position' => ''], range(1, 9));
         $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $tooMany)->assertUnprocessable();
+    }
+
+    /** A small PNG signature as a data: URI. */
+    private static function signatureImage(int $w = 120, int $h = 40): string
+    {
+        $img = imagecreatetruecolor($w, $h);
+        imageline($img, 2, $h - 4, $w - 2, 4, imagecolorallocate($img, 255, 255, 255));
+        ob_start();
+        imagepng($img);
+
+        return 'data:image/png;base64,'.base64_encode((string) ob_get_clean());
+    }
+
+    public function test_linked_people_sign_their_own_box_and_an_edit_clears_the_signatures(): void
+    {
+        $plan = $this->sample();
+        $draft = $this->draftOf($plan);
+        $author = $this->author();
+        // A plant manager who only views control plans, asked to approve this one.
+        $manager = $this->user(['control-plans.view']);
+        $doc = $this->document($draft);
+        $doc['content']['signatures'] = [
+            'prepared' => [['id' => 'a', 'user_id' => $author->id, 'name' => 'Budi Santoso', 'position' => 'Weaving Engineer']],
+            'approved' => [['id' => 'b', 'user_id' => $manager->id, 'name' => 'Hendra Gunawan', 'position' => 'Mill Manager'], ['id' => 'c', 'user_id' => null, 'name' => 'Paper Signer', 'position' => '']],
+        ];
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk();
+
+        // The manager can open the draft only because they have a box in it, and it waits for their signature.
+        $this->actingAs($manager)->get("/control-plan-revisions/{$draft->id}/review")->assertOk();
+        $this->actingAs($manager)->get('/control-plans')->assertInertia(fn (Assert $page) => $page
+            ->where('waiting.0.id', $draft->id)->where('waiting.0.to_sign', true));
+        $this->actingAs($this->user(['control-plans.view']))->get("/control-plan-revisions/{$draft->id}/review")->assertForbidden();
+
+        // Nobody signs someone else's box, or a box with no account, and the image must be a real picture.
+        $this->actingAs($author)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => self::signatureImage()])->assertForbidden();
+        $this->actingAs($author)->postJson("/control-plan-revisions/{$draft->id}/signatures/c", ['image' => self::signatureImage()])->assertForbidden();
+        $this->actingAs($manager)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => 'data:image/png;base64,'.base64_encode('<svg/>')])->assertUnprocessable();
+
+        $this->actingAs($author)->postJson("/control-plan-revisions/{$draft->id}/signatures/a", ['image' => self::signatureImage()])->assertCreated();
+        $this->actingAs($manager)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => self::signatureImage(2000, 300)])->assertCreated();
+
+        $signed = $draft->fresh()->signed('id');
+        $this->assertSame(['a', 'b'], array_keys($signed));
+        [$w] = getimagesizefromstring(base64_decode(substr($signed['b']['image'], 22)));
+        $this->assertSame(800, $w, 'A large image is scaled down.');
+        $this->actingAs($manager)->get('/control-plans')->assertInertia(fn (Assert $page) => $page->where('waiting', []));
+
+        // Both print, in the preview and the Word file.
+        $this->actingAs($author)->get("/control-plan-revisions/{$draft->id}/print")->assertOk()->assertSee('Signed by '.$manager->name);
+        $sheet = PrintSheet::build($draft->fresh(), ControlPlanSetting::current());
+        $this->assertCount(2, $sheet['signed']);
+        $this->actingAs($author)->get("/control-plan-revisions/{$draft->id}/download/docx")->assertOk();
+
+        // Saving the draft unchanged keeps them; changing anything removes them all.
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk()->assertJsonCount(2, 'data.signed');
+        $doc['content']['notes'] = '* changed';
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk()->assertJsonCount(0, 'data.signed');
+        $this->assertSame(0, $draft->signatures()->count());
+
+        // A signer can take their signature back, but nothing changes once the revision is released.
+        $this->actingAs($manager)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => self::signatureImage()])->assertCreated();
+        $this->actingAs($manager)->deleteJson("/control-plan-revisions/{$draft->id}/signatures/b")->assertOk();
+        $this->assertSame(0, $draft->signatures()->count());
+        $draft->update(['status' => ControlPlanRevision::RELEASED]);
+        $this->actingAs($manager)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => self::signatureImage()])->assertUnprocessable();
     }
 
     public function test_the_company_logo_is_uploaded_printed_and_removed(): void

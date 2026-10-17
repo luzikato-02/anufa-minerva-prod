@@ -237,8 +237,17 @@ class WordExport
                     continue;
                 }
                 foreach ($people as $p) {
-                    $text = $part === 'who' ? $p['name'] : ($part === 'pos' ? $p['position'] : '');
-                    $sign->addCell($box, $row['cell'])->addText($text, $part === 'who' ? ['bold' => true] : ['size' => 7], ['alignment' => 'center']);
+                    $cell = $sign->addCell($box, $row['cell'] + ($part === 'space' ? ['valign' => 'center'] : []));
+                    if ($part !== 'space') {
+                        $cell->addText($part === 'who' ? $p['name'] : $p['position'], $part === 'who' ? ['bold' => true] : ['size' => 7], ['alignment' => 'center']);
+                    } elseif ($sig = $s['signed'][$p['id']] ?? null) {
+                        // At most 1.3 cm tall and 4 cm wide, to stay inside the box.
+                        $png = base64_decode(substr($sig['image'], strpos($sig['image'], ',') + 1));
+                        [$w, $h] = getimagesizefromstring($png);
+                        $height = min(Converter::cmToPoint(1.3), Converter::cmToPoint(4) * $h / $w);
+                        $cell->addImage($png, ['height' => $height, 'width' => $height * $w / $h, 'alignment' => 'center']);
+                        $cell->addText($sig['at'], ['size' => 6, 'color' => '555555'], ['alignment' => 'center', 'spaceAfter' => 0]);
+                    }
                 }
             }
         }

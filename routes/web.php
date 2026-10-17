@@ -18,6 +18,7 @@ use App\Http\Controllers\ControlPlans\ControlPlanExportController;
 use App\Http\Controllers\ControlPlans\ControlPlanPageController;
 use App\Http\Controllers\ControlPlans\ControlPlanReferenceController;
 use App\Http\Controllers\ControlPlans\ControlPlanSettingController;
+use App\Http\Controllers\ControlPlans\ControlPlanSignatureController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -346,6 +347,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('control-plan-revisions/{revision}/download/{format}', [ControlPlanExportController::class, 'download']);
         Route::get('control-plan-references', [ControlPlanPageController::class, 'references'])->name('control-plan-references');
         Route::post('control-plan-revisions/{revision}/comments', [ControlPlanController::class, 'comment']);
+        Route::post('control-plan-revisions/{revision}/signatures/{signerId}', [ControlPlanSignatureController::class, 'store']);
+        Route::delete('control-plan-revisions/{revision}/signatures/{signerId}', [ControlPlanSignatureController::class, 'destroy']);
     });
 
     Route::middleware('permission:control-plans.author')->group(function () {

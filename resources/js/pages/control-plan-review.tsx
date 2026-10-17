@@ -420,6 +420,29 @@ export default function ControlPlanReview({
                     <PlanFooter
                         footer={revision.content}
                         base={null}
+                        signed={revision.signed}
+                        signing={
+                            s === 'released' || s === 'superseded'
+                                ? undefined
+                                : {
+                                      me,
+                                      onSign: async (id, image) => {
+                                          await controlPlanApi.sign(
+                                              revision.id,
+                                              id,
+                                              image,
+                                          );
+                                          router.reload();
+                                      },
+                                      onUnsign: async (id) => {
+                                          await controlPlanApi.unsign(
+                                              revision.id,
+                                              id,
+                                          );
+                                          router.reload();
+                                      },
+                                  }
+                        }
                         badge={
                             (diff.notes_changed || diff.signatures_changed) &&
                             base && (
