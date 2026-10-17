@@ -61,12 +61,23 @@ const PERMISSION_GROUPS: { label: string; prefix: string }[] = [
     { label: 'Finish Earlier', prefix: 'finish-earlier' },
     { label: 'Creel Visualization', prefix: 'creel' },
     { label: 'Machine Maintenance', prefix: 'machine-maintenance' },
+    { label: 'Torque Checks', prefix: 'torque-checks' },
+    { label: 'Creel Types', prefix: 'creel-types' },
+    { label: 'Control Plans', prefix: 'control-plans' },
     { label: 'Runtime', prefix: 'runtime' },
     { label: 'Energy', prefix: 'energy' },
     { label: 'Users', prefix: 'users' },
     { label: 'Roles', prefix: 'roles' },
     { label: 'Activity Log', prefix: 'activity-log' },
 ];
+
+/** Permissions no group above claims, so a newly added one still shows up in the dialog. */
+const OTHER_GROUP = { label: 'Other', prefix: '' };
+
+function permissionsIn(group: { prefix: string }, all: PermissionData[]): PermissionData[] {
+    if (group.prefix) return all.filter((p) => p.name.startsWith(`${group.prefix}.`));
+    return all.filter((p) => !PERMISSION_GROUPS.some((g) => p.name.startsWith(`${g.prefix}.`)));
+}
 
 function permissionLabel(name: string): string {
     const action = name.split('.')[1] ?? name;
@@ -218,11 +229,11 @@ function RoleFormDialog({
 
                         <div className="space-y-3">
                             <p className="text-sm font-semibold">Permissions</p>
-                            {PERMISSION_GROUPS.map((group) => {
-                                const perms = allPermissions.filter((p) => p.name.startsWith(`${group.prefix}.`));
+                            {[...PERMISSION_GROUPS, OTHER_GROUP].map((group) => {
+                                const perms = permissionsIn(group, allPermissions);
                                 if (perms.length === 0) return null;
                                 return (
-                                    <div key={group.prefix} className="rounded-md border p-3">
+                                    <div key={group.label} className="rounded-md border p-3">
                                         <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">{group.label}</p>
                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                             {perms.map((perm) => (
@@ -236,7 +247,7 @@ function RoleFormDialog({
                                                         htmlFor={`perm-${mode}-${role?.id ?? 'new'}-${perm.name}`}
                                                         className="text-sm font-normal"
                                                     >
-                                                        {permissionLabel(perm.name)}
+                                                        {group.prefix ? permissionLabel(perm.name) : perm.name}
                                                     </Label>
                                                 </div>
                                             ))}
