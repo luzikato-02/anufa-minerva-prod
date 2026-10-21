@@ -53,6 +53,38 @@ function cropped(canvas: HTMLCanvasElement): string | null {
     return out.toDataURL('image/png');
 }
 
+/**
+ * Makes the paper of a photographed or scanned signature transparent, so only the ink prints and the crop can
+ * trim to it. The paper's brightness is taken as the median, since ink covers a small part of the picture;
+ * pixels near it fade out and darker ones keep their colour. A picture that already has transparency is left
+ * as it is.
+ */
+function dropPaper(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+) {
+    const img = ctx.getImageData(x, y, w, h);
+    const px = img.data;
+    const lum = new Uint8Array(px.length / 4);
+    let opaque = 0;
+    for (let i = 0; i < lum.length; i++) {
+        const o = i * 4;
+        lum[i] = (px[o] * 299 + px[o + 1] * 587 + px[o + 2] * 114) / 1000;
+        if (px[o + 3] === 255) opaque++;
+    }
+    if (opaque < lum.length * 0.98) return;
+    const paper = [...lum].sort((a, b) => a - b)[lum.length >> 1];
+    // Fully clear within 30 of the paper, fully inked from 90 below it, faded in between.
+    for (let i = 0; i < lum.length; i++) {
+        const a = (paper - 30 - lum[i]) / 60;
+        px[i * 4 + 3] = Math.round(255 * Math.min(1, Math.max(0, a)));
+    }
+    ctx.putImageData(img, x, y);
+}
+
 interface Props {
     open: boolean;
     /** Shown in the title, e.g. "Dibuat oleh". */
@@ -126,7 +158,10 @@ export function SignatureDialog({ open, role, name, onClose, onSave }: Props) {
             const scale = Math.min(WIDTH / img.width, HEIGHT / img.height, 1);
             const w = img.width * scale;
             const h = img.height * scale;
-            c.drawImage(img, (WIDTH - w) / 2, (HEIGHT - h) / 2, w, h);
+            const x = Math.floor((WIDTH - w) / 2);
+            const y = Math.floor((HEIGHT - h) / 2);
+            c.drawImage(img, x, y, w, h);
+            dropPaper(c, x, y, Math.ceil(w), Math.ceil(h));
             URL.revokeObjectURL(url);
             setInked(true);
             setError(null);
