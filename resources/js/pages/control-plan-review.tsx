@@ -96,7 +96,9 @@ export default function ControlPlanReview({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const s = revision.status;
-    const own = revision.submitted_by === me;
+    const override = can('control-plans.override');
+    // Someone with control-plans.override may review and release their own submission; the history notes it.
+    const own = revision.submitted_by === me && !override;
 
     const allowed = {
         review: can('control-plans.review') && s === 'in_review' && !own,
@@ -426,6 +428,7 @@ export default function ControlPlanReview({
                                 ? undefined
                                 : {
                                       me,
+                                      override,
                                       onSign: async (id, image) => {
                                           await controlPlanApi.sign(
                                               revision.id,

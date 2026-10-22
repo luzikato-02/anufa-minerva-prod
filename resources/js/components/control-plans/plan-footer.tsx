@@ -64,6 +64,8 @@ interface Props {
 
 interface Signing {
     me: number;
+    /** May sign any box given to an account, for its owner (control-plans.override). */
+    override: boolean;
     onSign: (signerId: string, image: string) => Promise<void>;
     onUnsign: (signerId: string) => Promise<void>;
 }
@@ -305,6 +307,7 @@ function SignerList({
                                         <CheckIcon className="size-3.5 text-emerald-600" />
                                         <span className="text-foreground">
                                             Signed {sig.at}
+                                            {sig.proxy && ` by ${sig.proxy}`}
                                         </span>
                                     </>
                                 ) : s.user_id ? (
@@ -405,6 +408,8 @@ function SignatureBoxes({
                     {signers.map((s) => {
                         const sig = signed[s.id];
                         const mine = !!signing && s.user_id === signing.me;
+                        const proxy =
+                            !mine && !!signing?.override && !!s.user_id;
                         return (
                             <li
                                 key={s.id}
@@ -435,9 +440,10 @@ function SignatureBoxes({
                                     {sig && (
                                         <span className="text-xs text-muted-foreground">
                                             Signed {sig.at}
+                                            {sig.proxy && ` by ${sig.proxy}`}
                                         </span>
                                     )}
-                                    {mine && (
+                                    {(mine || proxy) && (
                                         <Button
                                             size="sm"
                                             variant={sig ? 'ghost' : 'default'}
@@ -450,10 +456,17 @@ function SignatureBoxes({
                                             }
                                         >
                                             {sig ? (
-                                                'Remove my signature'
+                                                mine ? (
+                                                    'Remove my signature'
+                                                ) : (
+                                                    'Remove signature'
+                                                )
                                             ) : (
                                                 <>
-                                                    <PenLineIcon /> Sign
+                                                    <PenLineIcon />{' '}
+                                                    {mine
+                                                        ? 'Sign'
+                                                        : `Sign for ${s.name || 'them'}`}
                                                 </>
                                             )}
                                         </Button>

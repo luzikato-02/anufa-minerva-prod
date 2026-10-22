@@ -46,6 +46,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'control-plans.review',
             'control-plans.approve',
             'control-plans.settings',
+            // Sign for others and review or release one's own submission; every use is noted in the revision history.
+            'control-plans.override',
             'users.view',
             'users.manage',
             'roles.manage',

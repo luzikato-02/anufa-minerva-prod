@@ -126,15 +126,22 @@ class ControlPlanRevision extends Model
      * The revision's signatures by signature box id: the image, who signed and when. A signature whose box has
      * since been given to someone else is left out.
      *
-     * @return array<string, array{image: string, by: string, at: string}>
+     * proxy: who signed on the owner's behalf (control-plans.override), or null when the owner signed.
+     *
+     * @return array<string, array{image: string, by: string, proxy: ?string, at: string}>
      */
     public function signed(string $fmt): array
     {
         $owners = collect(self::footer($this->content)['signatures'])->flatten(1)->pluck('user_id', 'id');
         $out = [];
-        foreach ($this->signatures()->with('user:id,name')->get() as $sig) {
+        foreach ($this->signatures()->with('user:id,name', 'signer:id,name')->get() as $sig) {
             if (($owners[$sig->signer_id] ?? null) === $sig->user_id) {
-                $out[$sig->signer_id] = ['image' => $sig->image, 'by' => $sig->user?->name ?? '', 'at' => PlanDates::format($sig->created_at, $fmt)];
+                $out[$sig->signer_id] = [
+                    'image' => $sig->image,
+                    'by' => $sig->user?->name ?? '',
+                    'proxy' => $sig->signed_by ? ($sig->signer?->name ?? 'Unknown user') : null,
+                    'at' => PlanDates::format($sig->created_at, $fmt),
+                ];
             }
         }
 

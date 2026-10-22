@@ -11,6 +11,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Signing a box in a revision's signature block. Only the account the author linked to that box can sign it or
  * take the signature back, and only while the revision is still being worked on: a released revision is final.
+ * Someone with control-plans.override can do either for that account; the revision history notes each time.
  */
 class ControlPlanSignatureController extends Controller
 {
@@ -19,31 +20,55 @@ class ControlPlanSignatureController extends Controller
 
     public function store(Request $request, ControlPlanRevision $revision, string $signerId): JsonResponse
     {
-        $this->guard($request, $revision, $signerId);
+        $box = $this->guard($request, $revision, $signerId);
         $request->validate(['image' => 'required|string|max:'.(int) (self::MAX_BYTES * 4 / 3 + 64)]);
+        $proxy = $box['user_id'] !== $request->user()->id;
 
         $revision->signatures()->updateOrCreate(
             ['signer_id' => $signerId],
-            ['user_id' => $request->user()->id, 'image' => self::png($request->input('image'))],
+            ['user_id' => $box['user_id'], 'signed_by' => $proxy ? $request->user()->id : null, 'image' => self::png($request->input('image'))],
         );
+        if ($proxy) {
+            $this->note($revision, $request, 'Signed for '.self::who($box).'.');
+        }
 
         return response()->json(['success' => true], 201);
     }
 
     public function destroy(Request $request, ControlPlanRevision $revision, string $signerId): JsonResponse
     {
-        $this->guard($request, $revision, $signerId);
-        $revision->signatures()->where('signer_id', $signerId)->delete();
+        $box = $this->guard($request, $revision, $signerId);
+        $removed = $revision->signatures()->where('signer_id', $signerId)->delete();
+        if ($removed && $box['user_id'] !== $request->user()->id) {
+            $this->note($revision, $request, 'Removed the signature of '.self::who($box).'.');
+        }
 
         return response()->json(['success' => true]);
     }
 
-    private function guard(Request $request, ControlPlanRevision $revision, string $signerId): void
+    /** The box being signed, once the user may sign it: as its owner, or for its owner with control-plans.override. */
+    private function guard(Request $request, ControlPlanRevision $revision, string $signerId): array
     {
         abort_unless($revision->isOpen(), 422, 'This revision is released, so its signatures can no longer change.');
         $box = $revision->signer($signerId);
         abort_if(! $box, 404, 'That signature box is no longer in the plan. Reload the page.');
-        abort_unless($box['user_id'] === $request->user()->id, 403, 'Only '.($box['name'] !== '' ? $box['name'] : 'the person named in this box').' can sign here.');
+        if ($box['user_id'] === $request->user()->id) {
+            return $box;
+        }
+        abort_unless($request->user()->can('control-plans.override'), 403, 'Only '.self::who($box).' can sign here.');
+        abort_if($box['user_id'] === null, 422, 'This box is signed on paper. Give it to an account in the editor to sign it here.');
+
+        return $box;
+    }
+
+    private static function who(array $box): string
+    {
+        return $box['name'] !== '' ? $box['name'] : 'the person named in this box';
+    }
+
+    private function note(ControlPlanRevision $revision, Request $request, string $body): void
+    {
+        $revision->comments()->create(['user_id' => $request->user()->id, 'kind' => 'comment', 'body' => $body]);
     }
 
     /**

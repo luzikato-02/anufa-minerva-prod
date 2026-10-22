@@ -66,7 +66,7 @@ class ControlPlanPageController extends Controller
                 ->filter(fn ($r) => $canWork && $r->author_id === $user->id && $r->isEditable())
                 ->map($summary)->values(),
             'waiting' => $openRevisions
-                ->filter(fn ($r) => $toSign($r) || ($canWork && $r->submitted_by !== $user->id && (
+                ->filter(fn ($r) => $toSign($r) || ($canWork && ($r->submitted_by !== $user->id || $user->can('control-plans.override')) && (
                     ($r->status === ControlPlanRevision::IN_REVIEW && $user->can('control-plans.review'))
                     || ($r->status === ControlPlanRevision::APPROVED && $user->can('control-plans.approve'))
                 )))

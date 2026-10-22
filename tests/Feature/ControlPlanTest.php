@@ -440,4 +440,48 @@ class ControlPlanTest extends TestCase
         // A draft stays hidden from someone who only views released plans.
         $this->actingAs($this->user(['control-plans.view']))->postJson($print, ['logo' => $image])->assertForbidden();
     }
+
+    public function test_override_signs_for_others_and_reviews_its_own_submission_with_a_note(): void
+    {
+        $draft = $this->draftOf($this->sample());
+        $author = $this->author();
+        $manager = $this->user(['control-plans.view']);
+        $admin = $this->user([...self::ALL, 'control-plans.override']);
+        $doc = $this->document($draft);
+        $doc['content']['signatures'] = [
+            'prepared' => [['id' => 'a', 'user_id' => $author->id, 'name' => 'Budi Santoso', 'position' => '']],
+            'approved' => [['id' => 'b', 'user_id' => $manager->id, 'name' => 'Hendra Gunawan', 'position' => ''], ['id' => 'c', 'user_id' => null, 'name' => 'Paper Signer', 'position' => '']],
+        ];
+        $this->actingAs($author)->putJson("/control-plan-revisions/{$draft->id}", $doc)->assertOk();
+
+        // The admin signs the manager's box for them: it counts as the manager's, shows who signed, and is noted.
+        $this->actingAs($admin)->postJson("/control-plan-revisions/{$draft->id}/signatures/b", ['image' => self::signatureImage()])->assertCreated();
+        $this->actingAs($admin)->postJson("/control-plan-revisions/{$draft->id}/signatures/c", ['image' => self::signatureImage()])->assertUnprocessable();
+        $signed = $draft->fresh()->signed('id');
+        $this->assertSame($manager->name, $signed['b']['by']);
+        $this->assertSame($admin->name, $signed['b']['proxy']);
+        $this->assertSame('Signed for Hendra Gunawan.', $draft->comments()->reorder('id', 'desc')->value('body'));
+
+        // A signature by the box's owner has no proxy; the admin can take it back, which is noted too.
+        $this->actingAs($author)->postJson("/control-plan-revisions/{$draft->id}/signatures/a", ['image' => self::signatureImage()])->assertCreated();
+        $this->assertNull($draft->fresh()->signed('id')['a']['proxy']);
+        $this->actingAs($admin)->deleteJson("/control-plan-revisions/{$draft->id}/signatures/a")->assertOk();
+        $this->assertSame('Removed the signature of Budi Santoso.', $draft->comments()->reorder('id', 'desc')->value('body'));
+
+        // The admin submits, approves and releases on their own; the history says they were also the submitter.
+        $this->actingAs($admin)->postJson("/control-plan-revisions/{$draft->id}/submit", ['history' => [['pages' => 'All', 'description' => 'Update']]])->assertOk();
+        $this->actingAs($admin)->get('/control-plans')->assertInertia(fn (Assert $page) => $page->where('waiting.0.id', $draft->id));
+        $this->actingAs($admin)->postJson("/control-plan-revisions/{$draft->id}/approve")->assertOk();
+        $this->assertSame('Approved for release (also the submitter).', $draft->comments()->reorder('id', 'desc')->value('body'));
+        $this->actingAs($admin)->postJson("/control-plan-revisions/{$draft->id}/release")->assertOk();
+        $this->assertSame(ControlPlanRevision::RELEASED, $draft->fresh()->status);
+        $this->assertStringEndsWith('(also the submitter).', $draft->comments()->reorder('id', 'desc')->value('body'));
+    }
+
+    public function test_the_admin_role_gets_the_override_permission(): void
+    {
+        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+        $this->assertTrue(\Spatie\Permission\Models\Role::findByName('admin')->hasPermissionTo('control-plans.override'));
+        $this->assertFalse(\Spatie\Permission\Models\Role::findByName('approver')->hasPermissionTo('control-plans.override'));
+    }
 }

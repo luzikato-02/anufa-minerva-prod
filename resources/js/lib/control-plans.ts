@@ -121,6 +121,8 @@ export interface Signature {
     /** PNG data: URI. */
     image: string;
     by: string;
+    /** Who signed on behalf of the box's owner, or null when the owner signed. */
+    proxy: string | null;
     /** Printed in the configured date format. */
     at: string;
 }

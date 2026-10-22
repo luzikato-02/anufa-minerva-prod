@@ -19,8 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Changes to control plans and their revisions: creating a plan, starting a revision, saving the draft, and the
- * review workflow (submit → approve or request changes → release). The author of a revision can never review
- * or release it themselves.
+ * review workflow (submit → approve or request changes → release). Whoever submitted a revision cannot review
+ * or release it themselves, unless they have control-plans.override; the history then says so.
  */
 class ControlPlanController extends Controller
 {
@@ -170,10 +170,10 @@ class ControlPlanController extends Controller
 
     public function approve(Request $request, ControlPlanRevision $revision): JsonResponse
     {
-        $this->guardReviewer($request, $revision, ControlPlanRevision::IN_REVIEW);
+        $self = $this->guardReviewer($request, $revision, ControlPlanRevision::IN_REVIEW);
 
         $revision->update(['status' => ControlPlanRevision::APPROVED, 'reviewed_by' => $request->user()->id, 'reviewed_at' => now()]);
-        $this->note($revision, $request, 'approved', 'Approved for release.');
+        $this->note($revision, $request, 'approved', "Approved for release{$self}.");
 
         return response()->json(['success' => true]);
     }
@@ -184,10 +184,10 @@ class ControlPlanController extends Controller
      */
     public function release(Request $request, ControlPlanRevision $revision): JsonResponse
     {
-        $this->guardReviewer($request, $revision, ControlPlanRevision::APPROVED);
+        $self = $this->guardReviewer($request, $revision, ControlPlanRevision::APPROVED);
         $settings = ControlPlanSetting::current();
 
-        DB::transaction(function () use ($revision, $request, $settings) {
+        DB::transaction(function () use ($revision, $request, $settings, $self) {
             ControlPlanRevision::where('control_plan_id', $revision->control_plan_id)
                 ->where('status', ControlPlanRevision::RELEASED)
                 ->update(['status' => ControlPlanRevision::SUPERSEDED]);
@@ -200,7 +200,7 @@ class ControlPlanController extends Controller
                 'next_review_date' => today()->addYears($settings->review_period_years),
                 'reference_snapshot' => ControlPlanReference::whereIn('code', $codes)->get(['code', 'title', 'type', 'revision', 'link'])->toArray(),
             ]);
-            $this->note($revision, $request, 'released', 'Released Rev '.$revision->rev_no.'.');
+            $this->note($revision, $request, 'released', 'Released Rev '.$revision->rev_no.$self.'.');
         });
 
         return response()->json(['success' => true]);
@@ -215,11 +215,19 @@ class ControlPlanController extends Controller
         return response()->json(['success' => true, 'data' => $comment], 201);
     }
 
-    /** Reviewing and releasing need the right status and someone other than the person who submitted it. */
-    private function guardReviewer(Request $request, ControlPlanRevision $revision, string $status): void
+    /**
+     * Reviewing and releasing need the right status and someone other than the person who submitted it, unless
+     * they have control-plans.override. Returns what to add to the history note when they used it.
+     */
+    private function guardReviewer(Request $request, ControlPlanRevision $revision, string $status): string
     {
         abort_unless($revision->status === $status, 422, 'This revision is not waiting for that step.');
-        abort_if($revision->submitted_by === $request->user()->id, 403, 'You submitted this revision, so someone else has to review and release it.');
+        if ($revision->submitted_by !== $request->user()->id) {
+            return '';
+        }
+        abort_unless($request->user()->can('control-plans.override'), 403, 'You submitted this revision, so someone else has to review and release it.');
+
+        return ' (also the submitter)';
     }
 
     private function note(ControlPlanRevision $revision, Request $request, string $kind, string $body): ControlPlanComment
