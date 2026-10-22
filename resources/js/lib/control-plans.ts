@@ -1,5 +1,7 @@
 /** Client and shared types for the control plan module (W-WSD work station documents). */
 
+import { loadFromLocalStorage } from '@/lib/localStorage';
+
 export type RevisionStatus =
     | 'draft'
     | 'in_review'
@@ -219,6 +221,13 @@ export function emptyLine(stepId: string): Line {
     };
 }
 
+async function csrfToken(): Promise<string> {
+    const { csrfToken } = await (
+        await fetch('/csrf-token', { credentials: 'include' })
+    ).json();
+    return csrfToken;
+}
+
 async function request<T>(
     url: string,
     method: string,
@@ -226,10 +235,7 @@ async function request<T>(
 ): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (method !== 'GET') {
-        const { csrfToken } = await (
-            await fetch('/csrf-token', { credentials: 'include' })
-        ).json();
-        headers['X-CSRF-TOKEN'] = csrfToken;
+        headers['X-CSRF-TOKEN'] = await csrfToken();
         headers['Content-Type'] = 'application/json';
     }
     const res = await fetch(url, {
@@ -336,14 +342,14 @@ export const controlPlanApi = {
     saveSettings: (fields: Settings) =>
         request('/control-plan-settings', 'PUT', fields),
     uploadLogo: async (file: File) => {
-        const { csrfToken } = await (
-            await fetch('/csrf-token', { credentials: 'include' })
-        ).json();
         const body = new FormData();
         body.append('logo', file);
         const res = await fetch('/control-plan-settings/logo', {
             method: 'POST',
-            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': await csrfToken(),
+            },
             credentials: 'include',
             body,
         });
@@ -358,3 +364,111 @@ export const controlPlanApi = {
     },
     deleteLogo: () => request('/control-plan-settings/logo', 'DELETE'),
 };
+
+/**
+ * Which company logo a plan prints, chosen per plan in this browser: the shared one from Settings, none, or an
+ * image kept only here (a PNG data: URI) that is sent with each preview and export and never saved on the server.
+ */
+export interface LogoChoice {
+    source: 'shared' | 'local' | 'none';
+    image?: string;
+}
+
+const logoKey = (planId: number) => `control-plan-logo:${planId}`;
+
+export function loadLogoChoice(planId: number): LogoChoice {
+    const c = loadFromLocalStorage<LogoChoice | null>(logoKey(planId), null);
+    return c && ['shared', 'local', 'none'].includes(c.source)
+        ? c
+        : { source: 'shared' };
+}
+
+/** Throws when the browser will not keep it (storage full or blocked). */
+export function saveLogoChoice(planId: number, choice: LogoChoice): void {
+    try {
+        localStorage.setItem(logoKey(planId), JSON.stringify(choice));
+    } catch {
+        throw new Error(
+            'This browser would not keep the logo. Free some site storage or use a smaller image.',
+        );
+    }
+}
+
+/** The logo that prints for this choice, or null; "This browser's logo" without an image prints none. */
+export const logoOf = (c: LogoChoice, shared: string | null) =>
+    c.source === 'shared'
+        ? shared
+        : c.source === 'local'
+          ? (c.image ?? null)
+          : null;
+
+/** A picked logo file as a PNG data: URI, scaled down to at most 1200 × 400 so it fits in browser storage. */
+export async function logoImage(file: File): Promise<string> {
+    if (!['image/png', 'image/jpeg'].includes(file.type))
+        throw new Error('Choose a PNG or JPG image.');
+    if (file.size > 2 * 1024 * 1024)
+        throw new Error('The logo must be at most 2 MB.');
+    const url = URL.createObjectURL(file);
+    try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = () =>
+                reject(new Error('That image could not be read.'));
+            i.src = url;
+        });
+        const scale = Math.min(1, 1200 / img.width, 400 / img.height);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas
+            .getContext('2d')!
+            .drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+/**
+ * Fetches the printed document (path "print" or "download/pdf|docx") with the plan's logo: by GET for the shared
+ * logo or none, by POST carrying the image for one kept in this browser. Throws with the server's message.
+ */
+export async function fetchSheet(
+    revisionId: number,
+    path: string,
+    choice: LogoChoice,
+    query: Record<string, string> = {},
+): Promise<Response> {
+    const local = choice.source === 'local' && !!choice.image;
+    const params = new URLSearchParams({
+        ...query,
+        ...(local
+            ? {}
+            : { logo: choice.source === 'local' ? 'none' : choice.source }),
+    });
+    const res = await fetch(
+        `/control-plan-revisions/${revisionId}/${path}?${params}`,
+        {
+            method: local ? 'POST' : 'GET',
+            credentials: 'include',
+            headers: local
+                ? {
+                      Accept: 'application/json',
+                      'Content-Type': 'application/json',
+                      'X-CSRF-TOKEN': await csrfToken(),
+                  }
+                : { Accept: 'application/json' },
+            body: local ? JSON.stringify({ logo: choice.image }) : undefined,
+        },
+    );
+    if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(
+            json.errors?.logo?.[0] ??
+                json.message ??
+                `The document could not be loaded (${res.status}). Try again.`,
+        );
+    }
+    return res;
+}

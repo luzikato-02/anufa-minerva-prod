@@ -343,8 +343,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('control-plans/{controlPlan}/export', [ControlPlanPageController::class, 'export'])->whereNumber('controlPlan')->name('control-plans.export');
         Route::get('control-plan-revisions/{revision}/review', [ControlPlanPageController::class, 'review'])->name('control-plan-revisions.review');
         Route::get('control-plan-revisions/{revision}/preview', [ControlPlanPageController::class, 'preview'])->name('control-plan-revisions.preview');
-        Route::get('control-plan-revisions/{revision}/print', [ControlPlanExportController::class, 'print']);
-        Route::get('control-plan-revisions/{revision}/download/{format}', [ControlPlanExportController::class, 'download']);
+        Route::match(['get', 'post'], 'control-plan-revisions/{revision}/print', [ControlPlanExportController::class, 'print']);
+        Route::match(['get', 'post'], 'control-plan-revisions/{revision}/download/{format}', [ControlPlanExportController::class, 'download']);
         Route::get('control-plan-references', [ControlPlanPageController::class, 'references'])->name('control-plan-references');
         Route::post('control-plan-revisions/{revision}/comments', [ControlPlanController::class, 'comment']);
         Route::post('control-plan-revisions/{revision}/signatures/{signerId}', [ControlPlanSignatureController::class, 'store']);

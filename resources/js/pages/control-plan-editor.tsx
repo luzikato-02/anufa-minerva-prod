@@ -57,6 +57,8 @@ interface Props {
     referenceCodes: string[];
     reviewPeriod: number;
     people: Person[];
+    /** The logo uploaded in Control Plan Settings, or null. */
+    sharedLogo: string | null;
 }
 
 interface Doc {
@@ -113,6 +115,7 @@ export default function ControlPlanEditor({
     referenceCodes,
     reviewPeriod,
     people,
+    sharedLogo,
 }: Props) {
     const { can } = usePermissions();
     const editable = revision.editable && can('control-plans.author');
@@ -479,6 +482,8 @@ export default function ControlPlanEditor({
                     )}
 
                     <PlanDetails
+                        planId={plan.id}
+                        sharedLogo={sharedLogo}
                         docNo={doc.doc_no}
                         header={doc.header}
                         info={doc.info}

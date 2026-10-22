@@ -1,4 +1,5 @@
 import { Field } from '@/components/control-plans/field';
+import { PlanLogo } from '@/components/control-plans/plan-logo';
 import { ToneBadge } from '@/components/control-plans/status-badge';
 import {
     blank,
@@ -48,6 +49,9 @@ export function missingDetails(
 }
 
 interface Props {
+    planId: number;
+    /** The logo uploaded in Control Plan Settings, or null. */
+    sharedLogo: string | null;
     docNo: string;
     header: DocHeader;
     info: PlanInfo;
@@ -65,6 +69,8 @@ interface Props {
 
 /** The document header (printed on every page) and control plan information block (printed once), collapsible. */
 export function PlanDetails({
+    planId,
+    sharedLogo,
     docNo,
     header,
     info,
@@ -177,6 +183,7 @@ export function PlanDetails({
                             {...h('issued')}
                         />
                     </div>
+                    <PlanLogo planId={planId} sharedLogo={sharedLogo} />
                     <dl className="grid gap-3 rounded-md bg-muted p-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
                         <Derived
                             label="No. Revisi / Tanggal Revisi terakhir"

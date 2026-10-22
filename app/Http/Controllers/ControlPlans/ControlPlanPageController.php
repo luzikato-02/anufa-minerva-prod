@@ -94,6 +94,7 @@ class ControlPlanPageController extends Controller
             'referenceCodes' => ControlPlanReference::orderBy('code')->pluck('code'),
             'reviewPeriod' => $settings->review_period_years,
             'people' => self::people(),
+            'sharedLogo' => $settings->logoDataUri(),
         ]);
     }
 

@@ -412,4 +412,32 @@ class ControlPlanTest extends TestCase
         Storage::disk('local')->assertMissing($path);
         $this->assertNull(ControlPlanSetting::current()->logo_path);
     }
+
+    public function test_a_print_or_export_uses_the_logo_chosen_in_the_browser_without_storing_it(): void
+    {
+        Storage::fake('local');
+        $admin = $this->user(['control-plans.view', 'control-plans.settings']);
+        $this->actingAs($admin)->postJson('/control-plan-settings/logo', ['logo' => UploadedFile::fake()->image('logo.png', 300, 80)])->assertOk();
+        $shared = ControlPlanSetting::current()->logo_path;
+        $draft = $this->draftOf($this->sample());
+        $author = $this->author();
+        $print = "/control-plan-revisions/{$draft->id}/print";
+        $image = self::signatureImage(300, 80);
+
+        // The shared logo by default, none when asked.
+        $this->actingAs($author)->get($print)->assertOk()->assertSee('class="logo"', false);
+        $this->actingAs($author)->get("{$print}?logo=none")->assertOk()->assertDontSee('class="logo"', false);
+
+        // A logo sent from the browser prints in the preview, the PDF and the Word file, and nothing is stored.
+        $this->actingAs($author)->post($print, ['logo' => $image])->assertOk()->assertSee('class="logo"', false);
+        $this->actingAs($author)->post("/control-plan-revisions/{$draft->id}/download/pdf", ['logo' => $image])->assertOk();
+        $this->actingAs($author)->post("/control-plan-revisions/{$draft->id}/download/docx", ['logo' => $image])->assertOk();
+        $this->assertSame([$shared], Storage::disk('local')->allFiles());
+        $this->assertSame($shared, ControlPlanSetting::current()->logo_path);
+
+        $this->actingAs($author)->postJson($print, ['logo' => 'data:application/pdf;base64,JVBERi0='])->assertUnprocessable()->assertJsonValidationErrors('logo');
+        $this->actingAs($author)->postJson($print, ['logo' => 'data:image/png;base64,bm90IGFuIGltYWdl'])->assertUnprocessable()->assertJsonValidationErrors('logo');
+        // A draft stays hidden from someone who only views released plans.
+        $this->actingAs($this->user(['control-plans.view']))->postJson($print, ['logo' => $image])->assertForbidden();
+    }
 }

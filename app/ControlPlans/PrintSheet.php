@@ -16,7 +16,8 @@ class PrintSheet
 
     public const PHASES = ['prototype' => 'Prototype', 'pre_launch' => 'Pre-launch', 'production' => 'Production'];
 
-    public static function build(ControlPlanRevision $revision, ControlPlanSetting $settings, bool $watermark = false): array
+    /** $logo: the logo keys from SheetLogo::toArray(); the shared logo from Settings when null. */
+    public static function build(ControlPlanRevision $revision, ControlPlanSetting $settings, bool $watermark = false, ?array $logo = null): array
     {
         $fmt = $settings->date_format;
         $plan = $revision->plan;
@@ -50,9 +51,7 @@ class PrintSheet
             'notes' => self::bullets($footer['notes']),
             'signatures' => $footer['signatures'],
             'signed' => $revision->signed($fmt),
-            'logo' => $settings->logoDataUri(),
-            'logo_file' => $settings->logoFile(),
-        ];
+        ] + ($logo ?? ['logo' => $settings->logoDataUri(), 'logo_file' => $settings->logoFile()]);
     }
 
     /**

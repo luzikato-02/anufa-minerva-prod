@@ -1,7 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
-import { type PlanRef, type RevisionStatus } from '@/lib/control-plans';
+import {
+    fetchSheet,
+    loadLogoChoice,
+    type PlanRef,
+    type RevisionStatus,
+} from '@/lib/control-plans';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -39,6 +44,9 @@ export default function ControlPlanExport({
         options.some((o) => o.id === selected) ? selected : options[0].id,
     );
     const [fmt, setFmt] = useState<'docx' | 'pdf'>('docx');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [logo] = useState(() => loadLogoChoice(plan.id));
     const chosen = options.find((o) => o.id === rev)!;
     const isDraft =
         chosen.status !== 'released' && chosen.status !== 'superseded';
@@ -49,6 +57,24 @@ export default function ControlPlanExport({
         { title: plan.doc_no, href: `/control-plans/${plan.id}` },
         { title: 'Export', href: `/control-plans/${plan.id}/export` },
     ];
+    // Fetched rather than linked so a logo kept in this browser can go with the request.
+    const download = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            const res = await fetchSheet(rev, `download/${fmt}`, logo);
+            const url = URL.createObjectURL(await res.blob());
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setBusy(false);
+        }
+    };
     const optCls = (on: boolean) =>
         cn(
             'flex cursor-pointer items-start gap-3 rounded-md border p-3',
@@ -161,10 +187,26 @@ export default function ControlPlanExport({
                                     ? 'Indonesian month names (09 Oktober 2026)'
                                     : 'English month names (09 October 2026)'}
                             </dd>
+                            <dt className="text-muted-foreground">Logo</dt>
+                            <dd>
+                                {logo.source === 'shared'
+                                    ? 'Shared logo from Control Plan Settings'
+                                    : logo.source === 'local' && logo.image
+                                      ? "This browser's logo for this plan"
+                                      : 'None'}
+                            </dd>
                             <dt className="text-muted-foreground">File name</dt>
                             <dd className="font-mono">{fileName}</dd>
                         </dl>
 
+                        {error && (
+                            <p
+                                role="alert"
+                                className="text-sm text-destructive"
+                            >
+                                {error}
+                            </p>
+                        )}
                         <div className="flex justify-end gap-2 border-t pt-4">
                             <Button variant="outline" asChild>
                                 <Link
@@ -173,13 +215,9 @@ export default function ControlPlanExport({
                                     Print preview
                                 </Link>
                             </Button>
-                            <Button asChild>
-                                <a
-                                    href={`/control-plan-revisions/${rev}/download/${fmt}`}
-                                    download={fileName}
-                                >
-                                    <DownloadIcon /> Export
-                                </a>
+                            <Button disabled={busy} onClick={download}>
+                                <DownloadIcon />{' '}
+                                {busy ? 'Exporting…' : 'Export'}
                             </Button>
                         </div>
                     </CardContent>

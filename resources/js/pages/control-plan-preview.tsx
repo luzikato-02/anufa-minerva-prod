@@ -1,7 +1,12 @@
 import { StatusBadge } from '@/components/control-plans/status-badge';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
-import { type PlanRef, type Revision } from '@/lib/control-plans';
+import {
+    fetchSheet,
+    loadLogoChoice,
+    type PlanRef,
+    type Revision,
+} from '@/lib/control-plans';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ChevronLeftIcon } from 'lucide-react';
@@ -10,7 +15,8 @@ import { useEffect, useState } from 'react';
 /**
  * The document exactly as it exports: the server renders the same page the PDF is made from, shown here in a
  * frame that grows to its full height. The page is fetched and passed in as srcDoc rather than loaded by URL,
- * because the server sends X-Frame-Options: DENY on every response, which stops even a same-origin frame.
+ * because the server sends X-Frame-Options: DENY on every response, which stops even a same-origin frame. It
+ * prints the logo chosen for this plan in the editor.
  */
 export default function ControlPlanPreview({
     plan,
@@ -25,25 +31,20 @@ export default function ControlPlanPreview({
     const [height, setHeight] = useState(1600);
     const [html, setHtml] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const src = `/control-plan-revisions/${revision.id}/print?watermark=${watermark ? 1 : 0}`;
 
     useEffect(() => {
         let cancelled = false;
         setError(null);
-        fetch(src, { credentials: 'include', headers: { Accept: 'text/html' } })
-            .then((res) => {
-                if (!res.ok)
-                    throw new Error(
-                        `The preview could not be loaded (${res.status}). Reload the page to try again.`,
-                    );
-                return res.text();
-            })
+        fetchSheet(revision.id, 'print', loadLogoChoice(plan.id), {
+            watermark: watermark ? '1' : '0',
+        })
+            .then((res) => res.text())
             .then((text) => !cancelled && setHtml(text))
             .catch((e) => !cancelled && setError((e as Error).message));
         return () => {
             cancelled = true;
         };
-    }, [src]);
+    }, [revision.id, plan.id, watermark]);
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Control Plans', href: '/control-plans' },
