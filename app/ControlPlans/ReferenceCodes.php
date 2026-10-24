@@ -2,6 +2,8 @@
 
 namespace App\ControlPlans;
 
+use App\Models\ControlPlanReference;
+
 /**
  * Finds document codes (QA-IK-14, T-WSD-W-3, TCF-W014…) in a revision's text so the reference library can say
  * where each is used. A code is upper-case letters followed by one or more dash-separated parts.
@@ -64,5 +66,11 @@ class ReferenceCodes
     public static function all(array $header, array $content): array
     {
         return array_keys(self::usages($header, $content));
+    }
+
+    /** The reference library entries a revision uses, as they are now: what a released revision keeps. */
+    public static function snapshot(array $header, array $content): array
+    {
+        return ControlPlanReference::whereIn('code', self::all($header, $content))->get(['code', 'title', 'type', 'revision', 'link'])->toArray();
     }
 }

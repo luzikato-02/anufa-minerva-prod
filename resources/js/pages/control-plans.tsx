@@ -1,3 +1,4 @@
+import { ImportPlanDialog } from '@/components/control-plans/import-dialog';
 import {
     StatusBadge,
     ToneBadge,
@@ -28,7 +29,7 @@ import { controlPlanApi, type RevisionStatus } from '@/lib/control-plans';
 import { usePermissions } from '@/lib/permissions';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { PlusIcon } from 'lucide-react';
+import { FileUpIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -80,6 +81,7 @@ export default function ControlPlans({
     const { can } = usePermissions();
     const [q, setQ] = useState('');
     const [creating, setCreating] = useState(false);
+    const [importing, setImporting] = useState(false);
 
     const needle = q.trim().toLowerCase();
     const shown = plans.filter(
@@ -103,9 +105,17 @@ export default function ControlPlans({
                         </p>
                     </div>
                     {can('control-plans.author') && (
-                        <Button onClick={() => setCreating(true)}>
-                            <PlusIcon /> New control plan
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setImporting(true)}
+                            >
+                                <FileUpIcon /> Import from Word/PDF
+                            </Button>
+                            <Button onClick={() => setCreating(true)}>
+                                <PlusIcon /> New control plan
+                            </Button>
+                        </div>
                     )}
                 </div>
 
@@ -341,6 +351,12 @@ export default function ControlPlans({
             </div>
 
             {creating && <NewPlanDialog onClose={() => setCreating(false)} />}
+            {importing && (
+                <ImportPlanDialog
+                    canRelease={can('control-plans.approve')}
+                    onClose={() => setImporting(false)}
+                />
+            )}
         </AppLayout>
     );
 }

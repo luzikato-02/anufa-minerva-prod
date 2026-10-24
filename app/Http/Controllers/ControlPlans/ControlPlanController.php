@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\ControlPlans;
 
+use App\ControlPlans\DocumentInput;
 use App\ControlPlans\ReferenceCodes;
 use App\Http\Controllers\Controller;
 use App\Models\ControlPlan;
 use App\Models\ControlPlanComment;
-use App\Models\ControlPlanReference;
 use App\Models\ControlPlanRevision;
 use App\Models\ControlPlanSetting;
 use App\Models\User;
@@ -83,7 +83,7 @@ class ControlPlanController extends Controller
     public function update(Request $request, ControlPlanRevision $revision): JsonResponse
     {
         abort_unless($revision->isEditable(), 422, 'Only a draft can be edited. Withdraw the revision from review first.');
-        $data = $this->validateDocument($request, $revision);
+        $data = DocumentInput::validate($request, $revision);
         $before = self::canonical([$revision->plan->doc_no, $revision->header, $revision->info,
             ['steps' => $revision->content['steps'] ?? [], 'lines' => $revision->content['lines'] ?? []] + ControlPlanRevision::footer($revision->content)]);
         $after = self::canonical([$data['doc_no'] ?? $revision->plan->doc_no, $data['header'], $data['info'], $data['content']]);
@@ -192,13 +192,12 @@ class ControlPlanController extends Controller
                 ->where('status', ControlPlanRevision::RELEASED)
                 ->update(['status' => ControlPlanRevision::SUPERSEDED]);
 
-            $codes = ReferenceCodes::all($revision->header ?? [], $revision->content ?? []);
             $revision->update([
                 'status' => ControlPlanRevision::RELEASED,
                 'released_by' => $request->user()->id,
                 'release_date' => today(),
                 'next_review_date' => today()->addYears($settings->review_period_years),
-                'reference_snapshot' => ControlPlanReference::whereIn('code', $codes)->get(['code', 'title', 'type', 'revision', 'link'])->toArray(),
+                'reference_snapshot' => ReferenceCodes::snapshot($revision->header ?? [], $revision->content ?? []),
             ]);
             $this->note($revision, $request, 'released', 'Released Rev '.$revision->rev_no.$self.'.');
         });
@@ -263,62 +262,6 @@ class ControlPlanController extends Controller
             'lines' => [array_fill_keys(ControlPlanRevision::LINE_FIELDS, '') + ['id' => Str::uuid()->toString(), 'step_id' => $step]],
             'notes' => '',
             'signatures' => ['prepared' => [$box($author)], 'approved' => [$box(null)]],
-        ];
-    }
-
-    /** Validates a saved draft and returns it normalised: every known field present as a string, unknown keys dropped. */
-    private function validateDocument(Request $request, ControlPlanRevision $revision): array
-    {
-        $request->validate([
-            'doc_no' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('control_plans', 'doc_no')->ignore($revision->control_plan_id)->whereNull('deleted_at')],
-            'header' => 'required|array',
-            'header.*' => 'nullable|string|max:255',
-            'info' => 'required|array',
-            'info.phase' => 'required|in:prototype,pre_launch,production',
-            'info.*' => 'nullable|string|max:255',
-            'content' => 'required|array',
-            'content.steps' => 'required|array|min:1',
-            'content.steps.*.id' => 'required|string|max:64|distinct',
-            'content.steps.*.no' => 'nullable|string|max:50',
-            'content.steps.*.group' => 'nullable|string|max:255',
-            'content.steps.*.name' => 'nullable|string|max:255',
-            'content.steps.*.machine' => 'nullable|string|max:255',
-            'content.lines' => 'required|array|min:1',
-            'content.lines.*.id' => 'required|string|max:64|distinct',
-            'content.lines.*.step_id' => 'required|string|max:64',
-            'content.lines.*.*' => 'nullable|string|max:2000',
-            'content.notes' => 'nullable|string|max:5000',
-            'content.signatures' => 'nullable|array',
-            'content.signatures.prepared' => 'nullable|array|max:'.ControlPlanRevision::MAX_SIGNERS,
-            'content.signatures.approved' => 'nullable|array|max:'.ControlPlanRevision::MAX_SIGNERS,
-            'content.signatures.*.*.id' => 'required|string|max:64',
-            'content.signatures.*.*.user_id' => 'nullable|integer|exists:users,id',
-            'content.signatures.*.*.name' => 'nullable|string|max:255',
-            'content.signatures.*.*.position' => 'nullable|string|max:255',
-        ]);
-
-        $str = fn ($v) => (string) ($v ?? '');
-        $steps = array_map(fn ($s) => ['id' => $s['id']] + array_map($str, array_replace(array_fill_keys(ControlPlanRevision::STEP_FIELDS, ''), array_intersect_key($s, array_flip(ControlPlanRevision::STEP_FIELDS)))), $request->input('content.steps'));
-        $stepIds = array_column($steps, 'id');
-        $lines = [];
-        foreach ($request->input('content.lines') as $i => $line) {
-            if (! in_array($line['step_id'], $stepIds, true)) {
-                throw ValidationException::withMessages(["content.lines.$i.step_id" => 'A line belongs to a process step that is not in the plan.']);
-            }
-            $lines[] = ['id' => $line['id'], 'step_id' => $line['step_id']]
-                + array_map($str, array_replace(array_fill_keys(ControlPlanRevision::LINE_FIELDS, ''), array_intersect_key($line, array_flip(ControlPlanRevision::LINE_FIELDS))));
-        }
-        // A step left without lines has nothing to print; drop it rather than keep an invisible step.
-        $used = array_flip(array_column($lines, 'step_id'));
-        $steps = array_values(array_filter($steps, fn ($s) => isset($used[$s['id']])));
-
-        $pick = fn (array $fields, string $key) => array_map($str, array_replace(array_fill_keys($fields, ''), array_intersect_key((array) $request->input($key), array_flip($fields))));
-
-        return [
-            'doc_no' => $request->has('doc_no') ? trim($request->input('doc_no')) : null,
-            'header' => $pick(ControlPlanRevision::HEADER_FIELDS, 'header'),
-            'info' => $pick(ControlPlanRevision::INFO_FIELDS, 'info'),
-            'content' => ['steps' => $steps, 'lines' => $lines] + ControlPlanRevision::footer($request->input('content')),
         ];
     }
 }

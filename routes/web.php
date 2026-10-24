@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\ControlPlans\ControlPlanController;
 use App\Http\Controllers\ControlPlans\ControlPlanExportController;
+use App\Http\Controllers\ControlPlans\ControlPlanImportController;
 use App\Http\Controllers\ControlPlans\ControlPlanPageController;
 use App\Http\Controllers\ControlPlans\ControlPlanReferenceController;
 use App\Http\Controllers\ControlPlans\ControlPlanSettingController;
@@ -353,6 +354,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('permission:control-plans.author')->group(function () {
         Route::post('control-plans', [ControlPlanController::class, 'store']);
+        Route::post('control-plans/import/preview', [ControlPlanImportController::class, 'preview']);
+        Route::post('control-plans/import', [ControlPlanImportController::class, 'store']);
         Route::post('control-plans/{controlPlan}/revisions', [ControlPlanController::class, 'startRevision'])->whereNumber('controlPlan');
         Route::put('control-plan-revisions/{revision}', [ControlPlanController::class, 'update']);
         Route::delete('control-plan-revisions/{revision}', [ControlPlanController::class, 'destroy']);

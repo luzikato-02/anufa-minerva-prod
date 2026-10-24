@@ -274,6 +274,37 @@ export interface Settings {
     review_period_years: number;
 }
 
+/** A history row as printed on a plan's revision history page. */
+export interface LegacyHistoryRow {
+    page: string;
+    date: string;
+    rev: string;
+    description: string;
+    revised_by: string;
+}
+
+/** What the importer read from a Word or PDF plan; nothing is saved until it is confirmed. */
+export interface ImportPreview {
+    format: 'docx' | 'pdf';
+    file_name: string;
+    doc_no: string;
+    /** Null when the document does not say. */
+    rev_no: number | null;
+    header: DocHeader;
+    info: PlanInfo;
+    content: Content;
+    history: LegacyHistoryRow[];
+    /** Y-m-d, from the document. */
+    release_date: string | null;
+    next_review_date: string | null;
+    warnings: string[];
+    /** The plan already in the app with this document number. */
+    existing_plan_id: number | null;
+    review_period_years: number;
+}
+
+export type ImportStatus = 'draft' | 'released';
+
 export const controlPlanApi = {
     create: (fields: { doc_no: string; title: string; rev_no: number }) =>
         request<{ data: { plan_id: number; revision_id: number } }>(
@@ -365,6 +396,38 @@ export const controlPlanApi = {
         return json.data.logo as string;
     },
     deleteLogo: () => request('/control-plan-settings/logo', 'DELETE'),
+    importPreview: async (file: File) => {
+        const body = new FormData();
+        body.append('file', file);
+        const res = await fetch('/control-plans/import/preview', {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': await csrfToken(),
+            },
+            credentials: 'include',
+            body,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok)
+            throw new Error(
+                json.errors?.file?.[0] ??
+                    json.message ??
+                    'The file could not be read. Try again.',
+            );
+        return json.data as ImportPreview;
+    },
+    importPlan: (
+        plan: Omit<
+            ImportPreview,
+            'warnings' | 'existing_plan_id' | 'review_period_years' | 'format'
+        > & { status: ImportStatus; rev_no: number },
+    ) =>
+        request<{ data: { plan_id: number; revision_id: number } }>(
+            '/control-plans/import',
+            'POST',
+            plan,
+        ).then((r) => r.data),
 };
 
 /**
