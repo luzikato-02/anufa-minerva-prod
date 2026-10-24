@@ -6,6 +6,7 @@ use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\Element\Table;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\Shared\Converter;
 
 /** Writes a PrintSheet as a Word document in the W-WSD layout: A4 landscape, revision history page, then the plan. */
@@ -23,6 +24,9 @@ class WordExport
     /** Saves the document to a temporary file and returns its path. */
     public static function save(array $s): string
     {
+        // PhpWord writes text into the XML as it is unless told to escape it, and a plan's text has & and <
+        // ("TCF1 & TCF2", "< 100 splices"): without this Word reports the file as corrupt.
+        Settings::setOutputEscapingEnabled(true);
         $word = new PhpWord;
         $word->setDefaultFontName(self::FONT);
         $word->setDefaultFontSize(8);
