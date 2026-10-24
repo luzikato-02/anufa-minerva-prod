@@ -24,13 +24,16 @@ import { useRef, useState } from 'react';
 
 /**
  * Brings a plan kept in Word or PDF into the app: read the file, check what came out, then create it as a draft
- * (the usual review workflow) or, for approvers, as the released revision it already is on paper.
+ * (the usual review workflow) or, for approvers, as the released revision it already is on paper. A plan whose
+ * document number is already in the app can replace that plan, for someone who may delete plans.
  */
 export function ImportPlanDialog({
     canRelease,
+    canReplace,
     onClose,
 }: {
     canRelease: boolean;
+    canReplace: boolean;
     onClose: () => void;
 }) {
     const fileRef = useRef<HTMLInputElement>(null);
@@ -39,10 +42,16 @@ export function ImportPlanDialog({
     const [title, setTitle] = useState('');
     const [revNo, setRevNo] = useState('');
     const [status, setStatus] = useState<ImportStatus>('draft');
+    const [replace, setReplace] = useState(false);
     const [releaseDate, setReleaseDate] = useState('');
     const [nextReview, setNextReview] = useState('');
     const [busy, setBusy] = useState<'reading' | 'importing' | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // The plan the document number belongs to, while it still is the number read from the file.
+    const clash =
+        preview?.existing && docNo.trim() === preview.existing.doc_no
+            ? preview.existing
+            : null;
 
     const read = async (file: File) => {
         setBusy('reading');
@@ -56,6 +65,7 @@ export function ImportPlanDialog({
             setReleaseDate(p.release_date ?? '');
             setNextReview(p.next_review_date ?? '');
             setStatus('draft');
+            setReplace(false);
         } catch (e) {
             setError((e as Error).message);
         } finally {
@@ -72,6 +82,10 @@ export function ImportPlanDialog({
             return setError(
                 'The revision number must be a whole number, 0 or more.',
             );
+        if (clash && !replace)
+            return setError(
+                `${clash.doc_no} is already in the app. Change the document number, or choose to replace that plan.`,
+            );
         if (status === 'released' && !releaseDate)
             return setError('Enter the date this revision was released.');
         setBusy('importing');
@@ -79,6 +93,7 @@ export function ImportPlanDialog({
         try {
             const { plan_id } = await controlPlanApi.importPlan({
                 status,
+                replace: clash !== null && replace,
                 file_name: preview.file_name,
                 doc_no: docNo.trim(),
                 rev_no: rev,
@@ -181,14 +196,6 @@ export function ImportPlanDialog({
                                             <li key={w}>{w}</li>
                                         ))}
                                     </ul>
-                                    {preview.existing_plan_id !== null && (
-                                        <Link
-                                            href={`/control-plans/${preview.existing_plan_id}`}
-                                            className="mt-1 font-medium text-primary underline underline-offset-2"
-                                        >
-                                            Open {preview.doc_no}
-                                        </Link>
-                                    )}
                                 </AlertDescription>
                             </Alert>
                         )}
@@ -224,6 +231,59 @@ export function ImportPlanDialog({
                                 />
                             </div>
                         </div>
+
+                        {clash && (
+                            <fieldset className="flex flex-col gap-2">
+                                <legend className="mb-2 text-sm font-medium">
+                                    <Link
+                                        href={`/control-plans/${clash.id}`}
+                                        className="font-mono text-primary underline underline-offset-2"
+                                    >
+                                        {clash.doc_no}
+                                    </Link>{' '}
+                                    is already in the app
+                                    {clash.revisions && ` (${clash.revisions})`}
+                                </legend>
+                                <label className={optCls(!replace)}>
+                                    <input
+                                        type="radio"
+                                        name="ip-existing"
+                                        className="mt-0.5 size-4 accent-primary"
+                                        checked={!replace}
+                                        onChange={() => setReplace(false)}
+                                    />
+                                    <span className="flex flex-col gap-0.5">
+                                        <b className="text-sm">Keep it</b>
+                                        <span className="text-xs text-muted-foreground">
+                                            Change the document number above to
+                                            import this file as another plan. To
+                                            revise the existing plan, open it
+                                            and start its next revision instead.
+                                        </span>
+                                    </span>
+                                </label>
+                                <label className={optCls(replace, !canReplace)}>
+                                    <input
+                                        type="radio"
+                                        name="ip-existing"
+                                        className="mt-0.5 size-4 accent-primary"
+                                        checked={replace}
+                                        disabled={!canReplace}
+                                        onChange={() => setReplace(true)}
+                                    />
+                                    <span className="flex flex-col gap-0.5">
+                                        <b className="text-sm">
+                                            Replace it with the imported plan
+                                        </b>
+                                        <span className="text-xs text-muted-foreground">
+                                            {canReplace
+                                                ? `Deletes ${clash.revisions ? `${clash.revisions}, ` : 'its revisions, '}with their comments and signatures. Links to ${clash.doc_no} open the imported plan.`
+                                                : 'Only someone who can delete control plans can replace one.'}
+                                        </span>
+                                    </span>
+                                </label>
+                            </fieldset>
+                        )}
 
                         <Summary preview={preview} />
                         <LinesPreview preview={preview} />
@@ -340,9 +400,7 @@ export function ImportPlanDialog({
                         >
                             {busy === 'importing'
                                 ? 'Importing…'
-                                : status === 'released'
-                                  ? 'Import as released'
-                                  : 'Import as draft'}
+                                : `${clash && replace ? 'Replace with' : 'Import as'} ${status === 'released' ? 'released' : 'draft'}`}
                         </Button>
                     )}
                 </DialogFooter>

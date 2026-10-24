@@ -22,7 +22,8 @@ use RuntimeException;
  * Bringing a plan kept in Word or PDF into the app, once, when it moves here: the file is read into a preview
  * (nothing saved), the author checks and corrects it, then the plan is created from what they confirmed, either
  * as a draft that goes through review like any other, or, for approvers, straight as the released revision it
- * already is on paper.
+ * already is on paper. When its document number is already in the app, someone with control-plans.delete may
+ * replace that plan with the import: its revisions go, and the plan keeps its id so links to it still work.
  */
 class ControlPlanImportController extends Controller
 {
@@ -54,14 +55,11 @@ class ControlPlanImportController extends Controller
         foreach (['org_plant', 'org_code'] as $field) {
             $plan['info'][$field] = $plan['info'][$field] !== '' ? $plan['info'][$field] : ($settings->$field ?? '');
         }
-        $existing = $plan['doc_no'] !== '' ? ControlPlan::where('doc_no', $plan['doc_no'])->first() : null;
-        if ($existing) {
-            array_unshift($plan['warnings'], "{$plan['doc_no']} is already in the app. Change the document number, or open the existing plan and start its next revision instead.");
-        }
+        $existing = $plan['doc_no'] !== '' ? ControlPlan::with('revisions')->where('doc_no', $plan['doc_no'])->first() : null;
 
         return response()->json(['success' => true, 'data' => $plan + [
             'file_name' => $file->getClientOriginalName(),
-            'existing_plan_id' => $existing?->id,
+            'existing' => $existing ? ['id' => $existing->id, 'doc_no' => $existing->doc_no, 'revisions' => $existing->revisionSummary()] : null,
             'review_period_years' => $settings->review_period_years,
         ]]);
     }
@@ -70,8 +68,10 @@ class ControlPlanImportController extends Controller
     {
         $released = $request->input('status') === 'released';
         abort_if($released && ! $request->user()->can('control-plans.approve'), 403, 'Only someone who can release control plans can import one as released.');
+        abort_if($request->boolean('replace') && ! $request->user()->can('control-plans.delete'), 403, 'Only someone who can delete control plans can replace one.');
         $meta = $request->validate([
             'status' => 'required|in:draft,released',
+            'replace' => 'boolean',
             'rev_no' => 'required|integer|min:0|max:999',
             'file_name' => 'nullable|string|max:255',
             'history' => 'nullable|array|max:500',
@@ -83,7 +83,8 @@ class ControlPlanImportController extends Controller
             'release_date' => 'nullable|required_if:status,released|date',
             'next_review_date' => 'nullable|date|after_or_equal:release_date',
         ]);
-        $doc = DocumentInput::validate($request);
+        $replacing = $request->boolean('replace') ? ControlPlan::with('revisions')->where('doc_no', trim((string) $request->input('doc_no')))->first() : null;
+        $doc = DocumentInput::validate($request, replacing: $replacing);
         $user = $request->user();
         $settings = ControlPlanSetting::current();
         $revNo = (int) $meta['rev_no'];
@@ -105,8 +106,12 @@ class ControlPlanImportController extends Controller
         $file = trim((string) ($meta['file_name'] ?? '')) ?: 'a file';
         $rev = 'Rev '.str_pad((string) $revNo, 2, '0', STR_PAD_LEFT);
 
-        $revision = DB::transaction(function () use ($doc, $content, $legacy, $own, $released, $meta, $revNo, $user, $settings, $file, $rev) {
-            $plan = ControlPlan::create(['doc_no' => $doc['doc_no'], 'legacy_history' => $legacy ?: null]);
+        $replaced = $replacing ? " It replaced {$replacing->revisionSummary()}." : '';
+
+        $revision = DB::transaction(function () use ($doc, $content, $legacy, $own, $released, $meta, $revNo, $user, $settings, $file, $rev, $replacing, $replaced) {
+            $plan = $replacing
+                ? tap($replacing->deleteRevisions())->update(['doc_no' => $doc['doc_no'], 'legacy_history' => $legacy ?: null])
+                : ControlPlan::create(['doc_no' => $doc['doc_no'], 'legacy_history' => $legacy ?: null]);
             $attributes = [
                 'rev_no' => $revNo,
                 'status' => $released ? ControlPlanRevision::RELEASED : ControlPlanRevision::DRAFT,
@@ -133,7 +138,7 @@ class ControlPlanImportController extends Controller
             $revision->comments()->create([
                 'user_id' => $user->id,
                 'kind' => $released ? 'released' : 'comment',
-                'body' => $released ? "Imported {$rev} as released from {$file}." : "Imported {$rev} from {$file}.",
+                'body' => ($released ? "Imported {$rev} as released from {$file}." : "Imported {$rev} from {$file}.").$replaced,
             ]);
 
             return $revision;

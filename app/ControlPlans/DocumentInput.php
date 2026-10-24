@@ -2,6 +2,7 @@
 
 namespace App\ControlPlans;
 
+use App\Models\ControlPlan;
 use App\Models\ControlPlanRevision;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,15 +14,16 @@ class DocumentInput
     /**
      * Validates the document and returns it normalised: every known field present as a string, unknown keys
      * dropped. For a saved draft ($revision) the document number may be left out; for an import it is required
-     * and must not be taken.
+     * and must not be taken, except by the plan the import replaces ($replacing).
      *
      * @return array{doc_no: ?string, header: array<string, string>, info: array<string, string>, content: array}
      */
-    public static function validate(Request $request, ?ControlPlanRevision $revision = null): array
+    public static function validate(Request $request, ?ControlPlanRevision $revision = null, ?ControlPlan $replacing = null): array
     {
         $unique = Rule::unique('control_plans', 'doc_no')->whereNull('deleted_at');
+        $ownPlan = $revision?->control_plan_id ?? $replacing?->id;
         $request->validate([
-            'doc_no' => [...($revision ? ['sometimes'] : []), 'required', 'string', 'max:255', $revision ? $unique->ignore($revision->control_plan_id) : $unique],
+            'doc_no' => [...($revision ? ['sometimes'] : []), 'required', 'string', 'max:255', $ownPlan ? $unique->ignore($ownPlan) : $unique],
             'header' => 'required|array',
             'header.*' => 'nullable|string|max:255',
             'info' => 'required|array',

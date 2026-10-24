@@ -298,8 +298,8 @@ export interface ImportPreview {
     release_date: string | null;
     next_review_date: string | null;
     warnings: string[];
-    /** The plan already in the app with this document number. */
-    existing_plan_id: number | null;
+    /** The plan already in the app with this document number; `revisions` reads "Rev 03 released, Rev 04 draft". */
+    existing: { id: number; doc_no: string; revisions: string } | null;
     review_period_years: number;
 }
 
@@ -333,6 +333,8 @@ export const controlPlanApi = {
         ).then((r) => r.data),
     discard: (revisionId: number) =>
         request(`/control-plan-revisions/${revisionId}`, 'DELETE'),
+    deletePlan: (planId: number) =>
+        request(`/control-plans/${planId}`, 'DELETE'),
     submit: (revisionId: number, history: HistoryEntry[]) =>
         request(`/control-plan-revisions/${revisionId}/submit`, 'POST', {
             history,
@@ -420,8 +422,13 @@ export const controlPlanApi = {
     importPlan: (
         plan: Omit<
             ImportPreview,
-            'warnings' | 'existing_plan_id' | 'review_period_years' | 'format'
-        > & { status: ImportStatus; rev_no: number },
+            'warnings' | 'existing' | 'review_period_years' | 'format'
+        > & {
+            status: ImportStatus;
+            rev_no: number;
+            /** Replace the plan that has this document number (control-plans.delete). */
+            replace: boolean;
+        },
     ) =>
         request<{ data: { plan_id: number; revision_id: number } }>(
             '/control-plans/import',

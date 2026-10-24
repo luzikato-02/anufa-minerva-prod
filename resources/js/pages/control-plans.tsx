@@ -82,6 +82,7 @@ export default function ControlPlans({
     const [q, setQ] = useState('');
     const [creating, setCreating] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [deleting, setDeleting] = useState<PlanRow | null>(null);
 
     const needle = q.trim().toLowerCase();
     const shown = plans.filter(
@@ -340,6 +341,19 @@ export default function ControlPlans({
                                                         Shop-floor view
                                                     </Link>
                                                 )}
+                                                {can(
+                                                    'control-plans.delete',
+                                                ) && (
+                                                    <button
+                                                        type="button"
+                                                        className="text-destructive hover:underline"
+                                                        onClick={() =>
+                                                            setDeleting(p)
+                                                        }
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -354,7 +368,14 @@ export default function ControlPlans({
             {importing && (
                 <ImportPlanDialog
                     canRelease={can('control-plans.approve')}
+                    canReplace={can('control-plans.delete')}
                     onClose={() => setImporting(false)}
+                />
+            )}
+            {deleting && (
+                <DeletePlanDialog
+                    plan={deleting}
+                    onClose={() => setDeleting(null)}
                 />
             )}
         </AppLayout>
@@ -486,6 +507,84 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
                     </Button>
                     <Button onClick={() => void create()} disabled={busy}>
                         {busy ? 'Creating…' : 'Create draft'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+/** Deleting a whole plan, released revisions too, so the document number has to be typed to confirm. */
+function DeletePlanDialog({
+    plan,
+    onClose,
+}: {
+    plan: PlanRow;
+    onClose: () => void;
+}) {
+    const [typed, setTyped] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const remove = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            await controlPlanApi.deletePlan(plan.id);
+            router.reload({ onFinish: onClose });
+        } catch (e) {
+            setError((e as Error).message);
+            setBusy(false);
+        }
+    };
+
+    const revisions = [
+        plan.released && `released Rev ${plan.released.rev}`,
+        plan.open &&
+            `${statusShort(plan.open.status).toLowerCase()} Rev ${plan.open.rev}`,
+    ].filter(Boolean);
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete {plan.doc_no}?</DialogTitle>
+                    <DialogDescription>
+                        Deletes the whole plan
+                        {revisions.length > 0 &&
+                            ` (${revisions.join(' and ')})`}
+                        , with every revision, comment and signature. It leaves
+                        the shop floor at once. This cannot be undone here.
+                    </DialogDescription>
+                </DialogHeader>
+                {error && (
+                    <Alert variant="destructive" role="alert">
+                        <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                )}
+                <div className="space-y-1.5">
+                    <Label htmlFor="dp-doc">
+                        Type <b className="font-mono">{plan.doc_no}</b> to
+                        confirm
+                    </Label>
+                    <Input
+                        id="dp-doc"
+                        className="font-mono"
+                        autoComplete="off"
+                        value={typed}
+                        onChange={(e) => setTyped(e.target.value)}
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose} disabled={busy}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={() => void remove()}
+                        disabled={busy || typed.trim() !== plan.doc_no}
+                    >
+                        {busy ? 'Deleting…' : 'Delete plan'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

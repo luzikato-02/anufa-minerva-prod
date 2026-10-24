@@ -26,7 +26,7 @@ class ControlPlanImportTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        foreach (self::ALL as $p) {
+        foreach ([...self::ALL, 'control-plans.delete'] as $p) {
             Permission::findOrCreate($p, 'web');
         }
     }
@@ -119,7 +119,7 @@ class ControlPlanImportTest extends TestCase
         ], $data['history']);
         $this->assertSame('2026-10-15', $data['release_date']);
         $this->assertSame('2028-10-15', $data['next_review_date']);
-        $this->assertSame($revision->control_plan_id, $data['existing_plan_id']);
+        $this->assertSame($revision->control_plan_id, $data['existing']['id']);
     }
 
     public function test_a_word_export_reads_back_as_the_same_plan(): void
@@ -129,7 +129,7 @@ class ControlPlanImportTest extends TestCase
 
         $this->assertReadsBack($revision, $data);
         $this->assertSame('docx', $data['format']);
-        $this->assertStringContainsString('already in the app', $data['warnings'][0]);
+        $this->assertSame([], $data['warnings']);
     }
 
     public function test_a_pdf_export_reads_back_as_the_same_plan(): void
@@ -209,6 +209,46 @@ class ControlPlanImportTest extends TestCase
         $this->actingAs($author)->postJson('/control-plans/import', ['status' => 'draft'] + $data)->assertJsonValidationErrors('doc_no');
         $this->actingAs($author)->postJson('/control-plans/import', ['status' => 'draft', 'doc_no' => ''] + $data)->assertJsonValidationErrors('doc_no');
         $this->assertSame(1, ControlPlan::count());
+    }
+
+    public function test_an_import_can_replace_the_plan_with_its_document_number(): void
+    {
+        $revision = $this->released();
+        $plan = $revision->plan;
+        $author = $this->author();
+        $data = $this->preview($author, $this->wordFile($revision));
+        $before = $plan->revisionSummary();
+        $this->assertSame($before, $data['existing']['revisions']);
+        $this->assertStringContainsString('Rev 11 released', $before);
+
+        $this->actingAs($author)->postJson('/control-plans/import', ['status' => 'draft', 'replace' => true] + $data)->assertForbidden();
+
+        $admin = $this->user(['control-plans.view', 'control-plans.author', 'control-plans.delete']);
+        $res = $this->actingAs($admin)->postJson('/control-plans/import', ['status' => 'draft', 'replace' => true] + $data)->assertCreated();
+
+        // The same plan, so links to it still work, now holding only the imported draft.
+        $this->assertSame($plan->id, $res->json('data.plan_id'));
+        $this->assertSame(1, ControlPlan::count());
+        $draft = $plan->fresh()->revisions()->sole();
+        $this->assertSame([ControlPlanRevision::DRAFT, 11], [$draft->status, $draft->rev_no]);
+        $this->assertNull($plan->fresh()->released);
+        $this->assertSame("Imported Rev 11 from W-WSD-W-30.docx. It replaced {$before}.", $draft->comments()->sole()->body);
+    }
+
+    public function test_deleting_a_whole_plan_needs_the_delete_permission_and_frees_its_number(): void
+    {
+        $plan = $this->released()->plan;
+        $this->actingAs($this->author())->deleteJson("/control-plans/{$plan->id}")->assertForbidden();
+
+        $admin = $this->user(['control-plans.view', 'control-plans.author', 'control-plans.delete']);
+        $this->actingAs($admin)->deleteJson("/control-plans/{$plan->id}")->assertOk();
+        $this->assertSoftDeleted($plan);
+        $this->assertSame(0, ControlPlanRevision::where('control_plan_id', $plan->id)->count());
+
+        // The document number can be used again.
+        $this->actingAs($admin)->postJson('/control-plans', ['doc_no' => 'W-WSD-W-30', 'title' => 'Again', 'rev_no' => 0])->assertCreated();
+        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+        $this->assertTrue(\Spatie\Permission\Models\Role::findByName('admin')->hasPermissionTo('control-plans.delete'));
     }
 
     public function test_files_that_cannot_be_imported_say_why(): void

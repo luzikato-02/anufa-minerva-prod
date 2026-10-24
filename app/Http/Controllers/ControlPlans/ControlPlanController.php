@@ -117,6 +117,14 @@ class ControlPlanController extends Controller
         return response()->json(['success' => true]);
     }
 
+    /** Deletes a whole plan, released revisions included; its document number is free for a new plan. */
+    public function destroyPlan(ControlPlan $controlPlan): JsonResponse
+    {
+        DB::transaction(fn () => $controlPlan->deleteRevisions()->delete());
+
+        return response()->json(['success' => true]);
+    }
+
     public function submit(Request $request, ControlPlanRevision $revision): JsonResponse
     {
         abort_unless($revision->isEditable(), 422, 'This revision has already been submitted.');

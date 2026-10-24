@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\ControlPlans\PlanDates;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -35,6 +36,21 @@ class ControlPlan extends Model
     public function open(): HasOne
     {
         return $this->hasOne(ControlPlanRevision::class)->ofMany(['rev_no' => 'max'], fn ($q) => $q->whereIn('status', ControlPlanRevision::OPEN));
+    }
+
+    /** "Rev 03 released, Rev 04 draft": the revisions the plan has, for telling someone what a change removes. */
+    public function revisionSummary(): string
+    {
+        return $this->revisions->map(fn (ControlPlanRevision $r) => 'Rev '.PlanDates::rev($r->rev_no).' '.str_replace('_', ' ', $r->status))->join(', ');
+    }
+
+    /** Deletes every revision, with their comments and signatures, leaving the plan itself to reuse or delete. */
+    public function deleteRevisions(): static
+    {
+        ControlPlanRevision::where('control_plan_id', $this->id)->delete();
+        $this->unsetRelation('revisions');
+
+        return $this;
     }
 
     /** The open revision if there is one, else the released one: what the plan currently says. */

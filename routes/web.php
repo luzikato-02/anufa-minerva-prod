@@ -371,6 +371,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::post('control-plan-revisions/{revision}/release', [ControlPlanController::class, 'release'])->middleware('permission:control-plans.approve');
+    Route::delete('control-plans/{controlPlan}', [ControlPlanController::class, 'destroyPlan'])->whereNumber('controlPlan')->middleware('permission:control-plans.delete');
 
     Route::middleware('permission:control-plans.settings')->group(function () {
         Route::get('control-plan-settings', [ControlPlanPageController::class, 'settings'])->name('control-plan-settings');
