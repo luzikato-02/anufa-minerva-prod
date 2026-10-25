@@ -19,6 +19,9 @@ class WordExport
     private const HEAD_CELL = self::CELL + ['bgColor' => 'F2F2F2', 'valign' => 'center'];
 
     /** Widths of the 15 characteristics columns, in twips; they add up to the A4 landscape text width. */
+    /** Text changed since the last release. */
+    private const CHANGED = ['bold' => true, 'italic' => true];
+
     private const MAIN_WIDTHS = [560, 420, 1300, 1100, 380, 1100, 900, 620, 1500, 1200, 520, 900, 1250, 700, 1250];
 
     /** Saves the document to a temporary file and returns its path. */
@@ -59,15 +62,15 @@ class WordExport
         if ($s['logo_file']) {
             $section->addImage($s['logo_file'], ['height' => Converter::cmToPoint(1.2), 'spaceAfter' => 60]);
         }
-        $section->addText($s['mill']);
+        $section->addText($s['mill'], self::mark($s, 'mill'));
         $section->addText($s['doc_no']);
         $section->addText('WORK STATION DOCUMENT', ['bold' => true, 'size' => 11], ['alignment' => 'center', 'spaceAfter' => 120]);
 
         $rows = [
-            ['Referensi SP', $s['sp_ref'], 'Tanggal diterbitkan', $s['issued']],
-            ['Tanggal Diterbitkan SP', $s['sp_date'], 'No. Revisi/Tanggal Revisi terakhir', $s['rev_label']],
-            ['', '', 'Tanggal Review berikutnya', $s['next_review']],
-            ['', '', 'Halaman', $page.' dari '.PrintSheet::PAGES],
+            ['Referensi SP', $s['sp_ref'], 'Tanggal diterbitkan', $s['issued'], 'sp_ref', 'issued'],
+            ['Tanggal Diterbitkan SP', $s['sp_date'], 'No. Revisi/Tanggal Revisi terakhir', $s['rev_label'], 'sp_date', ''],
+            ['', '', 'Tanggal Review berikutnya', $s['next_review'], '', ''],
+            ['', '', 'Halaman', $page.' dari '.PrintSheet::PAGES, '', ''],
         ];
         $table = $section->addTable(['cellMargin' => 20]);
         foreach ($rows as $i => $r) {
@@ -76,10 +79,10 @@ class WordExport
             $table->addRow();
             $table->addCell(2800, $cell)->addText($r[0]);
             $table->addCell(200, $cell)->addText($r[0] !== '' ? ':' : '');
-            $table->addCell(3400, $cell)->addText($r[1]);
+            $table->addCell(3400, $cell)->addText($r[1], self::mark($s, $r[4]));
             $table->addCell(4000, $cell)->addText($r[2]);
             $table->addCell(200, $cell)->addText(':');
-            $table->addCell(5000, $cell)->addText($r[3]);
+            $table->addCell(5000, $cell)->addText($r[3], self::mark($s, $r[5]));
         }
         $section->addTextBreak(1, ['size' => 4]);
     }
@@ -117,30 +120,33 @@ class WordExport
     private static function plan(Section $section, array $s): void
     {
         $info = $s['info'];
-        $phases = collect($s['phases'])->map(fn ($label, $key) => '['.(($info['phase'] ?? '') === $key ? 'X' : ' ').'] '.$label)->implode('    ');
         $head = $section->addTable();
         $head->addRow();
-        $head->addCell(5200, ['valign' => 'center'])->addText($phases);
-        $head->addCell(5200, ['valign' => 'center'])->addText($s['title'], ['bold' => true, 'size' => 10], ['alignment' => 'center']);
+        $phases = $head->addCell(5200, ['valign' => 'center'])->addTextRun();
+        foreach ($s['phases'] as $key => $label) {
+            $ticked = ($info['phase'] ?? '') === $key;
+            $phases->addText(($key === array_key_first($s['phases']) ? '' : '    ').'['.($ticked ? 'X' : ' ').'] '.$label, $ticked ? self::mark($s, 'phase') : []);
+        }
+        $head->addCell(5200, ['valign' => 'center'])->addText($s['title'], ['bold' => true, 'size' => 10] + self::mark($s, 'title'), ['alignment' => 'center']);
         $head->addCell(5200);
 
-        $field = fn (string $label, string $value) => [$label, $value];
-        $approval = fn (string $name, string $date) => trim(($info[$name] ?? '').' '.($info[$date] ?? ''));
+        $field = fn (string $label, string $value, string ...$keys) => [$label, $value, $keys];
+        $approval = fn (string $label, string $name, string $date) => $field($label, trim(($info[$name] ?? '').' '.($info[$date] ?? '')), $name, $date);
         $planApproval = in_array($s['status'], ['released', 'superseded'], true) ? $s['release_date'] : '';
         $rows = [
-            [[2, $field('Control Plan Number: ', $s['doc_no'])], [1, $field('Key Contact/Phone: ', $info['key_contact'] ?? '')], [2, $field('Date (Orig.): ', $s['issued'])], [1, $field('Date (Rev.): ', $s['release_date'])]],
-            [[2, $field('Part Number / Latest Change Level: ', $info['part_number'] ?? '')], [1, $field('Core Team: ', $info['core_team'] ?? '')], [1, $field('', '')], [2, $field("Customer Engineering Approval/Date (If Req'd.) ", $approval('cust_eng_name', 'cust_eng_date'))]],
-            [[2, $field('Part Name / Description: ', $info['part_name'] ?? '')], [1, $field('Organization/Plan Approval/Date: ', $planApproval)], [1, $field('', '')], [2, $field("Customer Quality Approval/Date (If Req'd.) ", $approval('cust_qual_name', 'cust_qual_date'))]],
-            [[1, $field('Organization/Plant: ', $info['org_plant'] ?? '')], [1, $field('Organization Code: ', $info['org_code'] ?? '')], [1, $field("Other Approval/Date (If Req'd.) ", $approval('other1_name', 'other1_date'))], [1, $field('', '')], [2, $field("Other Approval (If Req'd.) ", $approval('other2_name', 'other2_date'))]],
+            [[2, $field('Control Plan Number: ', $s['doc_no'])], [1, $field('Key Contact/Phone: ', $info['key_contact'] ?? '', 'key_contact')], [2, $field('Date (Orig.): ', $s['issued'], 'issued')], [1, $field('Date (Rev.): ', $s['release_date'])]],
+            [[2, $field('Part Number / Latest Change Level: ', $info['part_number'] ?? '', 'part_number')], [1, $field('Core Team: ', $info['core_team'] ?? '', 'core_team')], [1, $field('', '')], [2, $approval("Customer Engineering Approval/Date (If Req'd.) ", 'cust_eng_name', 'cust_eng_date')]],
+            [[2, $field('Part Name / Description: ', $info['part_name'] ?? '', 'part_name')], [1, $field('Organization/Plan Approval/Date: ', $planApproval)], [1, $field('', '')], [2, $approval("Customer Quality Approval/Date (If Req'd.) ", 'cust_qual_name', 'cust_qual_date')]],
+            [[1, $field('Organization/Plant: ', $info['org_plant'] ?? '', 'org_plant')], [1, $field('Organization Code: ', $info['org_code'] ?? '', 'org_code')], [1, $approval("Other Approval/Date (If Req'd.) ", 'other1_name', 'other1_date')], [1, $field('', '')], [2, $approval("Other Approval (If Req'd.) ", 'other2_name', 'other2_date')]],
         ];
         $unit = 2600;
         $infoTable = self::grid($section);
         foreach ($rows as $row) {
             $infoTable->addRow();
-            foreach ($row as [$span, [$label, $value]]) {
+            foreach ($row as [$span, [$label, $value, $keys]]) {
                 $run = $infoTable->addCell($unit * $span, self::CELL + ($span > 1 ? ['gridSpan' => $span] : []))->addTextRun();
                 $run->addText($label, ['bold' => true]);
-                $run->addText($value);
+                $run->addText($value, self::mark($s, ...$keys));
             }
         }
 
@@ -197,7 +203,7 @@ class WordExport
                     continue;
                 }
                 $style = self::CELL + (($cell['rowspan'] ?? 1) > 1 ? ['vMerge' => 'restart'] : []);
-                $table->addCell($w[$i], $style)->addText($cell['text'], $font, $center);
+                $table->addCell($w[$i], $style)->addText($cell['text'], $font + (empty($cell['changed']) ? [] : self::CHANGED), $center);
             }
         }
 
@@ -208,7 +214,7 @@ class WordExport
     private static function footer(Section $section, array $s): void
     {
         foreach ($s['notes'] as $i => $note) {
-            $section->addText($note, ['size' => 7], ['spaceBefore' => $i === 0 ? 80 : 0, 'spaceAfter' => 0]);
+            $section->addText($note, ['size' => 7] + (in_array($i, $s['notes_changed'] ?? [], true) ? self::CHANGED : []), ['spaceBefore' => $i === 0 ? 80 : 0, 'spaceAfter' => 0]);
         }
         $groups = array_filter(['Dibuat oleh' => $s['signatures']['prepared'], 'Disetujui oleh' => $s['signatures']['approved']]);
         if (! $groups) {
@@ -255,6 +261,12 @@ class WordExport
                 }
             }
         }
+    }
+
+    /** The bold italic font when any of the sheet's fields named changed since the last release. */
+    private static function mark(array $s, string ...$keys): array
+    {
+        return array_intersect($keys, $s['changed'] ?? []) ? self::CHANGED : [];
     }
 
     private static function grid(Section $section): Table

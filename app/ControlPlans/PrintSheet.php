@@ -14,6 +14,9 @@ class PrintSheet
 {
     public const PAGES = 2;
 
+    /** The page header fields an author writes; the revision and review dates change with every release, so are not marked. */
+    private const HEADER_FIELDS = ['mill', 'sp_ref', 'sp_date', 'issued'];
+
     public const PHASES = ['prototype' => 'Prototype', 'pre_launch' => 'Pre-launch', 'production' => 'Production'];
 
     /** $logo: the logo keys from SheetLogo::toArray(); the shared logo from Settings when null. */
@@ -25,6 +28,12 @@ class PrintSheet
         $info = $revision->info ?? [];
         $released = $revision->release_date !== null;
         $footer = ControlPlanRevision::footer($revision->content);
+        // What changed is printed bold italic: everything that differs from the last release before this revision.
+        $base = $revision->previousReleased();
+        $baseHeader = $base?->header ?? [];
+        $baseInfo = $base?->info ?? [];
+        $baseNotes = $base ? self::bullets(ControlPlanRevision::footer($base->content)['notes']) : null;
+        $notes = self::bullets($footer['notes']);
 
         $releaseDate = $released ? PlanDates::format($revision->release_date, $fmt) : '[set on release]';
         $nextReview = $revision->next_review_date
@@ -47,8 +56,13 @@ class PrintSheet
             'info' => $info + ['phase' => 'production'],
             'phases' => self::PHASES,
             'title' => trim((string) ($info['title'] ?? '')) !== '' ? $info['title'] : '[CONTROL PLAN TITLE]',
-            'rows' => self::rows($revision->content ?? []),
-            'notes' => self::bullets($footer['notes']),
+            'rows' => self::rows($revision->content ?? [], $base?->content),
+            'notes' => $notes,
+            'notes_changed' => $baseNotes === null ? [] : array_keys(array_diff($notes, $baseNotes)),
+            'changed' => $base === null ? [] : array_keys(array_filter([
+                ...array_map(fn ($k) => trim((string) ($header[$k] ?? '')) !== trim((string) ($baseHeader[$k] ?? '')), array_combine(self::HEADER_FIELDS, self::HEADER_FIELDS)),
+                ...array_map(fn ($k) => trim((string) ($info[$k] ?? '')) !== trim((string) ($baseInfo[$k] ?? '')), array_combine(ControlPlanRevision::INFO_FIELDS, ControlPlanRevision::INFO_FIELDS)),
+            ])),
             'signatures' => $footer['signatures'],
             'signed' => $revision->signed($fmt),
         ] + ($logo ?? ['logo' => $settings->logoDataUri(), 'logo_file' => $settings->logoFile()]);
@@ -105,14 +119,22 @@ class PrintSheet
     /**
      * The characteristics table, one row per line. Each row is the 15 printed cells in column order; the process
      * no., group, process name and machine cells merge down over the lines that share them. A cell covered by
-     * the one above is ['covered' => true]; the cell that starts a merge carries its 'rowspan'.
+     * the one above is ['covered' => true]; the cell that starts a merge carries its 'rowspan'. Given the content of
+     * the last release, a cell whose text differs from it (or that belongs to a new line or step) is 'changed'.
      *
-     * @return list<list<array{text?: string, rowspan?: int, covered?: bool, vertical?: bool, pic?: bool}>>
+     * @return list<list<array{text?: string, rowspan?: int, covered?: bool, vertical?: bool, pic?: bool, changed?: bool}>>
      */
-    public static function rows(array $content): array
+    public static function rows(array $content, ?array $base = null): array
     {
         $ordered = RevisionDiff::ordered($content);
         $n = count($ordered);
+        $baseSteps = array_column($base['steps'] ?? [], null, 'id');
+        $baseLines = array_column($base['lines'] ?? [], null, 'id');
+        // Whether a field of an entry's step or line differs from the base; nothing differs when there is no base.
+        $stepChanged = fn (array $e, string $f) => $base !== null
+            && (! isset($baseSteps[$e['step']['id']]) || trim((string) ($e['step'][$f] ?? '')) !== trim((string) ($baseSteps[$e['step']['id']][$f] ?? '')));
+        $lineChanged = fn (array $e, string ...$fs) => $base !== null && (! isset($baseLines[$e['line']['id']])
+            || array_filter($fs, fn ($f) => trim((string) ($e['line'][$f] ?? '')) !== trim((string) ($baseLines[$e['line']['id']][$f] ?? ''))) !== []);
         $runs = function (callable $key) use ($ordered, $n): array {
             $spans = array_fill(0, $n, 0);
             for ($i = 0; $i < $n;) {
@@ -131,33 +153,42 @@ class PrintSheet
         $groupRun = $runs(fn ($e) => ($e['step']['no'] ?? '').'|'.($e['step']['group'] ?? ''));
         $stepRun = $runs(fn ($e) => $e['step']['id']);
 
-        $merged = fn (int $span, string $text, array $extra = []) => $span > 0
-            ? ['text' => $text, 'rowspan' => $span] + $extra
-            : ['covered' => true];
-        $text = fn ($v) => ['text' => trim((string) $v) === '' ? '-' : (string) $v];
+        // A merged cell is changed when the field changed on any of the steps it covers.
+        $merged = function (int $i, array $spans, string $f, array $extra = []) use ($ordered, $stepChanged) {
+            if ($spans[$i] === 0) {
+                return ['covered' => true];
+            }
+            $changed = false;
+            for ($j = $i; $j < $i + $spans[$i]; $j++) {
+                $changed = $changed || $stepChanged($ordered[$j], $f);
+            }
+
+            return ['text' => (string) ($ordered[$i]['step'][$f] ?? ''), 'rowspan' => $spans[$i]] + $extra + ($changed ? ['changed' => true] : []);
+        };
+        $text = fn ($v, bool $changed = false) => ['text' => trim((string) $v) === '' ? '-' : (string) $v] + ($changed ? ['changed' => true] : []);
 
         $rows = [];
         foreach ($ordered as $i => $e) {
-            $step = $e['step'];
             $line = $e['line'];
             $ref = trim((string) ($line['reaction_ref'] ?? ''));
             $reaction = trim((string) ($line['reaction'] ?? ''));
+            $field = fn (string $f) => $text($line[$f] ?? '', $lineChanged($e, $f));
             $rows[] = [
-                $merged($noRun[$i], (string) ($step['no'] ?? '')),
-                $merged($groupRun[$i], (string) ($step['group'] ?? ''), ['vertical' => true]),
-                $merged($stepRun[$i], (string) ($step['name'] ?? '')),
-                $merged($stepRun[$i], (string) ($step['machine'] ?? '')),
+                $merged($i, $noRun, 'no'),
+                $merged($i, $groupRun, 'group', ['vertical' => true]),
+                $merged($i, $stepRun, 'name'),
+                $merged($i, $stepRun, 'machine'),
                 ['text' => '-'],
-                $text($line['product'] ?? ''),
-                $text($line['process'] ?? ''),
-                $text($line['sc'] ?? ''),
-                $text($line['spec'] ?? ''),
-                $text($line['measurement'] ?? ''),
-                $text($line['size'] ?? ''),
-                $text($line['frequency'] ?? ''),
-                $text($line['control'] ?? ''),
-                $text($line['pic'] ?? '') + ['pic' => true],
-                $text($ref !== '' ? trim($reaction.' ('.$ref.')') : $reaction),
+                $field('product'),
+                $field('process'),
+                $field('sc'),
+                $field('spec'),
+                $field('measurement'),
+                $field('size'),
+                $field('frequency'),
+                $field('control'),
+                $field('pic') + ['pic' => true],
+                $text($ref !== '' ? trim($reaction.' ('.$ref.')') : $reaction, $lineChanged($e, 'reaction', 'reaction_ref')),
             ];
         }
 

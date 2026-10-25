@@ -3,12 +3,14 @@
     @if ($s['logo'])
         <img class="logo" src="{{ $s['logo'] }}" alt="">
     @endif
-    <div class="mill">{{ $s['mill'] }}<br>{{ $s['doc_no'] }}</div>
+    <div class="mill">@if (in_array('mill', $s['changed'] ?? [], true))<span class="chg">{{ $s['mill'] }}</span>@else{{ $s['mill'] }}@endif<br>{{ $s['doc_no'] }}</div>
     <p class="title">WORK STATION DOCUMENT</p>
     <table class="head">
+        {{-- A header value changed since the last release prints bold italic. --}}
+        @php($v = fn (string $k) => in_array($k, $s['changed'] ?? [], true) ? '<span class="chg">'.e($s[$k]).'</span>' : e($s[$k]))
         @foreach ([
-            ['Referensi SP', e($s['sp_ref']), 'Tanggal diterbitkan', e($s['issued'])],
-            ['Tanggal Diterbitkan SP', e($s['sp_date']), 'No. Revisi/Tanggal Revisi terakhir', e($s['rev_label'])],
+            ['Referensi SP', $v('sp_ref'), 'Tanggal diterbitkan', $v('issued')],
+            ['Tanggal Diterbitkan SP', $v('sp_date'), 'No. Revisi/Tanggal Revisi terakhir', e($s['rev_label'])],
             ['', '', 'Tanggal Review berikutnya', e($s['next_review'])],
             ['', '', 'Halaman', $pageNo.' dari '.$pages],
         ] as $r)

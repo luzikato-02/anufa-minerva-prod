@@ -257,6 +257,23 @@ class ControlPlanTest extends TestCase
         $this->assertTrue($s['rows'][2][0]['covered']);
         $this->assertSame('Weigh greige fabric', $s['rows'][7][2]['text']);
         $this->assertSame('Reweigh product (W-WSD-W-26)', $s['rows'][7][14]['text']);
+
+        // Rev 12 against Rev 11: what changed prints bold italic, and nothing else does.
+        $changed = [];
+        foreach ($s['rows'] as $r => $row) {
+            foreach ($row as $i => $cell) {
+                if (! empty($cell['changed'])) {
+                    $changed[] = $row[5]['text'].' / '.$i;
+                }
+            }
+        }
+        $this->assertSame(['Fabric width / 11', ...array_map(fn ($i) => 'Unwoven cord / '.$i, range(5, 14))], $changed);
+        $this->assertSame([], $s['changed']);
+        $this->assertStringContainsString('chg', view('control-plans.sheet', ['s' => $s, 'screen' => true])->render());
+
+        // Rev 11 has no release before it, so nothing on it is marked.
+        $first = PrintSheet::build($draft->plan->revisions()->where('rev_no', 11)->first(), ControlPlanSetting::current());
+        $this->assertSame([], array_filter(array_merge(...$first['rows']), fn ($c) => ! empty($c['changed'])));
     }
 
     public function test_reference_codes_are_found_in_text_and_the_library_shows_where_they_are_used(): void

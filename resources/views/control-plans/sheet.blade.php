@@ -62,6 +62,8 @@
     .sign .at { display: block; font-size: 6pt; color: #555; }
     .sign tr.who td { border-bottom: none; font-weight: bold; }
     .sign tr.pos td { border-top: none; font-size: 7pt; }
+    /* Text changed since the last release. */
+    .chg { font-weight: bold; font-style: italic; }
     .placeholder { color: #6b6f73; font-style: italic; }
     .watermark { position: fixed; top: 22%; left: 18%; width: 64%; text-align: center; font-size: 110pt; font-weight: bold; color: rgba(179, 38, 30, 0.10); transform: rotate(-24deg); z-index: 0; }
     .screen .watermark { position: absolute; top: 38%; }
@@ -80,6 +82,12 @@
     // <col> widths, so they go on the cells.
     $widths = [4, 6, 7.5, 7.5, 3, 8, 6, 5, 10.5, 9, 3.5, 6, 8, 5, 11];
     $cw = fn (int $i) => 'width: '.$widths[$i].'%';
+    // An info value, printed bold italic when it changed since the last release. Unchanged text stays bare: a span
+    // splits it into separate PDF text runs, which the importer would then read out of order.
+    $s['changed'] ??= [];
+    $s['notes_changed'] ??= [];
+    $chg = fn (string $html, bool $changed) => $changed ? '<span class="chg">'.$html.'</span>' : $html;
+    $val = fn (string ...$keys) => $chg(e(trim(implode(' ', array_map(fn ($k) => $info[$k] ?? '', $keys)))), (bool) array_intersect($keys, $s['changed']));
 @endphp
 
 @if (! $screen)
@@ -132,38 +140,38 @@
                 <tr>
                     <td class="phase" style="width: 34%">
                         @foreach ($s['phases'] as $key => $label)
-                            <span><span class="box">{{ ($info['phase'] ?? '') === $key ? '×' : '' }}</span>{{ $label }}</span>
+                            <span @class(['chg' => ($info['phase'] ?? '') === $key && in_array('phase', $s['changed'], true)])><span class="box">{{ ($info['phase'] ?? '') === $key ? '×' : '' }}</span>{{ $label }}</span>
                         @endforeach
                     </td>
-                    <td class="plantitle">{{ $s['title'] }}</td>
+                    <td @class(['plantitle', 'chg' => in_array('title', $s['changed'], true)])>{{ $s['title'] }}</td>
                     <td style="width: 34%"></td>
                 </tr>
             </table>
             <table class="info grid">
                 <tr>
                     <td colspan="2"><b>Control Plan Number:</b> {{ $s['doc_no'] }}</td>
-                    <td><b>Key Contact/Phone:</b> {{ $info['key_contact'] ?? '' }}</td>
+                    <td><b>Key Contact/Phone:</b> {!! $val('key_contact') !!}</td>
                     <td colspan="2"><b>Date (Orig.):</b> {{ $s['issued'] }}</td>
                     <td><b>Date (Rev.):</b> {{ $s['release_date'] }}</td>
                 </tr>
                 <tr>
-                    <td colspan="2"><b>Part Number / Latest Change Level:</b> {{ $info['part_number'] ?? '' }}</td>
-                    <td><b>Core Team:</b> {{ $info['core_team'] ?? '' }}</td>
+                    <td colspan="2"><b>Part Number / Latest Change Level:</b> {!! $val('part_number') !!}</td>
+                    <td><b>Core Team:</b> {!! $val('core_team') !!}</td>
                     <td></td>
-                    <td colspan="2"><b>Customer Engineering Approval/Date (If Req'd.)</b> {{ trim(($info['cust_eng_name'] ?? '').' '.($info['cust_eng_date'] ?? '')) }}</td>
+                    <td colspan="2"><b>Customer Engineering Approval/Date (If Req'd.)</b> {!! $val('cust_eng_name', 'cust_eng_date') !!}</td>
                 </tr>
                 <tr>
-                    <td colspan="2"><b>Part Name / Description:</b> {{ $info['part_name'] ?? '' }}</td>
+                    <td colspan="2"><b>Part Name / Description:</b> {!! $val('part_name') !!}</td>
                     <td><b>Organization/Plan Approval/Date:</b> <span class="nw">{{ $s['status'] === 'released' || $s['status'] === 'superseded' ? $s['release_date'] : '' }}</span></td>
                     <td></td>
-                    <td colspan="2"><b>Customer Quality Approval/Date (If Req'd.)</b> {{ trim(($info['cust_qual_name'] ?? '').' '.($info['cust_qual_date'] ?? '')) }}</td>
+                    <td colspan="2"><b>Customer Quality Approval/Date (If Req'd.)</b> {!! $val('cust_qual_name', 'cust_qual_date') !!}</td>
                 </tr>
                 <tr>
-                    <td><b>Organization/Plant:</b> {{ $info['org_plant'] ?? '' }}</td>
-                    <td><b>Organization Code:</b> {{ $info['org_code'] ?? '' }}</td>
-                    <td><b>Other Approval/Date (If Req'd.)</b> {{ trim(($info['other1_name'] ?? '').' '.($info['other1_date'] ?? '')) }}</td>
+                    <td><b>Organization/Plant:</b> {!! $val('org_plant') !!}</td>
+                    <td><b>Organization Code:</b> {!! $val('org_code') !!}</td>
+                    <td><b>Other Approval/Date (If Req'd.)</b> {!! $val('other1_name', 'other1_date') !!}</td>
                     <td></td>
-                    <td colspan="2"><b>Other Approval (If Req'd.)</b> {{ trim(($info['other2_name'] ?? '').' '.($info['other2_date'] ?? '')) }}</td>
+                    <td colspan="2"><b>Other Approval (If Req'd.)</b> {!! $val('other2_name', 'other2_date') !!}</td>
                 </tr>
             </table>
             <table class="grid main">
@@ -180,9 +188,10 @@
                         <tr data-row="{{ $r }}">
                             @foreach ($row as $i => $cell)
                                 @php($covered = ! empty($cell['covered']))
-                                @php($covered || $merged[$i] = $cell['text'])
+                                @php($covered || $merged[$i] = $cell)
                                 @php($continues = ! empty($s['rows'][$r + 1][$i]['covered']) && ! $nextTop)
-                                <td style="{{ $cw($i) }}" @class(['center' => in_array($i, [0, 4, 7, 10], true), 'cont' => $covered && ! $top, 'more' => $continues])>@if (! $covered || $top){!! $text($covered ? $merged[$i] : $cell['text']) !!}@endif</td>
+                                @php($shown = $covered ? $merged[$i] : $cell)
+                                <td style="{{ $cw($i) }}" @class(['center' => in_array($i, [0, 4, 7, 10], true), 'cont' => $covered && ! $top, 'more' => $continues, 'chg' => ! empty($shown['changed'])])>@if (! $covered || $top){!! $text($shown['text']) !!}@endif</td>
                             @endforeach
                         </tr>
                     @empty
@@ -194,7 +203,7 @@
             @if ($s['notes'] || $signGroups)
                 <div>
                     @if ($s['notes'])
-                        <div class="notes">@foreach ($s['notes'] as $note)<p>{!! $text($note) !!}</p>@endforeach</div>
+                        <div class="notes">@foreach ($s['notes'] as $n => $note)<p @class(['chg' => in_array($n, $s['notes_changed'], true)])>{!! $text($note) !!}</p>@endforeach</div>
                     @endif
                     @if ($signGroups)
                         <table class="sign">
