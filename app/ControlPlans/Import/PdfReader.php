@@ -147,7 +147,7 @@ class PdfReader
         foreach ([
             // Which header holds the table, and which column has exactly one value per row.
             ['anchor' => '/\breaction\b/i', 'rows' => '/\bsize\b/i'],
-            ['anchor' => '/\brevised\s+by\b|\brevision\s+no\b/i', 'rows' => '/\brevision\s+no\b|\brev\b/i'],
+            ['anchor' => '/\brevised\s+by\b|\brevision\s+no\b|\b(diubah|direvisi)\s+oleh\b|\bno\.?\s*revisi\b/i', 'rows' => '/\brevision\s+no\b|\brev\b|\bno\.?\s*revisi\b/i'],
         ] as $kind) {
             $header = self::headerZone($lines, $kind['anchor']);
             if ($header === null) {
@@ -200,7 +200,7 @@ class PdfReader
     private static function endsTable(string $text): bool
     {
         return preg_match('/^\*|^(catatan|notes?)\b|dibuat\s+oleh|disetujui\s+oleh|prepared\s+by|approved\s+by/iu', $text) === 1
-            || (PlanImport::isHeaderText($text) && preg_match('/\breaction\b|\brevised\s+by\b/i', $text) === 1);
+            || (PlanImport::isHeaderText($text) && preg_match('/\breaction\b|\brevised\s+by\b|\b(diubah|direvisi)\s+oleh\b/i', $text) === 1);
     }
 
     /** @return list<list<array{text: string, col: float, span: float}>>|null header row, then one row per body row */

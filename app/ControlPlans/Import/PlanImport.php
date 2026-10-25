@@ -48,6 +48,9 @@ class PlanImport
         'class', 'method', 'methods', 'specification', 'tolerance', 'evaluation', 'measurement', 'technique', 'sample',
         'size', 'freq', 'frequency', 'control', 'pic', 'reaction', 'plan', 'page', 'date', 'of', 'revision', 'rev',
         'revised', 'by', 'and',
+        // History tables headed in Indonesian, or in both languages.
+        'halaman', 'hal', 'tanggal', 'tgl', 'revisi', 'nomor', 'keterangan', 'uraian', 'perubahan', 'deskripsi',
+        'diubah', 'direvisi', 'oleh',
     ];
 
     /** Characteristics table columns by header text, the first match winning; null for the characteristic No. */
@@ -68,12 +71,12 @@ class PlanImport
     ];
 
     private const HISTORY_COLUMNS = [
-        'revised_by' => '/revised\s*by|\bby\b/i',
-        'description' => '/description|keterangan/i',
-        // Before rev: "Date of Revision" is the date.
-        'date' => '/date|tanggal/i',
+        'revised_by' => '/revised\s*by|\bby\b|\boleh\b/i',
+        'description' => '/description|keterangan|uraian|perubahan|deskripsi/i',
+        // Before rev: "Date of Revision" and "Tanggal Revisi" are the date.
+        'date' => '/date|tanggal|\btgl\b/i',
         'rev' => '/revision\s*no|\brev/i',
-        'page' => '/page|halaman/i',
+        'page' => '/page|halaman|\bhal\b/i',
     ];
 
     private const PHASE_WORDS = '(prototype|pre-?\s?launch|production)';
@@ -118,18 +121,33 @@ class PlanImport
 
         [$steps, $lines, $history, $signatures] = [[], [], [], ['prepared' => [], 'approved' => []]];
         $foundLines = false;
+        // The table read last, so one carried on without its header (Word splits a table at a page break, or
+        // the author started a new one) continues it: [kind, keys, width].
+        $last = null;
         foreach ($doc->tables as $table) {
             [$columns, $body] = $this->columns($table);
             $lineKeys = $this->keys($columns, self::LINE_COLUMNS);
             $historyKeys = $this->keys($columns, self::HISTORY_COLUMNS);
-            if (in_array('reaction', $lineKeys, true) && array_intersect(['product', 'spec'], $lineKeys)) {
-                $foundLines = true;
-                $this->characteristics($body, $this->stepGroup($lineKeys), $steps, $lines);
+            $found = $this->signatures($table);
+            if (! $columns && ! $found && $last && $last[2] === self::width($table)) {
+                [$kind, $keys] = $last;
+            } elseif (in_array('reaction', $lineKeys, true) && array_intersect(['product', 'spec'], $lineKeys)) {
+                [$kind, $keys] = ['lines', $this->stepGroup($lineKeys)];
             } elseif (in_array('rev', $historyKeys, true) && in_array('description', $historyKeys, true)) {
-                array_push($history, ...$this->history($body, $historyKeys));
-            } elseif ($found = $this->signatures($table)) {
-                $signatures = $found;
+                [$kind, $keys] = ['history', $historyKeys];
+            } else {
+                $signatures = $found ?: $signatures;
+                $last = null;
+
+                continue;
             }
+            if ($kind === 'lines') {
+                $foundLines = true;
+                $this->characteristics($body, $keys, $steps, $lines);
+            } else {
+                array_push($history, ...$this->history($body, $keys));
+            }
+            $last = [$kind, $keys, self::width($table)];
         }
 
         if (! $foundLines) {
@@ -145,6 +163,8 @@ class PlanImport
         }
         if (! $history) {
             $this->warnings[] = 'No revision history table was found.';
+        } elseif ($missing = $this->missingRevisions($history)) {
+            $this->warnings[] = $missing;
         }
 
         [$revNo, $revDate] = $this->revision($f['rev'] ?? '', $history);
@@ -262,7 +282,8 @@ class PlanImport
 
     /**
      * A table's header text per grid column (the header rows are the leading rows of header words only; a header
-     * cell spanning several columns names each of them) and its body rows.
+     * cell spanning several columns names each of them) and its body rows. A title row above the header, such as
+     * "REVISION HISTORY" across the table, is left out.
      *
      * @return array{0: array<int, string>, 1: list<list<array{text: string, col: float, span: float}>>}
      */
@@ -270,6 +291,11 @@ class PlanImport
     {
         $columns = [];
         $h = 0;
+        $isHeader = fn (int $r) => isset($table[$r]) && self::isHeaderText(implode(' ', array_column($table[$r], 'text')));
+        $filled = fn (int $r) => count(array_filter($table[$r] ?? [], fn ($c) => $c['span'] > 0 && trim($c['text']) !== ''));
+        while ($h < 2 && ! $isHeader($h) && $filled($h) === 1 && $isHeader($h + 1)) {
+            $h++;
+        }
         while ($h < count($table) && self::isHeaderText(implode(' ', array_column($table[$h], 'text')))) {
             foreach ($table[$h] as $cell) {
                 if ($cell['span'] <= 0 || trim($cell['text']) === '') {
@@ -391,6 +417,47 @@ class PlanImport
         }
 
         return [$text, ''];
+    }
+
+    /** The number of grid columns a table spans. */
+    private static function width(array $table): int
+    {
+        $width = 0;
+        foreach ($table as $row) {
+            foreach ($row as $cell) {
+                $width = max($width, (int) ($cell['col'] + max(1, $cell['span'])));
+            }
+        }
+
+        return $width;
+    }
+
+    /** A warning when the history rows do not run from Rev 00 without gaps, as a sign some were not read. */
+    private function missingRevisions(array $history): ?string
+    {
+        $revs = array_values(array_unique(array_filter(array_map(fn ($h) => preg_match('/\d{1,3}/', $h['rev'], $m) ? (int) $m[0] : null, $history), 'is_int')));
+        if (! $revs) {
+            return null;
+        }
+        $absent = array_values(array_diff(range(0, max($revs)), $revs));
+        if (! $absent) {
+            return null;
+        }
+        // Runs of three or more read "00 to 08".
+        $runs = [];
+        foreach ($absent as $r) {
+            $last = array_key_last($runs);
+            if ($last !== null && end($runs[$last]) === $r - 1) {
+                $runs[$last][] = $r;
+            } else {
+                $runs[] = [$r];
+            }
+        }
+        $list = implode(', ', array_map(fn ($run) => count($run) > 2
+            ? PlanDates::rev($run[0]).' to '.PlanDates::rev(end($run))
+            : implode(', ', array_map(fn ($r) => PlanDates::rev($r), $run)), $runs));
+
+        return "The revision history has no row for Rev {$list}. If the file lists them, check its history table: they were not read.";
     }
 
     private function history(array $body, array $keys): array

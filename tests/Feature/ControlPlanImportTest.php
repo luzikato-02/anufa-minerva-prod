@@ -129,7 +129,8 @@ class ControlPlanImportTest extends TestCase
 
         $this->assertReadsBack($revision, $data);
         $this->assertSame('docx', $data['format']);
-        $this->assertSame([], $data['warnings']);
+        // The sample's history jumps from Rev 00 to Rev 11, and the preview says so.
+        $this->assertSame(['The revision history has no row for Rev 01 to 10. If the file lists them, check its history table: they were not read.'], $data['warnings']);
     }
 
     public function test_a_pdf_export_reads_back_as_the_same_plan(): void
@@ -249,6 +250,51 @@ class ControlPlanImportTest extends TestCase
         $this->actingAs($admin)->postJson('/control-plans', ['doc_no' => 'W-WSD-W-30', 'title' => 'Again', 'rev_no' => 0])->assertCreated();
         $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
         $this->assertTrue(\Spatie\Permission\Models\Role::findByName('admin')->hasPermissionTo('control-plans.delete'));
+    }
+
+    public function test_history_tables_are_read_in_the_ways_plans_lay_them_out(): void
+    {
+        $english = ['Page', 'Date of Revision', 'Revision No', 'Description', 'Revised by'];
+        $row = fn (int $rev) => ['All', "1 Januari 20{$rev}", sprintf('%02d', $rev), "Change {$rev}", 'Budi'];
+        $layouts = [
+            'Indonesian header' => [[['Halaman', 'Tanggal Revisi', 'No. Revisi', 'Keterangan', 'Diubah oleh'], $row(0), $row(1)]],
+            'both languages' => [[['Halaman / Page', 'Tanggal / Date', 'Revisi / Rev', 'Keterangan / Description', 'Oleh / Revised by'], $row(0), $row(1)]],
+            'title row above the header' => [[['REVISION HISTORY'], $english, $row(0), $row(1)]],
+            'continued without its header' => [[$english, $row(0)], [$row(1)]],
+        ];
+        foreach ($layouts as $layout => $tables) {
+            $word = new \PhpOffice\PhpWord\PhpWord;
+            $section = $word->addSection();
+            foreach ($tables as $rows) {
+                $table = $section->addTable();
+                foreach ($rows as $cells) {
+                    $table->addRow();
+                    count($cells) === 1
+                        ? $table->addCell(10000, ['gridSpan' => 5])->addText($cells[0])
+                        : array_map(fn ($c) => $table->addCell(2000)->addText($c), $cells);
+                }
+                $section->addText('');
+            }
+            $path = tempnam(sys_get_temp_dir(), 'cp').'.docx';
+            \PhpOffice\PhpWord\IOFactory::createWriter($word)->save($path);
+
+            $data = $this->preview($this->author(), $this->upload($path, 'plan.docx'));
+            $this->assertSame([
+                ['page' => 'All', 'date' => '1 Januari 200', 'rev' => '00', 'description' => 'Change 0', 'revised_by' => 'Budi'],
+                ['page' => 'All', 'date' => '1 Januari 201', 'rev' => '01', 'description' => 'Change 1', 'revised_by' => 'Budi'],
+            ], $data['history'], $layout);
+        }
+
+        // Rows missing from the start or the middle are pointed out.
+        $word = new \PhpOffice\PhpWord\PhpWord;
+        $table = $word->addSection()->addTable();
+        foreach ([$english, $row(3), $row(5)] as $cells) {
+            $table->addRow();
+            array_map(fn ($c) => $table->addCell(2000)->addText($c), $cells);
+        }
+        $path = tempnam(sys_get_temp_dir(), 'cp').'.docx';
+        \PhpOffice\PhpWord\IOFactory::createWriter($word)->save($path);
+        $this->assertContains('The revision history has no row for Rev 00 to 02, 04. If the file lists them, check its history table: they were not read.', $this->preview($this->author(), $this->upload($path, 'plan.docx'))['warnings']);
     }
 
     public function test_files_that_cannot_be_imported_say_why(): void
