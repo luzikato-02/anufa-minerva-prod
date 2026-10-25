@@ -101,6 +101,7 @@ export function ImportPlanDialog({
                 info: { ...preview.info, title: title.trim() },
                 content: preview.content,
                 history: preview.history,
+                marks: preview.marks,
                 release_date: status === 'released' ? releaseDate : null,
                 next_review_date:
                     status === 'released' && nextReview ? nextReview : null,
@@ -451,6 +452,17 @@ function LinesPreview({ preview }: { preview: ImportPreview }) {
     const rows = orderedLines(preview.content);
     const steps = preview.content.steps.length;
     const cell = 'border px-2 py-1 align-top';
+    const marks = preview.marks;
+    // Cells the file printed in bold italic show the same way here.
+    const marked = (kind: 'steps' | 'lines', id: string, ...fields: string[]) =>
+        fields.some((f) => marks?.[kind][id]?.includes(f)) &&
+        'font-bold italic';
+    const markedCount = marks
+        ? [...Object.values(marks.steps), ...Object.values(marks.lines)].reduce(
+              (n, fields) => n + fields.length,
+              marks.header.length + marks.info.length + marks.notes.length,
+          )
+        : 0;
 
     return (
         <section className="flex flex-col gap-2" aria-label="Characteristics">
@@ -460,6 +472,18 @@ function LinesPreview({ preview }: { preview: ImportPreview }) {
                     ? '1 characteristic'
                     : `${rows.length} characteristics`}
             </h3>
+            {markedCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                    <b className="font-bold text-foreground italic">
+                        {markedCount === 1
+                            ? '1 field'
+                            : `${markedCount} fields`}
+                    </b>{' '}
+                    {markedCount === 1 ? 'is' : 'are'} in bold italic in the
+                    file. The imported revision prints them that way, as its
+                    changes.
+                </p>
+            )}
             <div className="max-h-72 overflow-auto rounded-md border">
                 <table className="w-full border-collapse text-xs">
                     <thead className="sticky top-0 bg-muted">
@@ -497,30 +521,96 @@ function LinesPreview({ preview }: { preview: ImportPreview }) {
                                 <tr key={line.id}>
                                     {first && (
                                         <>
-                                            <td className={cell} rowSpan={span}>
+                                            <td
+                                                className={cn(
+                                                    cell,
+                                                    marked(
+                                                        'steps',
+                                                        step.id,
+                                                        'no',
+                                                    ),
+                                                )}
+                                                rowSpan={span}
+                                            >
                                                 {step.no}
                                             </td>
                                             <td className={cell} rowSpan={span}>
                                                 {step.group && (
-                                                    <span className="block text-muted-foreground">
+                                                    <span
+                                                        className={cn(
+                                                            'block text-muted-foreground',
+                                                            marked(
+                                                                'steps',
+                                                                step.id,
+                                                                'group',
+                                                            ),
+                                                        )}
+                                                    >
                                                         {step.group}
                                                     </span>
                                                 )}
-                                                {step.name}
+                                                <span
+                                                    className={cn(
+                                                        marked(
+                                                            'steps',
+                                                            step.id,
+                                                            'name',
+                                                        ) || undefined,
+                                                    )}
+                                                >
+                                                    {step.name}
+                                                </span>
                                             </td>
-                                            <td className={cell} rowSpan={span}>
+                                            <td
+                                                className={cn(
+                                                    cell,
+                                                    marked(
+                                                        'steps',
+                                                        step.id,
+                                                        'machine',
+                                                    ),
+                                                )}
+                                                rowSpan={span}
+                                            >
                                                 {step.machine}
                                             </td>
                                         </>
                                     )}
-                                    <td className={cell}>{line.product}</td>
-                                    <td className={cell}>{line.process}</td>
-                                    <td className={cell}>{line.spec}</td>
+                                    <td
+                                        className={cn(
+                                            cell,
+                                            marked('lines', line.id, 'product'),
+                                        )}
+                                    >
+                                        {line.product}
+                                    </td>
+                                    <td
+                                        className={cn(
+                                            cell,
+                                            marked('lines', line.id, 'process'),
+                                        )}
+                                    >
+                                        {line.process}
+                                    </td>
+                                    <td
+                                        className={cn(
+                                            cell,
+                                            marked('lines', line.id, 'spec'),
+                                        )}
+                                    >
+                                        {line.spec}
+                                    </td>
                                     <td
                                         className={cn(
                                             cell,
                                             !line.size.trim() &&
                                                 'bg-destructive/10',
+                                            marked(
+                                                'lines',
+                                                line.id,
+                                                'size',
+                                                'frequency',
+                                            ),
                                         )}
                                     >
                                         {[
@@ -530,7 +620,16 @@ function LinesPreview({ preview }: { preview: ImportPreview }) {
                                             .filter(Boolean)
                                             .join(' · ')}
                                     </td>
-                                    <td className={cell}>
+                                    <td
+                                        className={cn(
+                                            cell,
+                                            marked(
+                                                'lines',
+                                                line.id,
+                                                'reaction',
+                                            ),
+                                        )}
+                                    >
                                         {line.reaction}
                                         {line.reaction_ref &&
                                             ` (${line.reaction_ref})`}

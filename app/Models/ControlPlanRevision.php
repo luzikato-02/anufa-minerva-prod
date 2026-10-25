@@ -55,7 +55,7 @@ class ControlPlanRevision extends Model
     public const LINE_FIELDS = ['product', 'process', 'sc', 'spec', 'measurement', 'size', 'frequency', 'control', 'pic', 'reaction', 'reaction_ref'];
 
     protected $fillable = [
-        'control_plan_id', 'rev_no', 'status', 'header', 'info', 'content', 'history', 'reference_snapshot',
+        'control_plan_id', 'rev_no', 'status', 'header', 'info', 'content', 'history', 'marks', 'reference_snapshot',
         'author_id', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'released_by', 'release_date', 'next_review_date',
     ];
 
@@ -64,6 +64,7 @@ class ControlPlanRevision extends Model
         'info' => 'array',
         'content' => 'array',
         'history' => 'array',
+        'marks' => 'array',
         'reference_snapshot' => 'array',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',

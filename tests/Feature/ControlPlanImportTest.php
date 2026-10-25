@@ -129,8 +129,31 @@ class ControlPlanImportTest extends TestCase
 
         $this->assertReadsBack($revision, $data);
         $this->assertSame('docx', $data['format']);
+        $this->assertNull($data['marks']);
         // The sample's history jumps from Rev 00 to Rev 11, and the preview says so.
         $this->assertSame(['The revision history has no row for Rev 01 to 10. If the file lists them, check its history table: they were not read.'], $data['warnings']);
+    }
+
+    public function test_bold_italic_in_word_is_kept_as_the_imported_revisions_changes(): void
+    {
+        // Rev 12 prints what changed since Rev 11 in bold italic: imported as a plan of its own, it prints the same.
+        $this->released();
+        $draft = ControlPlanRevision::where('rev_no', 12)->firstOrFail();
+        $draft->update(['header' => ['sp_ref' => 'W-W-02'] + $draft->header, 'content' => ['notes' => "* Depends on the article\n** Checked by QA twice"] + $draft->content]);
+        $sheet = PrintSheet::build($draft->fresh(), ControlPlanSetting::current());
+        $data = $this->preview($this->author(), $this->upload(WordExport::save($sheet), 'W-WSD-W-30.docx'));
+        $this->assertSame(['sp_ref'], $data['marks']['header']);
+        $this->assertSame([1], $data['marks']['notes']);
+
+        $plan = $this->actingAs($this->author())->postJson('/control-plans/import', ['status' => 'draft', 'doc_no' => 'W-WSD-W-31'] + $data)
+            ->assertCreated()->json('data.plan_id');
+        $imported = PrintSheet::build(ControlPlan::find($plan)->revisions()->first(), ControlPlanSetting::current());
+        // The same cells print bold italic, but for the "-" of empty ones: the file gives no text to mark there.
+        $changed = fn (array $s) => array_merge(...array_map(fn ($row) => array_keys(array_filter($row, fn ($c) => ! empty($c['changed']) && $c['text'] !== '-')), $s['rows']));
+        $this->assertNotEmpty($changed($sheet));
+        $this->assertSame($changed($sheet), $changed($imported));
+        $this->assertSame(['sp_ref'], $imported['changed']);
+        $this->assertSame([1], $imported['notes_changed']);
     }
 
     public function test_a_pdf_export_reads_back_as_the_same_plan(): void
@@ -140,6 +163,7 @@ class ControlPlanImportTest extends TestCase
 
         $this->assertReadsBack($revision, $data);
         $this->assertSame('pdf', $data['format']);
+        $this->assertNull($data['marks']);
     }
 
     public function test_a_pdf_plan_over_several_pages_keeps_its_steps(): void

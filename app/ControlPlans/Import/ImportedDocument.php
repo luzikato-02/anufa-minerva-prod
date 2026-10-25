@@ -10,9 +10,12 @@ namespace App\ControlPlans\Import;
  *
  * tables: each table as rows of cells. A cell's col is where it starts and span how wide it is, in grid columns
  * for Word; a PDF signature block has no grid, so its cells carry their x position with span 0. A cell merged into
- * the one above it has empty text. Paragraphs inside a cell are separated by "\n".
+ * the one above it has empty text. Paragraphs inside a cell are separated by "\n". A Word cell holding bold italic
+ * text is marked.
  *
- * @phpstan-type Cell array{text: string, col: float, span: float}
+ * marked: the passages set in bold italic, each on one line; plans print what their latest revision changed that way.
+ *
+ * @phpstan-type Cell array{text: string, col: float, span: float, marked?: true}
  */
 final class ImportedDocument
 {
@@ -20,11 +23,13 @@ final class ImportedDocument
      * @param  list<string>  $lines
      * @param  list<list<list<Cell>>>  $tables
      * @param  list<string>  $warnings  what the reader could not do, worded for the person importing
+     * @param  list<string>  $marked
      */
     public function __construct(
         public readonly string $format,
         public readonly array $lines,
         public readonly array $tables,
         public readonly array $warnings = [],
+        public readonly array $marked = [],
     ) {}
 }

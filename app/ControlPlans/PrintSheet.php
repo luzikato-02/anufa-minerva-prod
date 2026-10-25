@@ -15,7 +15,7 @@ class PrintSheet
     public const PAGES = 2;
 
     /** The page header fields an author writes; the revision and review dates change with every release, so are not marked. */
-    private const HEADER_FIELDS = ['mill', 'sp_ref', 'sp_date', 'issued'];
+    public const HEADER_FIELDS = ['mill', 'sp_ref', 'sp_date', 'issued'];
 
     public const PHASES = ['prototype' => 'Prototype', 'pre_launch' => 'Pre-launch', 'production' => 'Production'];
 
@@ -29,7 +29,10 @@ class PrintSheet
         $released = $revision->release_date !== null;
         $footer = ControlPlanRevision::footer($revision->content);
         // What changed is printed bold italic: everything that differs from the last release before this revision.
+        // A revision with no release before it has nothing to compare with; one imported from Word keeps what the
+        // file printed in bold italic.
         $base = $revision->previousReleased();
+        $marks = $base === null ? $revision->marks : null;
         $baseHeader = $base?->header ?? [];
         $baseInfo = $base?->info ?? [];
         $baseNotes = $base ? self::bullets(ControlPlanRevision::footer($base->content)['notes']) : null;
@@ -56,13 +59,13 @@ class PrintSheet
             'info' => $info + ['phase' => 'production'],
             'phases' => self::PHASES,
             'title' => trim((string) ($info['title'] ?? '')) !== '' ? $info['title'] : '[CONTROL PLAN TITLE]',
-            'rows' => self::rows($revision->content ?? [], $base?->content),
+            'rows' => self::rows($revision->content ?? [], $base?->content, $marks),
             'notes' => $notes,
-            'notes_changed' => $baseNotes === null ? [] : array_keys(array_diff($notes, $baseNotes)),
-            'changed' => $base === null ? [] : array_keys(array_filter([
+            'notes_changed' => $marks !== null ? ($marks['notes'] ?? []) : ($baseNotes === null ? [] : array_keys(array_diff($notes, $baseNotes))),
+            'changed' => $marks !== null ? [...$marks['header'] ?? [], ...$marks['info'] ?? []] : ($base === null ? [] : array_keys(array_filter([
                 ...array_map(fn ($k) => trim((string) ($header[$k] ?? '')) !== trim((string) ($baseHeader[$k] ?? '')), array_combine(self::HEADER_FIELDS, self::HEADER_FIELDS)),
                 ...array_map(fn ($k) => trim((string) ($info[$k] ?? '')) !== trim((string) ($baseInfo[$k] ?? '')), array_combine(ControlPlanRevision::INFO_FIELDS, ControlPlanRevision::INFO_FIELDS)),
-            ])),
+            ]))),
             'signatures' => $footer['signatures'],
             'signed' => $revision->signed($fmt),
         ] + ($logo ?? ['logo' => $settings->logoDataUri(), 'logo_file' => $settings->logoFile()]);
@@ -120,21 +123,25 @@ class PrintSheet
      * The characteristics table, one row per line. Each row is the 15 printed cells in column order; the process
      * no., group, process name and machine cells merge down over the lines that share them. A cell covered by
      * the one above is ['covered' => true]; the cell that starts a merge carries its 'rowspan'. Given the content of
-     * the last release, a cell whose text differs from it (or that belongs to a new line or step) is 'changed'.
+     * the last release, a cell whose text differs from it (or that belongs to a new line or step) is 'changed'; given
+     * an imported revision's marks instead (step and line id => fields), the cells they name are.
      *
      * @return list<list<array{text?: string, rowspan?: int, covered?: bool, vertical?: bool, pic?: bool, changed?: bool}>>
      */
-    public static function rows(array $content, ?array $base = null): array
+    public static function rows(array $content, ?array $base = null, ?array $marks = null): array
     {
         $ordered = RevisionDiff::ordered($content);
         $n = count($ordered);
         $baseSteps = array_column($base['steps'] ?? [], null, 'id');
         $baseLines = array_column($base['lines'] ?? [], null, 'id');
         // Whether a field of an entry's step or line differs from the base; nothing differs when there is no base.
-        $stepChanged = fn (array $e, string $f) => $base !== null
-            && (! isset($baseSteps[$e['step']['id']]) || trim((string) ($e['step'][$f] ?? '')) !== trim((string) ($baseSteps[$e['step']['id']][$f] ?? '')));
-        $lineChanged = fn (array $e, string ...$fs) => $base !== null && (! isset($baseLines[$e['line']['id']])
-            || array_filter($fs, fn ($f) => trim((string) ($e['line'][$f] ?? '')) !== trim((string) ($baseLines[$e['line']['id']][$f] ?? ''))) !== []);
+        $stepChanged = fn (array $e, string $f) => $marks !== null
+            ? in_array($f, $marks['steps'][$e['step']['id']] ?? [], true)
+            : $base !== null && (! isset($baseSteps[$e['step']['id']]) || trim((string) ($e['step'][$f] ?? '')) !== trim((string) ($baseSteps[$e['step']['id']][$f] ?? '')));
+        $lineChanged = fn (array $e, string ...$fs) => $marks !== null
+            ? array_intersect($fs, $marks['lines'][$e['line']['id']] ?? []) !== []
+            : $base !== null && (! isset($baseLines[$e['line']['id']])
+                || array_filter($fs, fn ($f) => trim((string) ($e['line'][$f] ?? '')) !== trim((string) ($baseLines[$e['line']['id']][$f] ?? ''))) !== []);
         $runs = function (callable $key) use ($ordered, $n): array {
             $spans = array_fill(0, $n, 0);
             for ($i = 0; $i < $n;) {

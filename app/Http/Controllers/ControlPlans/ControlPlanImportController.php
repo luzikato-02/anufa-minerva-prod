@@ -6,6 +6,7 @@ use App\ControlPlans\DocumentInput;
 use App\ControlPlans\Import\DocxReader;
 use App\ControlPlans\Import\PdfReader;
 use App\ControlPlans\Import\PlanImport;
+use App\ControlPlans\PrintSheet;
 use App\ControlPlans\ReferenceCodes;
 use App\Http\Controllers\Controller;
 use App\Models\ControlPlan;
@@ -82,6 +83,7 @@ class ControlPlanImportController extends Controller
             'history.*.revised_by' => 'nullable|string|max:255',
             'release_date' => 'nullable|required_if:status,released|date',
             'next_review_date' => 'nullable|date|after_or_equal:release_date',
+            'marks' => 'nullable|array',
         ]);
         $replacing = $request->boolean('replace') ? ControlPlan::with('revisions')->where('doc_no', trim((string) $request->input('doc_no')))->first() : null;
         $doc = DocumentInput::validate($request, replacing: $replacing);
@@ -119,6 +121,7 @@ class ControlPlanImportController extends Controller
                 'info' => $doc['info'],
                 'content' => $content,
                 'history' => array_map(fn ($h) => ['pages' => $h['page'] !== '' ? $h['page'] : 'All', 'description' => $h['description']], $own) ?: null,
+                'marks' => self::marks($meta['marks'] ?? null, $content),
                 'author_id' => $user->id,
             ];
             if ($released) {
@@ -145,5 +148,34 @@ class ControlPlanImportController extends Controller
         });
 
         return response()->json(['success' => true, 'data' => ['plan_id' => $revision->control_plan_id, 'revision_id' => $revision->id]], 201);
+    }
+
+    /**
+     * The bold italic fields the preview found, kept to the shape PrintSheet reads: header and info keys, note
+     * indexes, and the fields of steps and lines that are in the content. Null when nothing is left.
+     */
+    private static function marks(?array $marks, array $content): ?array
+    {
+        $fields = fn ($list, array $allowed) => array_values(array_intersect(is_array($list) ? $list : [], $allowed));
+        $byId = function (string $kind, array $allowed) use ($marks, $content, $fields) {
+            $ids = array_column($content[$kind], 'id');
+            $out = [];
+            foreach (is_array($marks[$kind] ?? null) ? $marks[$kind] : [] as $id => $list) {
+                if (in_array($id, $ids, true) && ($kept = $fields($list, $allowed))) {
+                    $out[$id] = $kept;
+                }
+            }
+
+            return $out;
+        };
+        $kept = [
+            'header' => $fields($marks['header'] ?? [], PrintSheet::HEADER_FIELDS),
+            'info' => $fields($marks['info'] ?? [], ControlPlanRevision::INFO_FIELDS),
+            'notes' => array_values(array_filter(is_array($marks['notes'] ?? null) ? $marks['notes'] : [], fn ($n) => is_int($n) && $n >= 0)),
+            'steps' => $byId('steps', ControlPlanRevision::STEP_FIELDS),
+            'lines' => $byId('lines', ControlPlanRevision::LINE_FIELDS),
+        ];
+
+        return array_filter($kept) ? $kept : null;
     }
 }

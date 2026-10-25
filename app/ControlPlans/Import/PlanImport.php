@@ -91,6 +91,11 @@ class PlanImport
 
     private bool $cut = false;
 
+    /** The fields printed in bold italic, the way plans show what their latest revision changed: id => fields. */
+    private array $markedSteps = [];
+
+    private array $markedLines = [];
+
     public static function hasLabel(string $text): bool
     {
         return preg_match(self::labelPattern(), $text) === 1;
@@ -175,42 +180,59 @@ class PlanImport
             $this->warnings[] = 'Some text was longer than the editor allows and was cut short. Check the long cells.';
         }
 
+        // A labelled value is marked when a bold italic passage lies within it, or it within a longer passage
+        // (the whole "Core Team: …" row in bold italic).
+        $isMarked = fn (string $value) => trim($value) !== '' && array_filter($doc->marked, fn ($m) => (mb_strlen($m) >= 2 && str_contains($value, $m))
+            || (mb_strlen($value) >= 4 && str_contains($m, $value))) !== [];
         $approval = fn (string $key) => $this->splitDate($f[$key] ?? '');
         [$custEng, $custEngDate] = $approval('cust_eng');
         [$custQual, $custQualDate] = $approval('cust_qual');
         [$other1, $other1Date] = $approval('other1');
         [$other2, $other2Date] = $approval('other2');
 
+        $header = [
+            'mill' => $this->cut($this->mill($doc->lines, $docNo), 255),
+            'sp_ref' => $this->cut($f['sp_ref'] ?? '', 255),
+            'sp_date' => $this->cut($f['sp_date'] ?? '', 255),
+            'issued' => $this->cut(($f['issued'] ?? '') !== '' ? $f['issued'] : ($f['orig_date'] ?? ''), 255),
+        ];
+        $info = array_map(fn ($v) => $this->cut($v, 255), array_replace(array_fill_keys(ControlPlanRevision::INFO_FIELDS, ''), [
+            'phase' => $this->phase($doc->lines),
+            'title' => $this->title($doc->lines),
+            'key_contact' => $f['key_contact'] ?? '',
+            'core_team' => $f['core_team'] ?? '',
+            'part_number' => $f['part_number'] ?? '',
+            'part_name' => $f['part_name'] ?? '',
+            'org_plant' => $f['org_plant'] ?? '',
+            'org_code' => $f['org_code'] ?? '',
+            'cust_eng_name' => $custEng, 'cust_eng_date' => $custEngDate,
+            'cust_qual_name' => $custQual, 'cust_qual_date' => $custQualDate,
+            'other1_name' => $other1, 'other1_date' => $other1Date,
+            'other2_name' => $other2, 'other2_date' => $other2Date,
+        ]));
+        $notes = $this->cut($this->notes($doc->lines), 5000);
+        $marks = [
+            'header' => array_keys(array_filter($header, $isMarked)),
+            'info' => array_keys(array_filter(array_diff_key($info, ['phase' => true]), $isMarked)),
+            'notes' => array_keys(array_filter($notes === '' ? [] : explode("\n", $notes), $isMarked)),
+            'steps' => $this->markedSteps,
+            'lines' => $this->markedLines,
+        ];
+
         return [
             'format' => $doc->format,
             'doc_no' => $this->cut($docNo, 255),
             'rev_no' => $revNo,
-            'header' => [
-                'mill' => $this->cut($this->mill($doc->lines, $docNo), 255),
-                'sp_ref' => $this->cut($f['sp_ref'] ?? '', 255),
-                'sp_date' => $this->cut($f['sp_date'] ?? '', 255),
-                'issued' => $this->cut(($f['issued'] ?? '') !== '' ? $f['issued'] : ($f['orig_date'] ?? ''), 255),
-            ],
-            'info' => array_map(fn ($v) => $this->cut($v, 255), array_replace(array_fill_keys(ControlPlanRevision::INFO_FIELDS, ''), [
-                'phase' => $this->phase($doc->lines),
-                'title' => $this->title($doc->lines),
-                'key_contact' => $f['key_contact'] ?? '',
-                'core_team' => $f['core_team'] ?? '',
-                'part_number' => $f['part_number'] ?? '',
-                'part_name' => $f['part_name'] ?? '',
-                'org_plant' => $f['org_plant'] ?? '',
-                'org_code' => $f['org_code'] ?? '',
-                'cust_eng_name' => $custEng, 'cust_eng_date' => $custEngDate,
-                'cust_qual_name' => $custQual, 'cust_qual_date' => $custQualDate,
-                'other1_name' => $other1, 'other1_date' => $other1Date,
-                'other2_name' => $other2, 'other2_date' => $other2Date,
-            ])),
+            'header' => $header,
+            'info' => $info,
             'content' => [
                 'steps' => $steps,
                 'lines' => $lines,
-                'notes' => $this->cut($this->notes($doc->lines), 5000),
+                'notes' => $notes,
                 'signatures' => $signatures,
             ],
+            // What the file printed in bold italic, kept as this revision's changes; null when nothing was.
+            'marks' => array_filter($marks) ? $marks : null,
             'history' => $history,
             'release_date' => $revDate ?? PlanDates::parse($f['rev_date'] ?? ''),
             'next_review_date' => PlanDates::parse($f['next_review'] ?? ''),
@@ -341,8 +363,11 @@ class PlanImport
         return $keys;
     }
 
-    /** A body row as field => text. A cell spanning several columns goes to the step name if it covers it. */
-    private function values(array $row, array $keys): array
+    /**
+     * A body row as field => text. A cell spanning several columns goes to the step name if it covers it. The
+     * fields whose cell holds bold italic text are set in $marked.
+     */
+    private function values(array $row, array $keys, array &$marked = []): array
     {
         $out = [];
         foreach ($row as $cell) {
@@ -357,6 +382,9 @@ class PlanImport
             }
             $key = in_array('name', $covered, true) ? 'name' : $covered[0];
             $out[$key] = isset($out[$key]) ? $out[$key]."\n".$cell['text'] : $cell['text'];
+            if (! empty($cell['marked'])) {
+                $marked[$key] = true;
+            }
         }
 
         return $out;
@@ -376,7 +404,8 @@ class PlanImport
             if (self::isHeaderText(implode(' ', array_column($row, 'text')))) {
                 continue;
             }
-            $v = array_map(fn ($t) => DocxReader::flat($t), $this->values($row, $keys));
+            $marked = [];
+            $v = array_map(fn ($t) => DocxReader::flat($t), $this->values($row, $keys, $marked));
             if (! array_filter($v, fn ($t) => $t !== '')) {
                 continue;
             }
@@ -404,6 +433,11 @@ class PlanImport
                 ];
                 $current = array_key_last($steps);
             }
+            $stepMarks = array_keys(array_intersect_key($marked, array_flip(ControlPlanRevision::STEP_FIELDS)));
+            if ($stepMarks) {
+                $id = $steps[$current]['id'];
+                $this->markedSteps[$id] = array_values(array_unique([...$this->markedSteps[$id] ?? [], ...$stepMarks]));
+            }
 
             [$reaction, $ref] = $this->reaction($v['reaction'] ?? '');
             $line = ['id' => Str::uuid()->toString(), 'step_id' => $steps[$current]['id']];
@@ -415,6 +449,10 @@ class PlanImport
                 }, 2000);
             }
             $lines[] = $line;
+            // The reaction cell holds the reaction and its document code; both are marked as 'reaction'.
+            if ($lineMarks = array_keys(array_intersect_key($marked, array_flip(ControlPlanRevision::LINE_FIELDS)))) {
+                $this->markedLines[$line['id']] = $lineMarks;
+            }
         }
     }
 

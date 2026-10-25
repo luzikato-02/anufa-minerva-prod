@@ -283,6 +283,18 @@ export interface LegacyHistoryRow {
     revised_by: string;
 }
 
+/**
+ * What a Word file printed in bold italic, the way plans show what their latest revision changed: header and info
+ * keys, note indexes, and step and line id => fields. The imported revision's sheet prints them the same way.
+ */
+export interface ImportMarks {
+    header: string[];
+    info: string[];
+    notes: number[];
+    steps: Record<string, string[]>;
+    lines: Record<string, string[]>;
+}
+
 /** What the importer read from a Word or PDF plan; nothing is saved until it is confirmed. */
 export interface ImportPreview {
     format: 'docx' | 'pdf';
@@ -294,6 +306,8 @@ export interface ImportPreview {
     info: PlanInfo;
     content: Content;
     history: LegacyHistoryRow[];
+    /** Null when nothing was in bold italic (always for a PDF). */
+    marks: ImportMarks | null;
     /** Y-m-d, from the document. */
     release_date: string | null;
     next_review_date: string | null;
