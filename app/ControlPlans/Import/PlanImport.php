@@ -124,17 +124,13 @@ class PlanImport
         // The table read last, so one carried on without its header (Word splits a table at a page break, or
         // the author started a new one) continues it: [kind, keys, width].
         $last = null;
-        foreach ($doc->tables as $table) {
+        foreach (array_merge(...array_map(fn ($t) => $this->sections($t), $doc->tables ?: [[]])) as $table) {
             [$columns, $body] = $this->columns($table);
-            $lineKeys = $this->keys($columns, self::LINE_COLUMNS);
-            $historyKeys = $this->keys($columns, self::HISTORY_COLUMNS);
             $found = $this->signatures($table);
             if (! $columns && ! $found && $last && $last[2] === self::width($table)) {
                 [$kind, $keys] = $last;
-            } elseif (in_array('reaction', $lineKeys, true) && array_intersect(['product', 'spec'], $lineKeys)) {
-                [$kind, $keys] = ['lines', $this->stepGroup($lineKeys)];
-            } elseif (in_array('rev', $historyKeys, true) && in_array('description', $historyKeys, true)) {
-                [$kind, $keys] = ['history', $historyKeys];
+            } elseif ($known = $this->kind($table)) {
+                [$kind, $keys] = $known;
             } else {
                 $signatures = $found ?: $signatures;
                 $last = null;
@@ -238,6 +234,8 @@ class PlanImport
             $p = preg_quote($label, '/');
             $p = str_replace(['\\/', ' ', '\\.', "'"], ['\s*\/\s*', '\s*', '\.?', "['’]?"], $p);
             $p = str_replace(['\\(', '\\)'], ['\(\s*', '\s*\)'], $p);
+            // Plans also misspell it "Costumer".
+            $p = str_replace('Customer', 'C[uo]st[ou]mer', $p);
             if ($optional) {
                 $p .= "(?:\s*\(\s*if\s+req['’]?d\.?\s*\))?";
             }
@@ -283,7 +281,7 @@ class PlanImport
     /**
      * A table's header text per grid column (the header rows are the leading rows of header words only; a header
      * cell spanning several columns names each of them) and its body rows. A title row above the header, such as
-     * "REVISION HISTORY" across the table, is left out.
+     * "REVISION HISTORY" across the table, and empty rows around it are left out.
      *
      * @return array{0: array<int, string>, 1: list<list<array{text: string, col: float, span: float}>>}
      */
@@ -293,8 +291,11 @@ class PlanImport
         $h = 0;
         $isHeader = fn (int $r) => isset($table[$r]) && self::isHeaderText(implode(' ', array_column($table[$r], 'text')));
         $filled = fn (int $r) => count(array_filter($table[$r] ?? [], fn ($c) => $c['span'] > 0 && trim($c['text']) !== ''));
-        while ($h < 2 && ! $isHeader($h) && $filled($h) === 1 && $isHeader($h + 1)) {
+        while ($h < 3 && ! $isHeader($h) && $filled($h) <= 1 && isset($table[$h + 1])) {
             $h++;
+        }
+        if (! $isHeader($h)) {
+            $h = 0;
         }
         while ($h < count($table) && self::isHeaderText(implode(' ', array_column($table[$h], 'text')))) {
             foreach ($table[$h] as $cell) {
@@ -369,6 +370,8 @@ class PlanImport
     private function characteristics(array $body, array $keys, array &$steps, array &$lines): void
     {
         $current = array_key_last($steps);
+        $same = fn (string $a, string $b) => mb_strtolower($a) === mb_strtolower($b);
+        $first = true;
         foreach ($body as $row) {
             if (self::isHeaderText(implode(' ', array_column($row, 'text')))) {
                 continue;
@@ -379,11 +382,17 @@ class PlanImport
             }
             $step = ['no' => $v['no'] ?? '', 'group' => $v['group'] ?? '', 'name' => $v['name'] ?? '', 'machine' => $v['machine'] ?? ''];
             $cur = $current !== null ? $steps[$current] : null;
-            $continues = $cur !== null && (
-                ! array_filter($step, fn ($t) => $t !== '')
-                || (($step['name'] !== '' || $step['machine'] !== '') && $step['name'] === $cur['name'] && $step['machine'] === $cur['machine']
-                    && in_array($step['no'], ['', $cur['no']], true) && in_array($step['group'], ['', $cur['group']], true))
-            );
+            // A step carried on over a page break repeats its cells, sometimes with other capitals or, on the
+            // first row after the break, another process number; it is still the same step.
+            $repeats = $cur !== null && ($step['name'] !== '' || $step['machine'] !== '')
+                && $same($step['name'], $cur['name']) && $same($step['machine'], $cur['machine'])
+                && ($step['group'] === '' || $same($step['group'], $cur['group']))
+                && ($step['no'] === '' || $step['no'] === $cur['no'] || $first);
+            $continues = $cur !== null && (! array_filter($step, fn ($t) => $t !== '') || $repeats);
+            if ($repeats && $step['no'] !== '' && $step['no'] !== $cur['no']) {
+                $this->warnings[] = "“{$cur['name']}” is process no. {$cur['no']}, then {$step['no']} where it carries on after a page break. It was kept as no. {$cur['no']}; check the number in the editor.";
+            }
+            $first = false;
             if (! $continues) {
                 $inherit = $cur !== null && $step['no'] === '';
                 $steps[] = [
@@ -419,6 +428,40 @@ class PlanImport
         return [$text, ''];
     }
 
+    /**
+     * A table cut where a characteristics or history header starts inside it: a Word plan may keep the plan
+     * information block and the first characteristics in one table, or start a new section with its own header.
+     */
+    private function sections(array $table): array
+    {
+        $isHeader = fn (int $r) => self::isHeaderText(implode(' ', array_column($table[$r], 'text')));
+        $starts = [0];
+        for ($r = 1; $r < count($table); $r++) {
+            if ($isHeader($r) && ! $isHeader($r - 1) && $this->kind(array_slice($table, $r)) !== null) {
+                $starts[] = $r;
+            }
+        }
+        $starts[] = count($table);
+
+        return array_map(fn ($i) => array_slice($table, $starts[$i], $starts[$i + 1] - $starts[$i]), array_keys(array_slice($starts, 0, -1)));
+    }
+
+    /** "lines" or "history" with the column keys, for a table whose header names one of those tables. */
+    private function kind(array $table): ?array
+    {
+        [$columns] = $this->columns($table);
+        $lineKeys = $this->keys($columns, self::LINE_COLUMNS);
+        $historyKeys = $this->keys($columns, self::HISTORY_COLUMNS);
+        if (in_array('reaction', $lineKeys, true) && array_intersect(['product', 'spec'], $lineKeys)) {
+            return ['lines', $this->stepGroup($lineKeys)];
+        }
+        if (in_array('rev', $historyKeys, true) && in_array('description', $historyKeys, true)) {
+            return ['history', $historyKeys];
+        }
+
+        return null;
+    }
+
     /** The number of grid columns a table spans. */
     private static function width(array $table): int
     {
@@ -432,14 +475,17 @@ class PlanImport
         return $width;
     }
 
-    /** A warning when the history rows do not run from Rev 00 without gaps, as a sign some were not read. */
+    /**
+     * A warning when the history rows do not run without gaps from the first revision (Rev 00, or Rev 01 where the
+     * first issue has no row of its own), as a sign some were not read.
+     */
     private function missingRevisions(array $history): ?string
     {
         $revs = array_values(array_unique(array_filter(array_map(fn ($h) => preg_match('/\d{1,3}/', $h['rev'], $m) ? (int) $m[0] : null, $history), 'is_int')));
         if (! $revs) {
             return null;
         }
-        $absent = array_values(array_diff(range(0, max($revs)), $revs));
+        $absent = array_values(array_diff(range(min($revs) === 0 ? 0 : 1, max($revs)), $revs));
         if (! $absent) {
             return null;
         }

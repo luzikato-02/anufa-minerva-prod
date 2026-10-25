@@ -140,17 +140,90 @@ class DocxReader
             if ($child->localName === 'Fallback') {
                 continue;
             }
+            // A superscript mark such as "Barcode Scanner^EP" stays a word of its own in plain text.
+            if ($child->localName === 'r' && $child->namespaceURI === self::W
+                && $child->getElementsByTagNameNS(self::W, 'vertAlign')->item(0)?->getAttributeNS(self::W, 'val') === 'superscript') {
+                $sup = self::text($child);
+                $out .= (preg_match('/[\pL\pN]$/u', $out) && preg_match('/^[\pL\pN]/u', $sup) ? ' ' : '').$sup;
+
+                continue;
+            }
+            if ($child->localName === 'wgp') {
+                $out .= "\n".self::shapes($child)."\n";
+
+                continue;
+            }
             $out .= match ($child->namespaceURI === self::W ? $child->localName : '') {
                 't' => $child->textContent,
                 'tab' => ' ',
                 'br', 'cr' => "\n",
                 'sym' => self::SYMBOLS[strtoupper($child->getAttributeNS(self::W, 'char'))] ?? '',
-                'p' => "\n".self::text($child),
+                // A paragraph in a text box is set apart from the text around the box.
+                'p' => "\n".self::text($child)."\n",
                 default => self::text($child),
             };
         }
 
         return $out;
+    }
+
+    /**
+     * A group of drawn shapes. Some plans draw the phase checkboxes: a label in a text box beside each rectangle,
+     * and a cross (or a text box holding "X" or a tick) over the chosen rectangle. Then the labels come out as
+     * "☐ Prototype ☐ Pre-launch ☒ Production"; otherwise the text boxes' text, left to right.
+     */
+    private static function shapes(DOMElement $group): string
+    {
+        [$labels, $boxes, $ticks] = [[], [], []];
+        foreach ($group->getElementsByTagName('*') as $shape) {
+            if ($shape->localName !== 'wsp') {
+                continue;
+            }
+            $off = null;
+            $ext = null;
+            $geometry = '';
+            $text = '';
+            foreach ($shape->getElementsByTagName('*') as $el) {
+                match ($el->localName) {
+                    'off' => $off ??= $el,
+                    'ext' => $ext ??= $el,
+                    'prstGeom' => $geometry = $el->getAttribute('prst'),
+                    'txbxContent' => $text = self::flat(self::text($el)),
+                    default => null,
+                };
+            }
+            $x = (int) $off?->getAttribute('x');
+            $w = (int) $ext?->getAttribute('cx');
+            $y = (int) $off?->getAttribute('y');
+            $h = (int) $ext?->getAttribute('cy');
+            if ($geometry === 'mathMultiply' || preg_match('/^[xX✓✔√]$/u', $text)) {
+                $ticks[] = [$x + $w / 2, $y + $h / 2];
+            } elseif ($text !== '') {
+                $labels[] = ['x' => $x, 'text' => $text];
+            } elseif (in_array($geometry, ['rect', 'flowChartProcess', 'roundRect'], true)) {
+                $boxes[] = ['x' => $x, 'right' => $x + $w, 'y' => $y, 'bottom' => $y + $h];
+            }
+        }
+        usort($labels, fn ($a, $b) => $a['x'] <=> $b['x']);
+        if (! $ticks || count($boxes) < 2) {
+            return implode(' ', array_column($labels, 'text'));
+        }
+
+        // Each box belongs to the first label starting right of it; a ticked box ticks that label.
+        $ticked = [];
+        foreach ($ticks as [$tx, $ty]) {
+            foreach ($boxes as $box) {
+                $height = $box['bottom'] - $box['y'];
+                if ($tx >= $box['x'] && $tx <= $box['right'] && $ty >= $box['y'] - $height && $ty <= $box['bottom'] + $height) {
+                    $right = array_filter($labels, fn ($l) => $l['x'] >= $box['x']);
+                    if ($right) {
+                        $ticked[array_key_first($right)] = true;
+                    }
+                }
+            }
+        }
+
+        return implode(' ', array_map(fn ($i, $l) => (isset($ticked[$i]) ? '☒ ' : '☐ ').$l['text'], array_keys($labels), $labels));
     }
 
     /** Child elements, with content controls (w:sdt → w:sdtContent) opened up in place. */

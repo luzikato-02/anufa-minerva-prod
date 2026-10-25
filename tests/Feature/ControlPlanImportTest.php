@@ -294,7 +294,47 @@ class ControlPlanImportTest extends TestCase
         }
         $path = tempnam(sys_get_temp_dir(), 'cp').'.docx';
         \PhpOffice\PhpWord\IOFactory::createWriter($word)->save($path);
-        $this->assertContains('The revision history has no row for Rev 00 to 02, 04. If the file lists them, check its history table: they were not read.', $this->preview($this->author(), $this->upload($path, 'plan.docx'))['warnings']);
+        $this->assertContains('The revision history has no row for Rev 01, 02, 04. If the file lists them, check its history table: they were not read.', $this->preview($this->author(), $this->upload($path, 'plan.docx'))['warnings']);
+    }
+
+    /**
+     * A real plan kept in Word before the app, as the Quality team maintained it. The file is a company document,
+     * so it is not kept in the repository: put it in tests/Fixtures/control-plans/ to run this test.
+     */
+    public function test_the_weaving_plan_kept_in_word_reads_whole(): void
+    {
+        $path = base_path('tests/Fixtures/control-plans/W-WSD-W-30 Weaving Control Plan.docx');
+        if (! is_file($path)) {
+            $this->markTestSkipped('The W-WSD-W-30 Word file is not in tests/Fixtures/control-plans/.');
+        }
+        $data = $this->preview($this->author(), $this->upload($path, 'W-WSD-W-30 Weaving Control Plan.docx'));
+
+        $this->assertSame(['W-WSD-W-30', 11, '2026-10-15', '2028-10-15'], [$data['doc_no'], $data['rev_no'], $data['release_date'], $data['next_review_date']]);
+        $this->assertSame(['mill' => 'Mill Production TCF1 & TCF2', 'sp_ref' => 'W-W-01', 'sp_date' => '20 Juni 2014', 'issued' => '27 Oktober 2016'], $data['header']);
+        // The phase is a cross drawn over one of three drawn boxes.
+        $this->assertSame(['production', 'WEAVING CONTROL PLAN', 'QA, Prod., Tech., MTC', 'Greige Fabric', 'IK'], [$data['info']['phase'], $data['info']['title'], $data['info']['core_team'], $data['info']['part_name'], $data['info']['org_code']]);
+
+        // The history is in two tables, the first under a title row and an empty row; the first issue has no row.
+        $this->assertSame(['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11'], array_column($data['history'], 'rev'));
+        $this->assertSame(['1, 2, 3', '14 Mei 2019', 'Steven Lee'], [$data['history'][0]['page'], $data['history'][0]['date'], $data['history'][0]['revised_by']]);
+
+        // The first characteristics share a table with the plan information; later pages repeat the step cells.
+        $steps = $data['content']['steps'];
+        $this->assertCount(16, $steps);
+        $this->assertCount(76, $data['content']['lines']);
+        $this->assertSame(['2', 'Preparation', 'Prepare Twisted Yarn', 'Hand pallet, creel'], [$steps[0]['no'], $steps[0]['group'], $steps[0]['name'], $steps[0]['machine']]);
+        $this->assertSame(['7', 'Packaging and Data Entry', 'Pack greige fabric'], [end($steps)['no'], end($steps)['group'], end($steps)['name']]);
+        $perStep = collect($data['content']['lines'])->countBy('step_id');
+        $this->assertSame([4, 7, 3, 2, 8, 1, 5, 1, 2, 12, 14, 2, 4, 6, 1, 4], array_map(fn ($s) => $perStep[$s['id']], $steps));
+        $this->assertSame([], array_filter($data['content']['lines'], fn ($l) => $l['size'] === ''));
+        $this->assertContains('Barcode Scanner EP', array_column($data['content']['lines'], 'measurement'));
+
+        $this->assertStringStartsWith('* Actual set point', $data['content']['notes']);
+        $this->assertSame(['Anas Nur Fauzan'], array_column($data['content']['signatures']['prepared'], 'name'));
+        $this->assertSame(['Anom Tejo Pratomo', 'Hari Murtopo D. W.'], array_column($data['content']['signatures']['approved'], 'name'));
+        // The file numbers Start Up Machine 3, then 4 after a page break; the preview says so.
+        $this->assertCount(2, $data['warnings']);
+        $this->assertStringContainsString('is process no. 3, then 4', $data['warnings'][0]);
     }
 
     public function test_files_that_cannot_be_imported_say_why(): void
