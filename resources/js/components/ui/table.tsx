@@ -2,15 +2,35 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `size="dense"` sizes rows and header from the density tokens in app.css
+ * (32px rows in compact, 44px in comfortable), with 13px tabular figures.
+ * `containerClassName` styles the scroll wrapper (e.g. a max height for a
+ * sticky header).
+ */
+function Table({
+  className,
+  containerClassName,
+  size = "default",
+  ...props
+}: React.ComponentProps<"table"> & {
+  size?: "default" | "dense"
+  containerClassName?: string
+}) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        data-size={size}
+        className={cn(
+          "w-full caption-bottom text-sm",
+          size === "dense" &&
+            "text-[13px] tabular-nums [&_td]:h-(--density-row-h) [&_td]:px-(--density-cell-px) [&_td]:py-0 [&_th]:h-(--density-head-h) [&_th]:px-(--density-cell-px) [&_th]:text-xs [&_th]:text-muted-foreground",
+          className
+        )}
         {...props}
       />
     </div>

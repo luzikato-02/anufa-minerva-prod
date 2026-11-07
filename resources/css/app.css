@@ -133,6 +133,32 @@
     --sidebar-ring: oklch(0.439 0 0);
 }
 
+/*
+ * Density tokens (lengths only).
+ * Review surfaces (data grids, page headers, the app header) size themselves
+ * from these, so one switch on <html data-density="…"> changes them all.
+ * Floor-entry screens (numpads, scanners) don't use them and stay touch-sized.
+ * Kept out of the colour/radius names that mobile/tool/oklch_to_hex.dart parses.
+ */
+:root,
+:root[data-density='compact'] {
+    --density-header-h: 3rem;
+    --density-row-h: 2rem;
+    --density-head-h: 2rem;
+    --density-control-h: 1.75rem;
+    --density-cell-px: 0.5rem;
+    --density-gutter: 0.75rem;
+}
+
+:root[data-density='comfortable'] {
+    --density-header-h: 4rem;
+    --density-row-h: 2.75rem;
+    --density-head-h: 2.5rem;
+    --density-control-h: 2.25rem;
+    --density-cell-px: 0.75rem;
+    --density-gutter: 1.5rem;
+}
+
 @layer base {
     * {
         @apply border-border;

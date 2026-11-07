@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header';
 import { TensionProblemsDataTable } from '@/components/tension-problems-data-table';
 import { TensionStatsCards } from '@/components/tension-record-cards';
 import { TwistingDataTable } from '@/components/twisting-data-table';
@@ -7,6 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Tension Records',
@@ -22,72 +24,50 @@ export default function TensionRecordsDisplay() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tension Records" />
-            {/* <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div>
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                    <Tabs defaultValue="twisting">
-                        <TabsList>
-                            <TabsTrigger value="twisting">Twisting Tension</TabsTrigger>
-                            <TabsTrigger value="weaving">Weaving Tension</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="twisting">
-                            <TwistingDataTable></TwistingDataTable>
-                        </TabsContent>
-                        <TabsContent value="weaving">
-                           <WeavingDataTable></WeavingDataTable>
-                        </TabsContent>
-                    </Tabs>
-                </div>
-            </div> */}
-            <div className="flex flex-1 flex-col">
-                <div className="@container/main flex flex-1 flex-col gap-2">
-                    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        <div className="flex items-center justify-between px-4">
-                            <div>
-                                <h1 className="text-xl font-semibold">Tension Records</h1>
-                                <p className="text-sm text-muted-foreground">Twisting and weaving machine tension data</p>
-                            </div>
-                        </div>
-                        <TensionStatsCards />
+            <div className="@container/main flex flex-1 flex-col gap-(--density-gutter) py-(--density-gutter)">
+                {/* Stat cards stay for now; Phase 4 replaces them with a one-row KPI strip. */}
+                <TensionStatsCards />
 
-                        <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                            <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                                <Tabs defaultValue="twisting">
-                                    <TabsList>
-                                        <TabsTrigger value="twisting">
-                                            Twisting Tension
-                                        </TabsTrigger>
-                                        <TabsTrigger value="weaving">
-                                            Weaving Tension
-                                        </TabsTrigger>
-                                        <TabsTrigger value="problems">
-                                            Problem Records
-                                        </TabsTrigger>
-                                    </TabsList>
-                                    <TabsContent value="twisting">
-                                        <TwistingDataTable></TwistingDataTable>
-                                    </TabsContent>
-                                    <TabsContent value="weaving">
-                                        <WeavingDataTable></WeavingDataTable>
-                                    </TabsContent>
-                                    <TabsContent value="problems">
-                                        <TensionProblemsDataTable></TensionProblemsDataTable>
-                                    </TabsContent>
-                                </Tabs>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <Tabs
+                    defaultValue="twisting"
+                    className="flex min-w-0 flex-col gap-(--density-gutter) px-4"
+                >
+                    <PageHeader
+                        title="Tension Records"
+                        meta="Twisting and weaving machine tension data"
+                        tabs={
+                            <TabsList className="h-8">
+                                <TabsTrigger
+                                    value="twisting"
+                                    className="text-xs"
+                                >
+                                    Twisting
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="weaving"
+                                    className="text-xs"
+                                >
+                                    Weaving
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="problems"
+                                    className="text-xs"
+                                >
+                                    Problems
+                                </TabsTrigger>
+                            </TabsList>
+                        }
+                    />
+                    <TabsContent value="twisting" className="mt-0">
+                        <TwistingDataTable />
+                    </TabsContent>
+                    <TabsContent value="weaving" className="mt-0">
+                        <WeavingDataTable />
+                    </TabsContent>
+                    <TabsContent value="problems" className="mt-0">
+                        <TensionProblemsDataTable />
+                    </TabsContent>
+                </Tabs>
             </div>
         </AppLayout>
     );

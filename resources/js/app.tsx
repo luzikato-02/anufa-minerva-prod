@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { RestoreUnsavedDialog } from './components/restore-unsaved-dialog';
 import { SessionExpiredDialog } from './components/session-expired-dialog';
 import { initializeTheme } from './hooks/use-appearance';
+import { initializeDensity } from './hooks/use-density';
 import { installSessionExpiredDetection } from './lib/session-expired';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -36,3 +37,6 @@ createInertiaApp({
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+// ...and the saved row density (compact by default) for review screens.
+initializeDensity();

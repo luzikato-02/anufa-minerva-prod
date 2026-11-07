@@ -1,46 +1,36 @@
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
-import { DataTableDemo } from '@/components/data-table';
+import { Head, Link } from '@inertiajs/react';
+import { ConstructionIcon } from 'lucide-react';
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Dashboard',
+        title: 'Under construction',
         href: dashboard().url,
     },
 ];
 
-export default function Dashboard() {
+export default function UnderConstruction() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div>
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                    <Tabs defaultValue="twisting">
-                        <TabsList>
-                            <TabsTrigger value="twisting">Twisting Tension</TabsTrigger>
-                            <TabsTrigger value="weaving">Weaving Tension</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="twisting">
-                            <DataTableDemo></DataTableDemo>
-                        </TabsContent>
-                        <TabsContent value="weaving">
-                            <DataTableDemo></DataTableDemo>
-                        </TabsContent>
-                    </Tabs>
+            <Head title="Under construction" />
+            <div className="flex flex-1 items-center justify-center p-(--density-gutter)">
+                <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+                    <ConstructionIcon className="size-6 text-muted-foreground" />
+                    <h1 className="text-base font-semibold">
+                        This page isn&apos;t ready yet
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                        It&apos;s still being built. Records you need today are
+                        available from the other modules in the sidebar.
+                    </p>
+                    <Link
+                        href={dashboard().url}
+                        className="text-sm font-medium underline underline-offset-4"
+                    >
+                        Back to overview
+                    </Link>
                 </div>
             </div>
         </AppLayout>

@@ -50,8 +50,26 @@ class TensionRecordController extends Controller
             $query->byMachine($request->machine);
         }
 
-        // Order by latest first
-        $query->orderBy('created_at', 'desc');
+        // Sorting: only whitelisted columns, so sort_by never reaches SQL as-is.
+        // Unknown or missing sort_by falls back to newest first.
+        $sortable = [
+            'recorded_at' => 'created_at',
+            'machine' => $this->jsonExtract('metadata', '$.machine_number'),
+            'item_number' => $this->jsonExtract('metadata', '$.item_number'),
+            'yarn_code' => $this->jsonExtract('metadata', '$.yarn_code'),
+            'operator' => $this->jsonExtract('metadata', '$.operator'),
+        ];
+        $sortBy = $request->input('sort_by');
+        $sortDir = strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc';
+
+        if (is_string($sortBy) && array_key_exists($sortBy, $sortable)) {
+            $query->orderByRaw("{$sortable[$sortBy]} {$sortDir}");
+            if ($sortBy !== 'recorded_at') {
+                $query->orderBy('created_at', 'desc');
+            }
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
 
         // Paginate results
         $perPage = min((int) $request->get('per_page', 10), 200);

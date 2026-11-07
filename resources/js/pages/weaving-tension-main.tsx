@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { DataTableDemo } from '@/components/data-table';
 import WeavingTensionPage from '@/components/weaving-tension-record';
 const breadcrumbs: BreadcrumbItem[] = [
     {

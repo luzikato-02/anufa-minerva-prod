@@ -8,4 +8,14 @@ declare module '@tanstack/react-table' {
         currentUserId?: number;
         onStatusChange?: (id: string, status: string) => void;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    interface ColumnMeta<TData, TValue> {
+        /** Human label for the Columns menu (defaults to the column id). */
+        label?: string;
+        /** Right-align numeric columns, header included. */
+        align?: 'left' | 'right';
+        /** Extra classes for this column's header and cells. */
+        className?: string;
+    }
 }

@@ -17,6 +17,16 @@
                     }
                 }
             })();
+
+            // Apply the saved row density before first paint (see hooks/use-density.tsx).
+            (function() {
+                try {
+                    const density = window.localStorage.getItem('density');
+                    if (density === 'compact' || density === 'comfortable') {
+                        document.documentElement.dataset.density = density;
+                    }
+                } catch (e) {}
+            })();
         </script>
 
         {{-- Inline style to set the HTML background color based on our theme in app.css --}}

@@ -4,7 +4,6 @@ import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { DataTableDemo } from '@/components/data-table';
 import { FinishEarlierDataTable } from '@/components/finish-earlier-data-table';
 const breadcrumbs: BreadcrumbItem[] = [
     {

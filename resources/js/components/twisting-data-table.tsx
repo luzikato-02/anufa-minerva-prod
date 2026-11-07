@@ -1,3 +1,5 @@
+import { CodeCell, DateTimeCell, NumberCell, ProblemsCell, ProgressCell, TextCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,7 +14,6 @@ import {
 } from '@/components/ui/dialog';
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -30,20 +31,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useServerTable } from '@/hooks/use-server-table';
+import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
-    ColumnDef,
-    ColumnFiltersState,
-    flexRender,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
-    SortingState,
-    useReactTable,
-    VisibilityState,
-} from '@tanstack/react-table';
-import {
-    ChevronDown,
     DownloadIcon,
     EyeIcon,
     MoreHorizontal,
@@ -86,18 +76,95 @@ interface TensionRecord {
     updated_at?: string;
 }
 
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
+/** Percentage measured, from metadata (falls back to completed / total). */
+function progressOf(record: TensionRecord): number | null {
+    const meta = record.metadata;
+    if (!meta) return null;
+    if (typeof meta.progress_percentage === 'number') {
+        return meta.progress_percentage;
+    }
+    if (meta.total_measurements) {
+        return (meta.completed_measurements / meta.total_measurements) * 100;
+    }
+    return null;
 }
 
-type TwistingTableMeta = {
-    refetch: () => void;
+function problemCounts(record: TensionRecord) {
+    const problems = Array.isArray(record.problems) ? record.problems : [];
+    const open = problems.filter((p) => (p?.status ?? 'open') !== 'resolved').length;
+    return { open, total: problems.length };
+}
+
+/** "1400 dtex · 470 TPM · 9.0k RPM" — the parameters people scan together. */
+type ProcessFields = {
+    dtexNumber?: string | number;
+    tpm?: string | number;
+    rpm?: string | number;
 };
 
+function processSummary(form: ProcessFields | null | undefined): string | null {
+    if (!form) return null;
+    const parts: string[] = [];
+    if (form.dtexNumber) parts.push(`${form.dtexNumber} dtex`);
+    if (form.tpm) parts.push(`${form.tpm} TPM`);
+    if (form.rpm) {
+        const rpm = Number(form.rpm);
+        parts.push(
+            Number.isFinite(rpm) && rpm >= 1000
+                ? `${(rpm / 1000).toFixed(1)}k RPM`
+                : `${form.rpm} RPM`,
+        );
+    }
+    return parts.length ? parts.join(' · ') : null;
+}
+
+/**
+ * Row menu. Its own component so the open state is a real hook call,
+ * not a useState inside a column `cell` renderer.
+ */
+function TwistingRowActions({
+    record,
+    onSaved,
+}: {
+    record: TensionRecord;
+    onSaved?: () => void;
+}) {
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    const handleDownload = () => {
+        const a = document.createElement('a');
+        a.href = `${window.location.origin}/tension-records/${record.id}/download`;
+        a.click();
+    };
+
+    return (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Actions for ${record.metadata?.machine_number ?? 'record'}`}
+                >
+                    <MoreHorizontal />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <DropdownMenuItem onClick={handleDownload}>
+                    <DownloadIcon />
+                    Download
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <ViewTwistingRecordDialog record={record} onCloseMenu={() => setMenuOpen(false)} />
+                <EditTwistingRecordDialog record={record} onSaved={onSaved} onCloseMenu={() => setMenuOpen(false)} />
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
+/**
+ * Column ids double as the server `sort_by` values; only the ones
+ * whitelisted in TensionRecordController@index are sortable here.
+ */
 export const columns: ColumnDef<TensionRecord>[] = [
     {
         id: 'select',
@@ -107,10 +174,8 @@ export const columns: ColumnDef<TensionRecord>[] = [
                     table.getIsAllPageRowsSelected() ||
                     (table.getIsSomePageRowsSelected() && 'indeterminate')
                 }
-                onCheckedChange={(value) =>
-                    table.toggleAllPageRowsSelected(!!value)
-                }
-                aria-label="Select all"
+                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                aria-label="Select all rows on this page"
             />
         ),
         cell: ({ row }) => (
@@ -122,143 +187,128 @@ export const columns: ColumnDef<TensionRecord>[] = [
         ),
         enableSorting: false,
         enableHiding: false,
+        meta: { className: 'w-8 pr-0' },
     },
     {
-        accessorKey: 'Date',
-        header: 'Record Date',
+        id: 'recorded_at',
         accessorFn: (row) => row.created_at,
+        header: 'Recorded',
+        cell: ({ getValue }) => <DateTimeCell value={getValue()} />,
+        meta: { label: 'Recorded' },
+    },
+    {
+        id: 'machine',
+        accessorFn: (row) => row.metadata?.machine_number ?? row.form_data?.machineNumber,
+        header: 'Machine',
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+        meta: { label: 'Machine' },
+    },
+    {
+        id: 'item_number',
+        accessorFn: (row) => row.metadata?.item_number,
+        header: 'Item no.',
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+        meta: { label: 'Item number' },
+    },
+    {
+        id: 'yarn_code',
+        accessorFn: (row) => row.metadata?.yarn_code,
+        header: 'Yarn code',
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+        meta: { label: 'Yarn material code' },
+    },
+    {
+        id: 'operator',
+        accessorFn: (row) => row.metadata?.operator,
+        header: 'Operator',
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+        meta: { label: 'Operator' },
+    },
+    {
+        id: 'process',
+        accessorFn: (row) => processSummary(row.form_data),
+        header: 'Process',
+        enableSorting: false,
         cell: ({ getValue }) => {
-            const date = new Date(getValue() as string);
-            return (
-                <div>
-                    {date.toLocaleString('en-ID', {
-                        day: '2-digit',
-                        month: 'numeric',
-                        year: 'numeric',
-                    })}
-                </div>
+            const value = getValue() as string | null;
+            return value ? (
+                <span className="text-xs text-muted-foreground tabular-nums">{value}</span>
+            ) : (
+                <TextCell value={null} />
             );
         },
+        meta: { label: 'Process (dtex · TPM · RPM)' },
     },
     {
-        accessorKey: 'Item Number',
-        header: 'Item Number',
-        accessorFn: (row) => row.metadata?.item_number,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Yarn Mat Code',
-        header: 'Yarn Mat. Code',
-        accessorFn: (row) => row.metadata?.yarn_code,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Operator',
-        header: 'Operator',
-        accessorFn: (row) => row.metadata?.operator,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Machine Number',
-        header: 'Machine Number',
-        accessorFn: (row) => row.form_data?.machineNumber,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-
-    {
-        accessorKey: 'Density',
-        header: 'Density (Dtex)',
+        id: 'dtex',
         accessorFn: (row) => row.form_data?.dtexNumber,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'Dtex',
+        enableSorting: false,
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Density (dtex)', align: 'right' },
     },
     {
-        accessorKey: 'Table Twist (TPM)',
-        header: 'Table Twist (TPM)',
+        id: 'tpm',
         accessorFn: (row) => row.form_data?.tpm,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'TPM',
+        enableSorting: false,
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Table twist (TPM)', align: 'right' },
     },
     {
-        accessorKey: 'Cycle Speed (RPM)',
-        header: 'Cycle Speed (RPM)',
+        id: 'rpm',
         accessorFn: (row) => row.form_data?.rpm,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'RPM',
+        enableSorting: false,
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Cycle speed (RPM)', align: 'right' },
     },
     {
-        accessorKey: 'Spec Tension (cN)',
-        header: 'Spec. Tension (cN)',
+        id: 'spec',
         accessorFn: (row) => row.form_data?.specTens,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
+        header: 'Spec (cN)',
+        enableSorting: false,
+        cell: ({ row, getValue }) => (
+            <NumberCell
+                value={getValue()}
+                suffix={row.original.form_data?.tensPlus ? `±${row.original.form_data.tensPlus}` : undefined}
+            />
         ),
+        meta: { label: 'Spec. tension ± deviation (cN)', align: 'right' },
     },
     {
-        accessorKey: 'Tens Deviation (cN)',
-        header: 'Tens. Deviation (cN)',
-        accessorFn: (row) => row.form_data?.tensPlus,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Meters Check (m)',
-        header: 'Meters Check (m)',
+        id: 'meters',
         accessorFn: (row) => row.form_data?.metersCheck,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'Meters',
+        enableSorting: false,
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Meters check (m)', align: 'right' },
+    },
+    {
+        id: 'progress',
+        accessorFn: (row) => progressOf(row),
+        header: 'Progress',
+        enableSorting: false,
+        cell: ({ getValue }) => <ProgressCell percent={getValue() as number | null} />,
+        meta: { label: 'Progress' },
+    },
+    {
+        id: 'problems',
+        accessorFn: (row) => problemCounts(row).open,
+        header: 'Problems',
+        enableSorting: false,
+        cell: ({ row }) => <ProblemsCell {...problemCounts(row.original)} />,
+        meta: { label: 'Problems (open / total)' },
     },
     {
         id: 'actions',
-        header: 'Actions',
+        header: () => <span className="sr-only">Actions</span>,
+        enableSorting: false,
         enableHiding: false,
-        cell: ({ row, table }) => {
-            const record = row.original;
-            const meta = table.options.meta as TwistingTableMeta;
-            const [menuOpen, setMenuOpen] = useState(false);
-            const handleDownload = () => {
-                // const blob = new Blob([record.csv_data], { type: 'text/csv' });
-                const baseUrl = window.location.origin;
-                const url = `${baseUrl}/tension-records/${record.id}/download`;
-
-                const a = document.createElement('a');
-                a.href = url;
-                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-            };
-            return (
-                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                        <DropdownMenuItem onClick={handleDownload}>
-                            <DownloadIcon></DownloadIcon>Download
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ViewTwistingRecordDialog record={record} onCloseMenu={() => setMenuOpen(false)} />
-                        <EditTwistingRecordDialog record={record} onSaved={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            );
-        },
+        cell: ({ row, table }) => (
+            <TwistingRowActions record={row.original} onSaved={table.options.meta?.refetch} />
+        ),
+        meta: { className: 'w-10 px-1' },
     },
 ];
 
@@ -1003,236 +1053,44 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
     );
 }
 
-export function TwistingDataTable() {
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] =
-        React.useState<ColumnFiltersState>([]);
-    const [columnVisibility, setColumnVisibility] =
-        React.useState<VisibilityState>({});
-    const [rowSelection, setRowSelection] = React.useState({});
-    const [data, setData] = useState<TensionRecord[]>([]);
-    const [totalRows, setTotalRows] = useState(0);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
+const TWISTING_PARAMS = { type: 'twisting' };
 
-    const [pagination, setPagination] = useState({
-        pageIndex: 0, // TanStack starts from 0
-        pageSize: 10,
+export function TwistingDataTable() {
+    const grid = useServerTable<TensionRecord>({
+        endpoint: '/tension-records',
+        params: TWISTING_PARAMS,
+        storageKey: 'twisting-tension-records',
+        // The combined Process column covers these; they stay one click away.
+        defaultColumnVisibility: { dtex: false, tpm: false, rpm: false, meters: false },
     });
-    const [refreshKey, setRefreshKey] = useState(0);
 
     const table = useReactTable({
-        data,
+        data: grid.data,
         columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
+        getRowId: (row) => String(row.id),
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         manualPagination: true,
+        manualSorting: true,
         manualFiltering: true,
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onGlobalFilterChange: setGlobalFilter,
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        onPaginationChange: setPagination,
-        pageCount,
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            rowSelection,
-            pagination,
-        },
-        meta: {
-            refetch: () => setRefreshKey((k) => k + 1),
-        },
+        enableSortingRemoval: true,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+        meta: { refetch: grid.refetch },
     });
 
-    const baseUrl = window.location.origin;
-    useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchData = async () => {
-        setLoading(true);
-
-        const params = new URLSearchParams({
-            page: (pagination.pageIndex + 1).toString(),
-            per_page: pagination.pageSize.toString(),
-        });
-
-        params.append('type', 'twisting'); // 🧠 Filter by twisting type
-
-        // 🧠 Add global filter (search box)
-        if (globalFilter) {
-            params.append('search', globalFilter);
-        }
-
-        // 🧠 Add column filters
-        columnFilters.forEach((filter) => {
-            if (filter.value) {
-                params.append(filter.id, String(filter.value));
-            }
-        });
-
-        // 🧠 Add sorting (from TanStack Table sorting state)
-        if (sorting.length > 0) {
-            const sort = sorting[0]; // single-column sort
-            params.append('sort_by', sort.id);
-            params.append('sort_dir', sort.desc ? 'desc' : 'asc');
-        }
-
-        try {
-            const response = await fetch(
-                `${baseUrl}/tension-records?${params.toString()}`,
-                {
-                    credentials: 'include', // keep session if needed
-                    signal: controller.signal,
-                },
-            );
-
-            const json: LaravelPaginatedResponse<TensionRecord> =
-                await response.json();
-                console.log(json);
-
-            setData(json.data);
-            setTotalRows(json.total);
-            setPageCount(json.last_page);
-        } catch (error: any) {
-            if (error.name !== 'AbortError') {
-                console.error('Fetch error:', error);
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchData();
-
-    return () => controller.abort();
-}, [
-    pagination.pageIndex,
-    pagination.pageSize,
-    sorting,
-    globalFilter,
-    columnFilters,
-    refreshKey,
-]);
-
     return (
-        <div className="w-full">
-            <div className="flex items-center py-4">
-                <Input
-                    placeholder="Search value"
-                    value={globalFilter ?? ""}
-                    onChange={(e) => setGlobalFilter(e.target.value)}
-                    className="max-w-sm"
-                />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            Columns <ChevronDown />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table
-                            .getAllColumns()
-                            .filter((column) => column.getCanHide())
-                            .map((column) => {
-                                return (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        className="capitalize"
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) =>
-                                            column.toggleVisibility(!!value)
-                                        }
-                                    >
-                                        {column.id}
-                                    </DropdownMenuCheckboxItem>
-                                );
-                            })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-            <div className="overflow-hidden rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                      header.column.columnDef
-                                                          .header,
-                                                      header.getContext(),
-                                                  )}
-                                        </TableHead>
-                                    );
-                                })}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={
-                                        row.getIsSelected() && 'selected'
-                                    }
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext(),
-                                            )}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center"
-                                >
-                                    Contacting server for information...
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <div className="flex-1 text-sm text-muted-foreground">
-                    {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                    {table.getFilteredRowModel().rows.length} row(s) selected.
-                </div>
-                <div className="space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-        </div>
+        <DataGrid
+            table={table}
+            label="Twisting tension records"
+            loading={grid.loading}
+            error={grid.error}
+            total={grid.total}
+            onRetry={grid.refetch}
+            search={grid.search}
+            onSearchChange={grid.setSearch}
+            searchPlaceholder="Search machine, item, operator…"
+            emptyMessage="No twisting tension records match this search."
+        />
     );
 }
