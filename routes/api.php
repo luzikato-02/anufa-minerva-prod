@@ -110,6 +110,7 @@ Route::name('v1.')->group(function () {
         Route::middleware('permission:tension-records.view')->group(function () {
             Route::get('tension-records/{tensionRecord}/download', [TensionRecordController::class, 'downloadCsv']);
             Route::get('tension-statistics', [TensionRecordController::class, 'statistics']);
+            Route::get('tension-summary', [TensionRecordController::class, 'summary']);
             Route::get('tension-trends', [TensionRecordController::class, 'trends']);
             Route::get('tension-problems', [TensionRecordController::class, 'problems']);
             Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])

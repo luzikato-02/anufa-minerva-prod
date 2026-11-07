@@ -305,6 +305,176 @@ class TensionRecordController extends Controller
     }
 
     /**
+     * Key figures for the records page header, each with the comparison it is judged against.
+     *
+     * Query params:
+     *   - type: 'twisting' | 'weaving' | 'all' (default 'all')
+     *   - tz_offset: caller's offset from UTC in minutes, so "today" and day buckets are the caller's days
+     *
+     * Windows: "current" is the last 7 local days including today, "previous" the 7 days before it.
+     * Every figure is computed from stored records; nothing here is estimated.
+     */
+    public function summary(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'type'      => 'nullable|in:twisting,weaving,all',
+            'tz_offset' => 'nullable|integer|min:-840|max:840',
+        ]);
+        $type = $validated['type'] ?? 'all';
+        $offset = (int) ($validated['tz_offset'] ?? 0);
+
+        $localNow = now()->utc()->addMinutes($offset);
+        $todayLocal = $localNow->toDateString();
+        $currentStart = $localNow->copy()->startOfDay()->subDays(6);   // 7 days incl. today
+        $previousStart = $currentStart->copy()->subDays(7);
+        $toLocal = fn ($ts) => \Illuminate\Support\Carbon::parse($ts)->utc()->addMinutes($offset);
+        $toUtc = fn ($localTime) => $localTime->copy()->subMinutes($offset);
+
+        $base = fn () => TensionRecord::query()->when($type !== 'all', fn ($q) => $q->byType($type));
+
+        // Records created in the last 14 local days: counts, completion, daily series.
+        $recent = $base()
+            ->where('created_at', '>=', $toUtc($previousStart))
+            ->get(['id', 'created_at', 'metadata']);
+
+        $daily = [];
+        for ($i = 0; $i < 7; $i++) {
+            $daily[$currentStart->copy()->addDays($i)->toDateString()] = 0;
+        }
+        $currentCount = 0;
+        $previousCount = 0;
+        $currentCompletion = [];
+        $previousCompletion = [];
+        $completionOf = function (array $meta): ?float {
+            if (isset($meta['progress_percentage']) && is_numeric($meta['progress_percentage'])) {
+                return (float) $meta['progress_percentage'];
+            }
+            $total = (int) ($meta['total_measurements'] ?? 0);
+
+            return $total > 0 ? ((int) ($meta['completed_measurements'] ?? 0)) / $total * 100 : null;
+        };
+
+        foreach ($recent as $record) {
+            $local = $toLocal($record->created_at);
+            $completion = $completionOf($record->metadata ?? []);
+            if ($local->gte($currentStart)) {
+                $currentCount++;
+                $daily[$local->toDateString()] = ($daily[$local->toDateString()] ?? 0) + 1;
+                if ($completion !== null) {
+                    $currentCompletion[] = $completion;
+                }
+            } else {
+                $previousCount++;
+                if ($completion !== null) {
+                    $previousCompletion[] = $completion;
+                }
+            }
+        }
+
+        // Problems: open now, new today, older than 24h, and resolution times.
+        $problemsLengthExpr = $this->jsonArrayLength('problems');
+        $withProblems = $base()->whereRaw("{$problemsLengthExpr} > 0")->get(['id', 'problems']);
+
+        $open = 0;
+        $newToday = 0;
+        $olderThanDay = 0;
+        $currentResolveHours = [];
+        $previousResolveHours = [];
+        $openDaily = array_fill_keys(array_keys($daily), 0);
+        $dayAgoUtc = now()->utc()->subDay();
+
+        foreach ($withProblems as $record) {
+            foreach ($record->problems ?? [] as $problem) {
+                $reported = ! empty($problem['timestamp']) ? \Illuminate\Support\Carbon::parse($problem['timestamp']) : null;
+                if ($reported && isset($openDaily[$toLocal($reported)->toDateString()])) {
+                    $openDaily[$toLocal($reported)->toDateString()]++;
+                }
+                if ($reported && $toLocal($reported)->toDateString() === $todayLocal) {
+                    $newToday++;
+                }
+
+                if (($problem['status'] ?? 'open') !== 'resolved') {
+                    $open++;
+                    if ($reported && $reported->lt($dayAgoUtc)) {
+                        $olderThanDay++;
+                    }
+                    continue;
+                }
+
+                $resolvedAt = $problem['resolution']['resolved_at'] ?? null;
+                if (! $reported || ! $resolvedAt) {
+                    continue;
+                }
+                $resolved = \Illuminate\Support\Carbon::parse($resolvedAt);
+                $hours = max(0, $reported->diffInMinutes($resolved, false)) / 60;
+                $resolvedLocal = $toLocal($resolved);
+                if ($resolvedLocal->gte($currentStart)) {
+                    $currentResolveHours[] = $hours;
+                } elseif ($resolvedLocal->gte($previousStart)) {
+                    $previousResolveHours[] = $hours;
+                }
+            }
+        }
+
+        // Machines: which machines recorded in the last 30 days were checked today, and which are overdue.
+        $machineExpr = $this->jsonExtract('metadata', '$.machine_number');
+        $lastChecks = $base()
+            ->where('created_at', '>=', now()->utc()->subDays(30))
+            ->whereRaw("{$machineExpr} IS NOT NULL")
+            ->selectRaw("{$machineExpr} as machine, MAX(created_at) as last_checked")
+            ->groupByRaw($machineExpr)
+            ->get();
+        $todayStartUtc = $toUtc($localNow->copy()->startOfDay());
+        $overdueBeforeUtc = $todayStartUtc->copy()->subDays(2); // no check today or in the 2 days before
+        $checkedToday = $lastChecks->filter(fn ($row) => \Illuminate\Support\Carbon::parse($row->last_checked)->gte($todayStartUtc))->count();
+        $overdue = $lastChecks->filter(fn ($row) => \Illuminate\Support\Carbon::parse($row->last_checked)->lt($overdueBeforeUtc))->count();
+
+        $avg = fn (array $xs) => $xs ? round(array_sum($xs) / count($xs), 1) : null;
+        $median = function (array $xs): ?float {
+            if (! $xs) {
+                return null;
+            }
+            sort($xs);
+            $mid = intdiv(count($xs), 2);
+
+            return round(count($xs) % 2 ? $xs[$mid] : ($xs[$mid - 1] + $xs[$mid]) / 2, 1);
+        };
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'type' => $type,
+                'today' => $todayLocal,
+                'records' => [
+                    'current' => $currentCount,
+                    'previous' => $previousCount,
+                    'daily' => array_values($daily),
+                ],
+                'open_problems' => [
+                    'open' => $open,
+                    'new_today' => $newToday,
+                    'older_than_24h' => $olderThanDay,
+                    'reported_daily' => array_values($openDaily),
+                ],
+                'resolve_hours' => [
+                    'current_median' => $median($currentResolveHours),
+                    'previous_median' => $median($previousResolveHours),
+                    'resolved_current' => count($currentResolveHours),
+                ],
+                'completion' => [
+                    'current_avg' => $avg($currentCompletion),
+                    'previous_avg' => $avg($previousCompletion),
+                ],
+                'machines' => [
+                    'checked_today' => $checkedToday,
+                    'active_30d' => $lastChecks->count(),
+                    'overdue' => $overdue,
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Daily counts for the mobile trend charts: problems reported and measurements recorded per calendar day.
      *
      * Query params:

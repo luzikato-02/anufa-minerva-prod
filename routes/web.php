@@ -154,6 +154,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tension-statistics', [TensionRecordController::class, 'statistics'])
             ->name('tension-records.statistics');
 
+        Route::get('tension-summary', [TensionRecordController::class, 'summary'])
+            ->name('tension-records.summary');
+
         // Flattened problem list across all tension records (twisting + weaving)
         Route::get('tension-problems', [TensionRecordController::class, 'problems'])
             ->name('tension-records.problems');

@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/page-header';
+import { TensionKpiStrip } from '@/components/tension-kpi-strip';
 import { TensionProblemsDataTable } from '@/components/tension-problems-data-table';
-import { TensionStatsCards } from '@/components/tension-record-cards';
 import { TwistingDataTable } from '@/components/twisting-data-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WeavingDataTable } from '@/components/weaving-data-table';
@@ -8,6 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -21,15 +22,20 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function TensionRecordsDisplay() {
+    const [tab, setTab] = useState('twisting');
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Tension Records" />
             <div className="@container/main flex flex-1 flex-col gap-(--density-gutter) py-(--density-gutter)">
-                {/* Stat cards stay for now; Phase 4 replaces them with a one-row KPI strip. */}
-                <TensionStatsCards />
+                <TensionKpiStrip
+                    className="mx-4"
+                    onOpenProblems={() => setTab('problems')}
+                />
 
                 <Tabs
-                    defaultValue="twisting"
+                    value={tab}
+                    onValueChange={setTab}
                     className="flex min-w-0 flex-col gap-(--density-gutter) px-4"
                 >
                     <PageHeader
