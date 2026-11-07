@@ -25,7 +25,7 @@ class UserController extends Controller
             });
         }
 
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = max(1, min((int) $request->query('per_page', 10), 200));
 
         return $query->orderBy('name')->paginate($perPage)->withQueryString();
     }

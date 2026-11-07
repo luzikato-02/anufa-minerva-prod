@@ -121,6 +121,14 @@ export function useServerTable<T>({
 
     const paramsKey = JSON.stringify(params ?? {});
 
+    // Changing a filter param (status, type…) starts from page 1 and clears
+    // the selection, like a new search does.
+    const [lastParamsKey, setLastParamsKey] = useState(paramsKey);
+    if (paramsKey !== lastParamsKey) {
+        setLastParamsKey(paramsKey);
+        setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+    }
+
     useEffect(() => {
         const controller = new AbortController();
         const query = new URLSearchParams({

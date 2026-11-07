@@ -12,10 +12,8 @@ import {
 } from '@/components/ui/dialog';
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -33,18 +31,10 @@ import {
 } from '@/components/ui/table';
 import {
     ColumnDef,
-    ColumnFiltersState,
-    flexRender,
     getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
-    SortingState,
     useReactTable,
-    VisibilityState,
 } from '@tanstack/react-table';
 import {
-    ChevronDown,
     DownloadIcon,
     EyeIcon,
     MoreHorizontal,
@@ -65,6 +55,11 @@ import {
 } from 'recharts';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
 import { databaseService, verifyPersistedRecord } from '@/lib/databaseConnector';
+
+import { CodeCell, DateTimeCell, NumberCell, ProblemsCell, ProgressCell, TextCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
+import { useServerTable } from '@/hooks/use-server-table';
+import { problemCounts, progressOf } from '@/lib/tension-record-summary';
 
 interface TensionRecord {
     id: string;
@@ -87,31 +82,52 @@ interface TensionRecord {
     updated_at?: string;
 }
 
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
+/**
+ * Row menu as its own component, so its open state is a real hook call
+ * rather than a useState inside a column `cell` renderer.
+ */
+function WeavingRowActions({ record, onSaved }: { record: TensionRecord; onSaved?: () => void }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    const handleDownload = () => {
+        const a = document.createElement('a');
+        a.href = `${window.location.origin}/tension-records/${record.id}/download`;
+        a.click();
+    };
+
+    return (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Actions for ${record.metadata?.machine_number ?? record.form_data?.machineNumber ?? 'record'}`}
+                >
+                    <MoreHorizontal />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <DropdownMenuItem onClick={handleDownload}>
+                    <DownloadIcon />
+                    Download
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <ViewWeavingRecordDialog record={record} onCloseMenu={() => setMenuOpen(false)} />
+                <EditWeavingRecordDialog record={record} onSaved={onSaved} onCloseMenu={() => setMenuOpen(false)} />
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
-type WeavingTableMeta = {
-    refetch: () => void;
-};
-
+/** Column ids double as the server `sort_by` values (see TensionRecordController@index). */
 export const columns: ColumnDef<TensionRecord>[] = [
     {
         id: 'select',
         header: ({ table }) => (
             <Checkbox
-                checked={
-                    table.getIsAllPageRowsSelected() ||
-                    (table.getIsSomePageRowsSelected() && 'indeterminate')
-                }
-                onCheckedChange={(value) =>
-                    table.toggleAllPageRowsSelected(!!value)
-                }
-                aria-label="Select all"
+                checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                aria-label="Select all rows on this page"
             />
         ),
         cell: ({ row }) => (
@@ -123,143 +139,121 @@ export const columns: ColumnDef<TensionRecord>[] = [
         ),
         enableSorting: false,
         enableHiding: false,
+        meta: { className: 'w-8 pr-0' },
     },
     {
-        accessorKey: 'Date',
-        header: 'Record Date',
+        id: 'recorded_at',
         accessorFn: (row) => row.created_at,
+        header: 'Recorded',
+        cell: ({ getValue }) => <DateTimeCell value={getValue()} />,
+        meta: { label: 'Recorded' },
+    },
+    {
+        id: 'machine',
+        accessorFn: (row) => row.metadata?.machine_number ?? row.form_data?.machineNumber,
+        header: 'Loom',
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+        meta: { label: 'Loom (machine number)' },
+    },
+    {
+        id: 'production_order',
+        accessorFn: (row) => row.form_data?.productionOrder,
+        header: 'Prod. order',
+        enableSorting: false,
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+        meta: { label: 'Production order' },
+    },
+    {
+        id: 'item_number',
+        accessorFn: (row) => row.metadata?.item_number,
+        header: 'Item no.',
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+        meta: { label: 'Item number' },
+    },
+    {
+        id: 'item_description',
+        accessorFn: (row) => row.metadata?.item_description,
+        header: 'Description',
+        enableSorting: false,
         cell: ({ getValue }) => {
-            const date = new Date(getValue() as string);
-            return (
-                <div>
-                    {date.toLocaleString('en-ID', {
-                        day: '2-digit',
-                        month: 'numeric',
-                        year: 'numeric',
-                    })}
-                </div>
+            const value = getValue() as string | undefined;
+            return value ? (
+                <span className="block max-w-56 truncate text-xs text-muted-foreground" title={value}>
+                    {value}
+                </span>
+            ) : (
+                <TextCell value={null} />
             );
         },
+        meta: { label: 'Item description' },
     },
     {
-        accessorKey: 'Item Number',
-        header: 'Item Number',
-        accessorFn: (row) => row.metadata?.item_number,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Item Description',
-        header: 'Item Description',
-        accessorFn: (row) => row.metadata?.item_description,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Operator',
-        header: 'Operator',
-        accessorFn: (row) => row.metadata?.operator,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Machine Number',
-        header: 'Machine Number',
-        accessorFn: (row) => row.form_data?.machineNumber,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-
-    {
-        accessorKey: 'Color Code',
-        header: 'Color Code',
-        accessorFn: (row) => row.form_data?.colorCode,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Production Order',
-        header: 'Production Order',
-        accessorFn: (row) => row.form_data?.productionOrder,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Bale Number',
-        header: 'Bale Number',
+        id: 'bale',
         accessorFn: (row) => row.form_data?.baleNumber,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'Bale',
+        enableSorting: false,
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+        meta: { label: 'Bale number' },
     },
     {
-        accessorKey: 'Spec. Tension (cN)',
-        header: 'Spec. Tension (cN)',
+        id: 'color',
+        accessorFn: (row) => row.form_data?.colorCode,
+        header: 'Colour',
+        enableSorting: false,
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+        meta: { label: 'Colour code' },
+    },
+    {
+        id: 'operator',
+        accessorFn: (row) => row.metadata?.operator,
+        header: 'Operator',
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+        meta: { label: 'Operator' },
+    },
+    {
+        id: 'spec',
         accessorFn: (row) => row.form_data?.specTens,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
+        header: 'Spec (cN)',
+        enableSorting: false,
+        cell: ({ row, getValue }) => (
+            <NumberCell
+                value={getValue()}
+                suffix={row.original.form_data?.tensPlus ? `±${row.original.form_data.tensPlus}` : undefined}
+            />
         ),
+        meta: { label: 'Spec. tension ± deviation (cN)', align: 'right' },
     },
     {
-        accessorKey: 'Tens. Deviation (cN)',
-        header: 'Tens. Deviation (cN)',
-        accessorFn: (row) => row.form_data?.tensPlus,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
-    },
-    {
-        accessorKey: 'Meters Check (m)',
-        header: 'Meters Check (m)',
+        id: 'meters',
         accessorFn: (row) => row.form_data?.metersCheck,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'Meters',
+        enableSorting: false,
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Meters check (m)', align: 'right' },
+    },
+    {
+        id: 'progress',
+        accessorFn: (row) => progressOf(row),
+        header: 'Progress',
+        enableSorting: false,
+        cell: ({ getValue }) => <ProgressCell percent={getValue() as number | null} />,
+        meta: { label: 'Progress' },
+    },
+    {
+        id: 'problems',
+        accessorFn: (row) => problemCounts(row).open,
+        header: 'Problems',
+        enableSorting: false,
+        cell: ({ row }) => <ProblemsCell {...problemCounts(row.original)} />,
+        meta: { label: 'Problems (open / total)' },
     },
     {
         id: 'actions',
-        header: 'Actions',
+        header: () => <span className="sr-only">Actions</span>,
+        enableSorting: false,
         enableHiding: false,
-        cell: ({ row, table }) => {
-            const record = row.original;
-            const meta = table.options.meta as WeavingTableMeta;
-            const [menuOpen, setMenuOpen] = useState(false);
-            const handleDownload = () => {
-                 // const blob = new Blob([record.csv_data], { type: 'text/csv' });
-                const baseUrl = window.location.origin;
-                const url = `${baseUrl}/tension-records/${record.id}/download`;
-
-                const a = document.createElement('a');
-                a.href = url;
-                // a.download = `ID${record.id}-${record.created_at}-${record.metadata.machine_number}-${record.metadata.operator}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-            };
-            return (
-                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                        <DropdownMenuItem onClick={handleDownload}>
-                            <DownloadIcon></DownloadIcon>Download
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ViewWeavingRecordDialog record={record} onCloseMenu={() => setMenuOpen(false)} />
-                        <EditWeavingRecordDialog record={record} onSaved={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            );
-        },
+        cell: ({ row, table }) => <WeavingRowActions record={row.original} onSaved={table.options.meta?.refetch} />,
+        meta: { className: 'w-10 px-1' },
     },
 ];
 
@@ -1054,235 +1048,43 @@ function EditWeavingRecordDialog({ record, onSaved, onCloseMenu }: { record: Ten
     );
 }
 
-export function WeavingDataTable() {
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] =
-        React.useState<ColumnFiltersState>([]);
-    const [columnVisibility, setColumnVisibility] =
-        React.useState<VisibilityState>({});
-    const [rowSelection, setRowSelection] = React.useState({});
-    const [data, setData] = useState<TensionRecord[]>([]);
-    const [totalRows, setTotalRows] = useState(0);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
 
-    const [pagination, setPagination] = useState({
-        pageIndex: 0, // TanStack starts from 0
-        pageSize: 10,
+const WEAVING_PARAMS = { type: 'weaving' };
+
+export function WeavingDataTable() {
+    const grid = useServerTable<TensionRecord>({
+        endpoint: '/tension-records',
+        params: WEAVING_PARAMS,
+        storageKey: 'weaving-tension-records',
+        defaultColumnVisibility: { bale: false, color: false, meters: false },
     });
-    const [refreshKey, setRefreshKey] = useState(0);
 
     const table = useReactTable({
-        data,
+        data: grid.data,
         columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
+        getRowId: (row) => String(row.id),
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         manualPagination: true,
+        manualSorting: true,
         manualFiltering: true,
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onGlobalFilterChange: setGlobalFilter,
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        onPaginationChange: setPagination,
-        pageCount,
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            rowSelection,
-            pagination,
-        },
-        meta: {
-            refetch: () => setRefreshKey((k) => k + 1),
-        },
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+        meta: { refetch: grid.refetch },
     });
 
-    const baseUrl = window.location.origin;
-    useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchData = async () => {
-        setLoading(true);
-
-        const params = new URLSearchParams({
-            page: (pagination.pageIndex + 1).toString(),
-            per_page: pagination.pageSize.toString(),
-        });
-
-        params.append('type', 'weaving'); // 🧠 Filter by weaving type
-
-        // 🧠 Add global filter (search box)
-        if (globalFilter) {
-            params.append('search', globalFilter);
-        }
-
-        // 🧠 Add column filters
-        columnFilters.forEach((filter) => {
-            if (filter.value) {
-                params.append(filter.id, String(filter.value));
-            }
-        });
-
-        // 🧠 Add sorting (from TanStack Table sorting state)
-        if (sorting.length > 0) {
-            const sort = sorting[0]; // single-column sort
-            params.append('sort_by', sort.id);
-            params.append('sort_dir', sort.desc ? 'desc' : 'asc');
-        }
-
-        try {
-            const response = await fetch(
-                `${baseUrl}/tension-records/?${params.toString()}`,
-                {
-                    credentials: 'include', // keep session if needed
-                    signal: controller.signal,
-                },
-            );
-
-            const json: LaravelPaginatedResponse<TensionRecord> =
-                await response.json();
-
-            setData(json.data);
-            setTotalRows(json.total);
-            setPageCount(json.last_page);
-        } catch (error: unknown) {
-            if ((error as { name?: string }).name !== 'AbortError') {
-                console.error('Fetch error:', error);
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchData();
-
-    return () => controller.abort();
-}, [
-    pagination.pageIndex,
-    pagination.pageSize,
-    sorting,
-    globalFilter,
-    columnFilters,
-    refreshKey,
-]);
-
     return (
-        <div className="w-full">
-            <div className="flex items-center py-4">
-                <Input
-                    placeholder="Search value"
-                    value={globalFilter ?? ""}
-                    onChange={(e) => setGlobalFilter(e.target.value)}
-                    className="max-w-sm"
-                />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            Columns <ChevronDown />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table
-                            .getAllColumns()
-                            .filter((column) => column.getCanHide())
-                            .map((column) => {
-                                return (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        className="capitalize"
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) =>
-                                            column.toggleVisibility(!!value)
-                                        }
-                                    >
-                                        {column.id}
-                                    </DropdownMenuCheckboxItem>
-                                );
-                            })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-            <div className="overflow-hidden rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                      header.column.columnDef
-                                                          .header,
-                                                      header.getContext(),
-                                                  )}
-                                        </TableHead>
-                                    );
-                                })}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={
-                                        row.getIsSelected() && 'selected'
-                                    }
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext(),
-                                            )}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center"
-                                >
-                                    Contacting server for information...
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <div className="flex-1 text-sm text-muted-foreground">
-                    {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                    {table.getFilteredRowModel().rows.length} row(s) selected.
-                </div>
-                <div className="space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-        </div>
+        <DataGrid
+            table={table}
+            label="Weaving tension records"
+            loading={grid.loading}
+            error={grid.error}
+            total={grid.total}
+            onRetry={grid.refetch}
+            search={grid.search}
+            onSearchChange={grid.setSearch}
+            searchPlaceholder="Search loom, item, operator…"
+            emptyMessage="No weaving tension records yet."
+        />
     );
 }

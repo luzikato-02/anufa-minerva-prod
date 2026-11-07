@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/dialog';
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
@@ -33,20 +32,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
-    type ColumnDef,
-    type ColumnFiltersState,
-    flexRender,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
-    type SortingState,
-    useReactTable,
-    type VisibilityState,
-} from '@tanstack/react-table';
-import {
-    ChevronDown,
     CircleAlertIcon,
     DownloadIcon,
     EyeIcon,
@@ -55,8 +42,12 @@ import {
     UploadIcon,
     VerifiedIcon,
 } from 'lucide-react';
+import { CodeCell, DateTimeCell, NumberCell, TextCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
+import { useServerTable } from '@/hooks/use-server-table';
+import { cn } from '@/lib/utils';
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 
 interface StockTakeRecord {
@@ -76,14 +67,6 @@ interface StockTakeRecord {
     session_id?: any;
 }
 
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
-}
-
 // Percentage of batches that have been checked/found relative to the total.
 function calculateSimilitudeRatio(
     totalCheckedBatches: number,
@@ -94,19 +77,51 @@ function calculateSimilitudeRatio(
         : 0;
 }
 
+function SessionStatusCell({ status }: { status?: string }) {
+    if (!status) return <TextCell value={null} />;
+    const inProgress = status === 'In Progress';
+    const completed = status === 'Completed';
+    return (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+            <span
+                aria-hidden="true"
+                className={cn(
+                    'size-1.5 rounded-full',
+                    inProgress ? 'bg-blue-600' : completed ? 'bg-emerald-600' : 'bg-muted-foreground/40',
+                )}
+            />
+            <span className={completed ? 'text-muted-foreground' : undefined}>{status}</span>
+        </span>
+    );
+}
+
+/** Checked vs total batches: thin bar, counts and percentage on one line. */
+function BatchProgressCell({ found, total }: { found: number; total: number }) {
+    const ratio = calculateSimilitudeRatio(found, total);
+    return (
+        <span className="inline-flex items-center gap-1.5">
+            <span className="h-1 w-12 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <span className="block h-full rounded-full bg-foreground/70" style={{ width: `${ratio}%` }} />
+            </span>
+            <span className="text-xs tabular-nums">
+                {found.toLocaleString('en-US')} / {total.toLocaleString('en-US')}
+            </span>
+            <span className={cn('text-xs tabular-nums', ratio >= 100 ? 'text-muted-foreground' : 'font-medium')}>
+                {ratio}%
+            </span>
+        </span>
+    );
+}
+
+/** Sorting stays off: the stock take endpoint returns its own fixed order. */
 export const columns: ColumnDef<StockTakeRecord>[] = [
     {
         id: 'select',
         header: ({ table }) => (
             <Checkbox
-                checked={
-                    table.getIsAllPageRowsSelected() ||
-                    (table.getIsSomePageRowsSelected() && 'indeterminate')
-                }
-                onCheckedChange={(value) =>
-                    table.toggleAllPageRowsSelected(!!value)
-                }
-                aria-label="Select all"
+                checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                aria-label="Select all rows on this page"
             />
         ),
         cell: ({ row }) => (
@@ -116,123 +131,73 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
                 aria-label="Select row"
             />
         ),
-        enableSorting: false,
         enableHiding: false,
+        meta: { className: 'w-8 pr-0' },
     },
     {
-        accessorKey: 'Date',
-        header: 'Record Date',
+        id: 'recorded_at',
         accessorFn: (row) => row.created_at,
-        cell: ({ getValue }) => {
-            const date = new Date(getValue() as string);
-            return (
-                <div>
-                    {date.toLocaleString('en-ID', {
-                        day: '2-digit',
-                        month: 'numeric',
-                        year: 'numeric',
-                    })}
-                </div>
-            );
-        },
+        header: 'Started',
+        cell: ({ getValue }) => <DateTimeCell value={getValue()} />,
+        meta: { label: 'Started' },
     },
     {
-        accessorKey: 'Session ID',
-        header: 'Session ID',
+        id: 'session',
         accessorFn: (row) => row.session_id,
-        cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
+        header: 'Session',
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+        meta: { label: 'Session ID' },
     },
     {
-        accessorKey: 'Session Leader',
-        header: 'Session Leader',
+        id: 'leader',
         accessorFn: (row) => row.metadata?.session_leader,
-        cell: ({ getValue }) => (
-            <div className="capitalize">{String(getValue() ?? 'N/A')}</div>
-        ),
+        header: 'Leader',
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+        meta: { label: 'Session leader' },
     },
     {
-        accessorKey: 'Session Status',
-        header: 'Session Status',
+        id: 'status',
         accessorFn: (row) => row.metadata?.session_status,
-        cell: ({ getValue }) => {
-            if (getValue() === 'In Progress') {
-                return <Badge variant="secondary">{String(getValue())}</Badge>;
-            } else if (getValue() === 'Completed') {
-                return (
-                    <Badge
-                        variant="secondary"
-                        className="bg-blue-500 text-white dark:bg-blue-600"
-                    >
-                        <VerifiedIcon></VerifiedIcon>
-                        {String(getValue())}
-                    </Badge>
-                );
-            } else {
-                return (
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-sm font-medium text-gray-800">
-                        {String(getValue() ?? 'N/A')}
-                    </span>
-                );
-            }
-        },
+        header: 'Status',
+        cell: ({ getValue }) => <SessionStatusCell status={getValue() as string | undefined} />,
+        meta: { label: 'Session status' },
     },
     {
-        accessorKey: 'Total Materials',
-        header: 'Total Materials',
+        id: 'materials',
         accessorFn: (row) => row.metadata?.total_materials,
-        cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
+        header: 'Materials',
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Total materials', align: 'right' },
     },
     {
-        accessorKey: 'Progress',
-        header: 'Progress',
-        accessorFn: (row) => row.metadata,
-        cell: ({ getValue }) => {
-            const metadata = getValue() as StockTakeRecord['metadata'];
-            const total = metadata?.total_batches ?? 0;
-            const found = metadata?.total_checked_batches ?? 0;
-            const ratio = calculateSimilitudeRatio(found, total);
-
-            return (
-                <div className="flex min-w-32 flex-col gap-1">
-                    <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium">
-                            {found} / {total} batches
-                        </span>
-                        <span className="text-muted-foreground">{ratio}%</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                            className="h-full rounded-full bg-blue-500"
-                            style={{ width: `${ratio}%` }}
-                        />
-                    </div>
-                </div>
-            );
-        },
+        id: 'progress',
+        accessorFn: (row) => row.metadata?.total_checked_batches,
+        header: 'Batches checked',
+        cell: ({ row }) => (
+            <BatchProgressCell
+                found={row.original.metadata?.total_checked_batches ?? 0}
+                total={row.original.metadata?.total_batches ?? 0}
+            />
+        ),
+        meta: { label: 'Batches checked' },
     },
     {
         id: 'actions',
-        header: 'Actions',
+        header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
-        cell: ({ row, table }) => {
-            const record = row.original;
-            return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <ViewSessionDialog
-                            record={record}
-                            onStatusChange={table.options.meta?.onStatusChange}
-                        />
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            );
-        },
+        cell: ({ row, table }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon-xs" aria-label={`Actions for session ${row.original.session_id ?? ''}`}>
+                        <MoreHorizontal />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <ViewSessionDialog record={row.original} onStatusChange={table.options.meta?.onStatusChange} />
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+        meta: { className: 'w-10 px-1' },
     },
 ];
 
@@ -703,136 +668,30 @@ function countUniqueMaterialCodes(data: Record<string, string>[]): number {
 }
 
 export function StockTakeDataTable() {
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] =
-        React.useState<ColumnFiltersState>([]);
-    const [columnVisibility, setColumnVisibility] =
-        React.useState<VisibilityState>({});
-    const [rowSelection, setRowSelection] = React.useState({});
-    const [data, setData] = useState<StockTakeRecord[]>([]);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
-    const [refreshIndex, setRefreshIndex] = useState(0);
     const [notice, setNotice] = useState<NoticeState>(initialNoticeState);
 
-    const showNotice = (
-        variant: NoticeVariant,
-        title: string,
-        description: string,
-    ) => setNotice({ open: true, variant, title, description });
+    const showNotice = (variant: NoticeVariant, title: string, description: string) =>
+        setNotice({ open: true, variant, title, description });
 
-    const [pagination, setPagination] = useState({
-        pageIndex: 0,
-        pageSize: 10,
+    const grid = useServerTable<StockTakeRecord>({
+        endpoint: '/stock-take-records',
+        storageKey: 'stock-take-records',
     });
-
-    const handleStatusChange = (id: string, status: string) => {
-        setData((prev) =>
-            prev.map((record) =>
-                record.id === id
-                    ? {
-                          ...record,
-                          metadata: {
-                              ...record.metadata,
-                              session_status: status,
-                          },
-                      }
-                    : record,
-            ),
-        );
-    };
 
     const table = useReactTable({
-        data,
+        data: grid.data,
         columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
+        getRowId: (row) => String(row.id),
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         manualPagination: true,
         manualFiltering: true,
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onGlobalFilterChange: setGlobalFilter,
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        onPaginationChange: setPagination,
-        pageCount,
-        meta: {
-            onStatusChange: handleStatusChange,
-        },
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            rowSelection,
-            pagination,
-        },
+        enableSorting: false,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+        // A status change is saved by the dialog; reload so the row shows it.
+        meta: { onStatusChange: () => grid.refetch(), refetch: grid.refetch },
     });
-
-    const baseUrl = window.location.origin;
-    useEffect(() => {
-        const controller = new AbortController();
-
-        const fetchData = async () => {
-            setLoading(true);
-
-            const params = new URLSearchParams({
-                page: (pagination.pageIndex + 1).toString(),
-                per_page: pagination.pageSize.toString(),
-            });
-
-            if (globalFilter) {
-                params.append('search', globalFilter);
-            }
-
-            columnFilters.forEach((filter) => {
-                if (filter.value) {
-                    params.append(filter.id, String(filter.value));
-                }
-            });
-
-            if (sorting.length > 0) {
-                const sort = sorting[0];
-                params.append('sort_by', sort.id);
-                params.append('sort_dir', sort.desc ? 'desc' : 'asc');
-            }
-
-            try {
-                const response = await fetch(
-                    `${baseUrl}/stock-take-records?${params.toString()}`,
-                    {
-                        credentials: 'include',
-                        signal: controller.signal,
-                    },
-                );
-
-                const json: LaravelPaginatedResponse<StockTakeRecord> =
-                    await response.json();
-
-                setData(json.data);
-                setPageCount(json.last_page);
-            } catch (error: any) {
-                if (error.name !== 'AbortError') {
-                    console.error('Fetch error:', error);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-
-        return () => controller.abort();
-    }, [
-        pagination.pageIndex,
-        pagination.pageSize,
-        sorting,
-        globalFilter,
-        columnFilters,
-        refreshIndex,
-    ]);
 
     const [sessionLeader, setSessionLeader] = useState('');
     const [jsonData, setJsonData] = useState<Record<string, string>[]>([]);
@@ -871,11 +730,7 @@ export function StockTakeDataTable() {
     // Action when submitting new session
     const handleSubmit = async () => {
         if (!sessionLeader || jsonData.length === 0) {
-            showNotice(
-                'error',
-                'Missing Information',
-                'Please provide a session leader and upload a CSV file.',
-            );
+            showNotice('error', 'Missing Information', 'Please provide a session leader and upload a CSV file.');
             return;
         }
 
@@ -914,266 +769,118 @@ export function StockTakeDataTable() {
 
             setSessionLeader('');
             setJsonData([]);
-            setRefreshIndex((i) => i + 1);
-            showNotice(
-                'success',
-                'Session Created',
-                'Session created successfully!',
-            );
+            grid.refetch();
+            showNotice('success', 'Session Created', 'Session created successfully!');
         } catch (error) {
             console.error(error);
             showNotice('error', 'Creation Failed', 'Error creating session.');
         }
     };
 
-    return (
-        <>
-            <div className="w-full">
-                <div className="flex items-center justify-between py-4">
-                    <Input
-                        placeholder="Search value"
-                        value={globalFilter ?? ''}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                        className="max-w-sm"
-                    />
-                    <div className="ml-auto flex items-center gap-2">
-                        <Dialog
-                            open={open}
-                            onOpenChange={(isOpen) => {
-                                setOpen(isOpen);
-                                if (!isOpen) resetSessionForm();
-                            }}
-                        >
-                            <DialogTrigger asChild>
-                                <Button className="bg-primary text-white hover:bg-primary/90">
-                                    <PlusIcon></PlusIcon>Create New Session
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
-                                <DialogHeader>
-                                    <DialogTitle>
-                                        Create New Session
-                                    </DialogTitle>
-                                    <DialogDescription>
-                                        Fill out the details below to start a
-                                        new stock take session.
-                                    </DialogDescription>
-                                </DialogHeader>
+    const createSessionDialog = (
+        <Dialog
+            open={open}
+            onOpenChange={(isOpen) => {
+                setOpen(isOpen);
+                if (!isOpen) resetSessionForm();
+            }}
+        >
+            <DialogTrigger asChild>
+                <Button size="xs">
+                    <PlusIcon />
+                    New session
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Create New Session</DialogTitle>
+                    <DialogDescription>Fill out the details below to start a new stock take session.</DialogDescription>
+                </DialogHeader>
 
-                                <div className="space-y-4 py-2">
-                                    <div>
-                                        <label className="text-sm font-medium">
-                                            Session Leader
-                                        </label>
-                                        <Input
-                                            placeholder="Enter leader name"
-                                            value={sessionLeader}
-                                            onChange={(e) =>
-                                                setSessionLeader(e.target.value)
-                                            }
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium">
-                                            Upload Stock Data
-                                        </label>
-                                        <Button
-                                            variant="outline"
-                                            type="button"
-                                            onClick={() =>
-                                                document
-                                                    .getElementById(
-                                                        'stock-file',
-                                                    )
-                                                    ?.click()
-                                            }
-                                        >
-                                            <UploadIcon></UploadIcon>Upload File
-                                        </Button>
-                                        <input
-                                            id="stock-file"
-                                            type="file"
-                                            accept=".csv"
-                                            className="hidden"
-                                            onChange={handleFileUpload}
-                                        />
-                                    </div>
-                                    {jsonData.length > 0 && (
-                                        <div className="max-h-[60vh] overflow-auto rounded-md border p-3 text-sm">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        {Object.keys(
-                                                            jsonData[0],
-                                                        ).map((key) => (
-                                                            <TableHead
-                                                                key={key}
-                                                            >
-                                                                {key}
-                                                            </TableHead>
-                                                        ))}
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {jsonData.map((row, i) => (
-                                                        <TableRow key={i}>
-                                                            {Object.values(
-                                                                row,
-                                                            ).map((val, j) => (
-                                                                <TableCell
-                                                                    key={j}
-                                                                >
-                                                                    {val}
-                                                                </TableCell>
-                                                            ))}
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <DialogFooter>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => {
-                                            resetSessionForm();
-                                            setOpen(false);
-                                        }}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={async () => {
-                                            await handleSubmit();
-                                            setOpen(false);
-                                        }}
-                                        disabled={
-                                            !sessionLeader ||
-                                            jsonData.length === 0
-                                        }
-                                    >
-                                        Create Session
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className="ml-auto bg-transparent"
-                                >
-                                    Columns <ChevronDown />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                {table
-                                    .getAllColumns()
-                                    .filter((column) => column.getCanHide())
-                                    .map((column) => {
-                                        return (
-                                            <DropdownMenuCheckboxItem
-                                                key={column.id}
-                                                className="capitalize"
-                                                checked={column.getIsVisible()}
-                                                onCheckedChange={(value) =>
-                                                    column.toggleVisibility(
-                                                        !!value,
-                                                    )
-                                                }
-                                            >
-                                                {column.id}
-                                            </DropdownMenuCheckboxItem>
-                                        );
-                                    })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                <div className="space-y-4 py-2">
+                    <div>
+                        <label className="text-sm font-medium" htmlFor="stock-session-leader">
+                            Session Leader
+                        </label>
+                        <Input
+                            id="stock-session-leader"
+                            placeholder="Enter leader name"
+                            value={sessionLeader}
+                            onChange={(e) => setSessionLeader(e.target.value)}
+                        />
                     </div>
-                </div>
-                <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => {
-                                        return (
-                                            <TableHead key={header.id}>
-                                                {header.isPlaceholder
-                                                    ? null
-                                                    : flexRender(
-                                                          header.column
-                                                              .columnDef.header,
-                                                          header.getContext(),
-                                                      )}
-                                            </TableHead>
-                                        );
-                                    })}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {table.getRowModel().rows?.length ? (
-                                table.getRowModel().rows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        data-state={
-                                            row.getIsSelected() && 'selected'
-                                        }
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id}>
-                                                {flexRender(
-                                                    cell.column.columnDef.cell,
-                                                    cell.getContext(),
-                                                )}
-                                            </TableCell>
+
+                    <div>
+                        <label className="mb-2 block text-sm font-medium">Upload Stock Data</label>
+                        <Button variant="outline" type="button" onClick={() => document.getElementById('stock-file')?.click()}>
+                            <UploadIcon />
+                            Upload File
+                        </Button>
+                        <input id="stock-file" type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                    </div>
+                    {jsonData.length > 0 && (
+                        <div className="max-h-[60vh] overflow-auto rounded-md border p-3 text-sm">
+                            <Table size="dense">
+                                <TableHeader>
+                                    <TableRow>
+                                        {Object.keys(jsonData[0]).map((key) => (
+                                            <TableHead key={key}>{key}</TableHead>
                                         ))}
                                     </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={columns.length}
-                                        className="h-24 text-center"
-                                    >
-                                        {loading
-                                            ? 'Loading stock take records...'
-                                            : 'No stock take records found.'}
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {jsonData.map((row, i) => (
+                                        <TableRow key={i}>
+                                            {Object.values(row).map((val, j) => (
+                                                <TableCell key={j}>{val}</TableCell>
+                                            ))}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </div>
-                <div className="flex items-center justify-end space-x-2 py-4">
-                    <div className="flex-1 text-sm text-muted-foreground">
-                        {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                        {table.getFilteredRowModel().rows.length} row(s)
-                        selected.
-                    </div>
-                    <div className="space-x-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => table.previousPage()}
-                            disabled={!table.getCanPreviousPage()}
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => table.nextPage()}
-                            disabled={!table.getCanNextPage()}
-                        >
-                            Next
-                        </Button>
-                    </div>
-                </div>
-            </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            resetSessionForm();
+                            setOpen(false);
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={async () => {
+                            await handleSubmit();
+                            setOpen(false);
+                        }}
+                        disabled={!sessionLeader || jsonData.length === 0}
+                    >
+                        Create Session
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
+    return (
+        <>
+            <DataGrid
+                table={table}
+                label="Stock take sessions"
+                loading={grid.loading}
+                error={grid.error}
+                total={grid.total}
+                onRetry={grid.refetch}
+                search={grid.search}
+                onSearchChange={grid.setSearch}
+                searchPlaceholder="Search session, leader, status…"
+                emptyMessage="No stock take sessions yet."
+                actions={createSessionDialog}
+            />
 
             <NoticeDialog
                 open={notice.open}

@@ -32,7 +32,7 @@ class ActivityLogController extends Controller
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
-        $perPage = (int) $request->query('per_page', 15);
+        $perPage = max(1, min((int) $request->query('per_page', 15), 200));
 
         return $query->paginate($perPage)->withQueryString();
     }

@@ -11,7 +11,6 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -32,22 +31,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { type SharedData } from '@/types';
 import { usePage } from '@inertiajs/react';
-import {
-    ColumnDef,
-    flexRender,
-    getCoreRowModel,
-    useReactTable,
-} from '@tanstack/react-table';
+import { CodeCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
+import { useServerTable } from '@/hooks/use-server-table';
+import { cn } from '@/lib/utils';
+import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { MoreHorizontal, PencilIcon, PlusIcon, PowerIcon, ShieldIcon, Trash2Icon } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -66,14 +56,6 @@ export interface UserData {
     status: 'active' | 'inactive';
     roles: RoleRef[];
     created_at?: string;
-}
-
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
 }
 
 type UserTableMeta = {
@@ -589,8 +571,7 @@ function UserActionsCell({ user, meta }: { user: UserData; meta: UserTableMeta }
     return (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                    <span className="sr-only">Open menu</span>
+                <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${user.name}`}>
                     <MoreHorizontal />
                 </Button>
             </DropdownMenuTrigger>
@@ -626,82 +607,98 @@ function UserActionsCell({ user, meta }: { user: UserData; meta: UserTableMeta }
     );
 }
 
+function UserStatusCell({ status }: { status: UserData['status'] }) {
+    const active = status === 'active';
+    return (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+            <span aria-hidden="true" className={cn('size-1.5 rounded-full', active ? 'bg-emerald-600' : 'bg-muted-foreground/40')} />
+            <span className={active ? undefined : 'text-muted-foreground'}>{active ? 'Active' : 'Inactive'}</span>
+        </span>
+    );
+}
+
+/** Users come back sorted by name from the server; column sorting stays off. */
 export const columns: ColumnDef<UserData>[] = [
     {
-        accessorKey: 'name',
+        id: 'name',
+        accessorFn: (row) => row.name,
         header: 'Name',
-        cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        enableHiding: false,
+        meta: { label: 'Name' },
     },
     {
-        accessorKey: 'username',
+        id: 'username',
+        accessorFn: (row) => row.username,
         header: 'Username',
-        cell: ({ row }) => <div>{row.original.username}</div>,
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+        meta: { label: 'Username' },
     },
     {
-        accessorKey: 'email',
+        id: 'email',
+        accessorFn: (row) => row.email,
         header: 'Email',
-        cell: ({ row }) => <div className="lowercase">{row.original.email}</div>,
+        cell: ({ getValue }) => <span className="text-xs text-muted-foreground lowercase">{String(getValue() ?? '')}</span>,
+        meta: { label: 'Email' },
     },
     {
         id: 'roles',
         header: 'Roles',
-        cell: ({ row }) => (
-            <div className="flex flex-wrap gap-1">
-                {row.original.roles.length ? (
-                    row.original.roles.map((role) => (
-                        <Badge key={role.id} variant="secondary" className="capitalize">
+        cell: ({ row }) =>
+            row.original.roles.length ? (
+                <span className="flex flex-wrap gap-1">
+                    {row.original.roles.map((role) => (
+                        <span
+                            key={role.id}
+                            className="inline-flex h-5 items-center rounded border bg-muted px-1.5 text-[11px] font-medium capitalize"
+                        >
                             {role.name}
-                        </Badge>
-                    ))
-                ) : (
-                    <span className="text-sm text-muted-foreground">No role</span>
-                )}
-            </div>
-        ),
+                        </span>
+                    ))}
+                </span>
+            ) : (
+                <span className="text-xs font-medium text-orange-700 dark:text-orange-400">No role</span>
+            ),
+        meta: { label: 'Roles' },
     },
     {
         id: 'status',
         header: 'Status',
-        cell: ({ row }) => (
-            <Badge
-                variant={row.original.status === 'active' ? 'secondary' : 'destructive'}
-                className="capitalize"
-            >
-                {row.original.status}
-            </Badge>
-        ),
+        cell: ({ row }) => <UserStatusCell status={row.original.status} />,
+        meta: { label: 'Status' },
     },
     {
         id: 'actions',
-        header: 'Actions',
+        header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
         cell: ({ row, table }) => <UserActionsCell user={row.original} meta={table.options.meta as UserTableMeta} />,
+        meta: { className: 'w-10 px-1' },
     },
 ];
 
 export function UserDataTable() {
     const { auth } = usePage<SharedData>().props;
-    const [data, setData] = useState<UserData[]>([]);
     const [allRoles, setAllRoles] = useState<RoleRef[]>([]);
-    const [totalRows, setTotalRows] = useState(0);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [search, setSearch] = useState('');
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
-    const [refreshKey, setRefreshKey] = useState(0);
+
+    const grid = useServerTable<UserData>({
+        endpoint: '/api/users',
+        storageKey: 'users',
+    });
 
     const table = useReactTable({
-        data,
+        data: grid.data,
         columns,
+        getRowId: (row) => String(row.id),
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
-        pageCount,
-        state: {
-            pagination,
-        },
-        onPaginationChange: setPagination,
+        manualFiltering: true,
+        enableSorting: false,
+        enableRowSelection: false,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
         meta: {
-            refetch: () => setRefreshKey((k) => k + 1),
+            refetch: grid.refetch,
             allRoles,
             currentUserId: auth.user.id,
         },
@@ -721,111 +718,31 @@ export function UserDataTable() {
         return () => controller.abort();
     }, []);
 
-    useEffect(() => {
-        const baseUrl = window.location.origin;
-        const controller = new AbortController();
-
-        const fetchData = async () => {
-            setLoading(true);
-
-            const params = new URLSearchParams({
-                page: (pagination.pageIndex + 1).toString(),
-                per_page: pagination.pageSize.toString(),
-            });
-
-            if (search) {
-                params.append('search', search);
-            }
-
-            try {
-                const response = await fetch(`${baseUrl}/api/users?${params.toString()}`, {
-                    credentials: 'include',
-                    signal: controller.signal,
-                });
-
-                const json: LaravelPaginatedResponse<UserData> = await response.json();
-
-                setData(json.data);
-                setTotalRows(json.total);
-                setPageCount(json.last_page);
-            } catch (error: any) {
-                if (error.name !== 'AbortError') {
-                    console.error('Fetch error:', error);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-
-        return () => controller.abort();
-    }, [pagination.pageIndex, pagination.pageSize, search, refreshKey]);
-
     return (
-        <div className="w-full">
-            <div className="flex items-center py-4">
-                <Input
-                    placeholder="Search by name, username, or email"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="max-w-sm"
-                />
+        <DataGrid
+            table={table}
+            label="Users"
+            loading={grid.loading}
+            error={grid.error}
+            total={grid.total}
+            onRetry={grid.refetch}
+            search={grid.search}
+            onSearchChange={grid.setSearch}
+            searchPlaceholder="Search name, username, email…"
+            emptyMessage="No users yet."
+            actions={
                 <UserFormDialog
                     mode="create"
                     allRoles={allRoles}
-                    onSaved={() => setRefreshKey((k) => k + 1)}
+                    onSaved={grid.refetch}
                     trigger={
-                        <Button className="ml-auto">
-                            <PlusIcon className="mr-2 h-4 w-4" />
-                            New User
+                        <Button size="xs">
+                            <PlusIcon />
+                            New user
                         </Button>
                     }
                 />
-            </div>
-            <div className="overflow-hidden rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => (
-                                    <TableHead key={header.id}>
-                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                    </TableHead>
-                                ))}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow key={row.id}>
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={columns.length} className="h-24 text-center">
-                                    {loading ? 'Loading...' : 'No users found.'}
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <div className="flex-1 text-sm text-muted-foreground">{totalRows} total user(s).</div>
-                <div className="space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-                        Previous
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-                        Next
-                    </Button>
-                </div>
-            </div>
-        </div>
+            }
+        />
     );
 }

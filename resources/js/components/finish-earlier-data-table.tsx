@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog';
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -26,20 +25,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { CodeCell, DateTimeCell, NumberCell, TextCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
+import { useServerTable } from '@/hooks/use-server-table';
+import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
-    type ColumnDef,
-    type ColumnFiltersState,
-    flexRender,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
-    type SortingState,
-    useReactTable,
-    type VisibilityState,
-} from '@tanstack/react-table';
-import {
-    ChevronDown,
     DownloadIcon,
     EyeIcon,
     LayoutGrid,
@@ -75,14 +65,6 @@ interface FinishEarlierRecord {
     entries: Entry[];
     created_at?: string;
     updated_at?: string;
-}
-
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
 }
 
 function getCsrfToken(): string {
@@ -547,8 +529,8 @@ function RecordActions({
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="size-4" />
+                    <Button variant="ghost" size="icon-xs" aria-label={`Actions for PO ${record.metadata?.production_order ?? ''}`}>
+                        <MoreHorizontal />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -581,231 +563,147 @@ function RecordActions({
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 
+/** FE bobbin count with a small bar so heavy records stand out in the column. */
+function BobbinCountCell({ value }: { value: number | null | undefined }) {
+    if (value === null || value === undefined) return <TextCell value={null} />;
+    return (
+        <span className="inline-flex items-center justify-end gap-1.5">
+            <span
+                aria-hidden="true"
+                className="h-1.5 rounded-sm bg-orange-400"
+                style={{ width: `${Math.min(48, value * 4)}px` }}
+            />
+            <span className="min-w-5 tabular-nums">{value}</span>
+        </span>
+    );
+}
+
+/** The finish-earlier endpoint returns newest first and doesn't sort, so sorting stays off. */
+const columns: ColumnDef<FinishEarlierRecord>[] = [
+    {
+        id: 'select',
+        header: ({ table }) => (
+            <Checkbox
+                checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+                aria-label="Select all rows on this page"
+            />
+        ),
+        cell: ({ row }) => (
+            <Checkbox
+                checked={row.getIsSelected()}
+                onCheckedChange={(v) => row.toggleSelected(!!v)}
+                aria-label="Select row"
+            />
+        ),
+        enableHiding: false,
+        meta: { className: 'w-8 pr-0' },
+    },
+    {
+        id: 'recorded_at',
+        accessorFn: (row) => row.created_at,
+        header: 'Recorded',
+        cell: ({ getValue }) => <DateTimeCell value={getValue()} />,
+        meta: { label: 'Recorded' },
+    },
+    {
+        id: 'production_order',
+        accessorFn: (row) => row.metadata?.production_order,
+        header: 'Prod. order',
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+        meta: { label: 'Production order' },
+    },
+    {
+        id: 'machine',
+        accessorFn: (row) => row.metadata?.machine_number,
+        header: 'Loom',
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+        meta: { label: 'Loom (machine number)' },
+    },
+    {
+        id: 'material',
+        accessorFn: (row) => row.metadata?.style,
+        header: 'Material',
+        cell: ({ getValue }) => {
+            const value = getValue() as string | undefined;
+            return value ? (
+                <span className="block max-w-60 truncate text-xs text-muted-foreground" title={value}>
+                    {value}
+                </span>
+            ) : (
+                <TextCell value={null} />
+            );
+        },
+        meta: { label: 'Material description' },
+    },
+    {
+        id: 'shift',
+        accessorFn: (row) => row.metadata?.shift_group,
+        header: 'Shift',
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+        meta: { label: 'Shift group' },
+    },
+    {
+        id: 'fe_bobbins',
+        accessorFn: (row) => row.metadata?.total_finish_earlier,
+        header: 'FE bobbins',
+        cell: ({ getValue }) => <BobbinCountCell value={getValue() as number | undefined} />,
+        meta: { label: 'Finish-earlier bobbins', align: 'right' },
+    },
+    {
+        id: 'avg_meters',
+        accessorFn: (row) => row.metadata?.average_meters_finish,
+        header: 'Avg finish (m)',
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+        meta: { label: 'Average meters at finish', align: 'right' },
+    },
+    {
+        id: 'actions',
+        header: () => <span className="sr-only">Actions</span>,
+        enableHiding: false,
+        cell: ({ row, table }) => (
+            <RecordActions
+                record={row.original}
+                onSaved={() => table.options.meta?.refetch?.()}
+                onDeleted={() => table.options.meta?.refetch?.()}
+            />
+        ),
+        meta: { className: 'w-10 px-1' },
+    },
+];
+
 export function FinishEarlierDataTable() {
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-    const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-    const [rowSelection, setRowSelection] = React.useState({});
-    const [data, setData] = useState<FinishEarlierRecord[]>([]);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
-
-    const columns: ColumnDef<FinishEarlierRecord>[] = [
-        {
-            id: 'select',
-            header: ({ table }) => (
-                <Checkbox
-                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
-                    onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
-                    aria-label="Select all"
-                />
-            ),
-            cell: ({ row }) => (
-                <Checkbox
-                    checked={row.getIsSelected()}
-                    onCheckedChange={(v) => row.toggleSelected(!!v)}
-                    aria-label="Select row"
-                />
-            ),
-            enableSorting: false,
-            enableHiding: false,
-        },
-        {
-            id: 'Date',
-            header: 'Record Date',
-            accessorFn: (row) => row.created_at,
-            cell: ({ getValue }) => (
-                <div>
-                    {new Date(getValue() as string).toLocaleString('en-ID', {
-                        day: '2-digit', month: 'numeric', year: 'numeric',
-                    })}
-                </div>
-            ),
-        },
-        {
-            id: 'Shift Group',
-            header: 'Shift Group',
-            accessorFn: (row) => row.metadata?.shift_group,
-            cell: ({ getValue }) => <div className="capitalize">{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'Machine Number',
-            header: 'Machine Number',
-            accessorFn: (row) => row.metadata?.machine_number,
-            cell: ({ getValue }) => <div className="capitalize">{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'Production Order',
-            header: 'Production Order',
-            accessorFn: (row) => row.metadata?.production_order,
-            cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'Material Description',
-            header: 'Material Description',
-            accessorFn: (row) => row.metadata?.style,
-            cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'Total Finish Earlier Bobbins',
-            header: 'Total FE Bobbins',
-            accessorFn: (row) => row.metadata?.total_finish_earlier,
-            cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'Average Meters Finish',
-            header: 'Avg Meters Finish',
-            accessorFn: (row) => row.metadata?.average_meters_finish,
-            cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
-        },
-        {
-            id: 'actions',
-            header: 'Actions',
-            enableHiding: false,
-            cell: ({ row }) => (
-                <RecordActions
-                    record={row.original}
-                    onSaved={(updated) =>
-                        setData((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
-                    }
-                    onDeleted={(id) =>
-                        setData((prev) => prev.filter((r) => r.id !== id))
-                    }
-                />
-            ),
-        },
-    ];
-
-    const table = useReactTable({
-        data,
-        columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        manualPagination: true,
-        manualFiltering: true,
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onGlobalFilterChange: setGlobalFilter,
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        onPaginationChange: setPagination,
-        pageCount,
-        state: { sorting, columnFilters, columnVisibility, rowSelection, pagination },
+    const grid = useServerTable<FinishEarlierRecord>({
+        endpoint: '/finish-earlier',
+        storageKey: 'finish-earlier-records',
     });
 
-    useEffect(() => {
-        const controller = new AbortController();
-        const fetchData = async () => {
-            setLoading(true);
-            const params = new URLSearchParams({
-                page: (pagination.pageIndex + 1).toString(),
-                per_page: pagination.pageSize.toString(),
-            });
-            if (globalFilter) params.append('search', globalFilter);
-            columnFilters.forEach((f) => { if (f.value) params.append(f.id, String(f.value)); });
-            if (sorting.length > 0) {
-                params.append('sort_by', sorting[0].id);
-                params.append('sort_dir', sorting[0].desc ? 'desc' : 'asc');
-            }
-            try {
-                const res = await fetch(
-                    `${window.location.origin}/finish-earlier?${params}`,
-                    { credentials: 'include', signal: controller.signal },
-                );
-                const json: LaravelPaginatedResponse<FinishEarlierRecord> = await res.json();
-                setData(json.data);
-                setPageCount(json.last_page);
-            } catch (e: any) {
-                if (e.name !== 'AbortError') console.error('Fetch error:', e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-        return () => controller.abort();
-    }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter, columnFilters]);
+    const table = useReactTable({
+        data: grid.data,
+        columns,
+        getRowId: (row) => String(row.id),
+        getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
+        manualFiltering: true,
+        enableSorting: false,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+        meta: { refetch: grid.refetch },
+    });
 
     return (
-        <div className="w-full">
-            <div className="flex items-center justify-between py-4">
-                <Input
-                    placeholder="Search value"
-                    value={globalFilter ?? ''}
-                    onChange={(e) => setGlobalFilter(e.target.value)}
-                    className="max-w-sm"
-                />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto bg-transparent">
-                            Columns <ChevronDown />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table.getAllColumns().filter((c) => c.getCanHide()).map((column) => (
-                            <DropdownMenuCheckboxItem
-                                key={column.id}
-                                className="capitalize"
-                                checked={column.getIsVisible()}
-                                onCheckedChange={(v) => column.toggleVisibility(!!v)}
-                            >
-                                {column.id}
-                            </DropdownMenuCheckboxItem>
-                        ))}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-            <div className="overflow-hidden rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((hg) => (
-                            <TableRow key={hg.id}>
-                                {hg.headers.map((header) => (
-                                    <TableHead key={header.id}>
-                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                    </TableHead>
-                                ))}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={columns.length} className="h-24 text-center">
-                                    {loading ? 'Loading…' : 'No records found.'}
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end gap-2 py-4">
-                <div className="flex-1 text-sm text-muted-foreground">
-                    {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                    {table.getFilteredRowModel().rows.length} row(s) selected.
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-                        Previous
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-                        Next
-                    </Button>
-                </div>
-            </div>
-        </div>
+        <DataGrid
+            table={table}
+            label="Finish earlier records"
+            loading={grid.loading}
+            error={grid.error}
+            total={grid.total}
+            onRetry={grid.refetch}
+            search={grid.search}
+            onSearchChange={grid.setSearch}
+            searchPlaceholder="Search PO, loom, material…"
+            emptyMessage="No finish-earlier records yet."
+        />
     );
 }

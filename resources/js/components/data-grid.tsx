@@ -334,9 +334,33 @@ export function DataGrid<T>({
                             <TableRow className="hover:bg-transparent">
                                 <TableCell
                                     colSpan={visibleColumnCount}
-                                    className="h-24! text-center text-sm text-muted-foreground"
+                                    className="h-28! text-center text-sm"
                                 >
-                                    {emptyMessage}
+                                    <div className="flex flex-col items-center gap-2">
+                                        <span>
+                                            {search?.trim() ? (
+                                                <>
+                                                    No records match &ldquo;
+                                                    {search.trim()}&rdquo;.
+                                                </>
+                                            ) : (
+                                                emptyMessage
+                                            )}
+                                        </span>
+                                        {search?.trim() && onSearchChange && (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="xs"
+                                                    onClick={() =>
+                                                        onSearchChange('')
+                                                    }
+                                                >
+                                                    Clear search
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         )}
@@ -346,9 +370,11 @@ export function DataGrid<T>({
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                 <span className="tabular-nums">
-                    {total === 0
-                        ? 'No records'
-                        : `Showing ${numberFormat.format(firstRow)}–${numberFormat.format(lastRow)} of ${numberFormat.format(total)}`}
+                    {showSkeleton
+                        ? 'Loading records…'
+                        : total === 0
+                          ? 'No records'
+                          : `Showing ${numberFormat.format(firstRow)}–${numberFormat.format(lastRow)} of ${numberFormat.format(total)}`}
                 </span>
                 <div className="ml-auto flex flex-wrap items-center gap-3">
                     <label className="flex items-center gap-1.5">

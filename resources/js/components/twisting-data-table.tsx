@@ -32,6 +32,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useServerTable } from '@/hooks/use-server-table';
+import { problemCounts, progressOf } from '@/lib/tension-record-summary';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
     DownloadIcon,
@@ -74,25 +75,6 @@ interface TensionRecord {
     };
     created_at?: string;
     updated_at?: string;
-}
-
-/** Percentage measured, from metadata (falls back to completed / total). */
-function progressOf(record: TensionRecord): number | null {
-    const meta = record.metadata;
-    if (!meta) return null;
-    if (typeof meta.progress_percentage === 'number') {
-        return meta.progress_percentage;
-    }
-    if (meta.total_measurements) {
-        return (meta.completed_measurements / meta.total_measurements) * 100;
-    }
-    return null;
-}
-
-function problemCounts(record: TensionRecord) {
-    const problems = Array.isArray(record.problems) ? record.problems : [];
-    const open = problems.filter((p) => (p?.status ?? 'open') !== 'resolved').length;
-    return { open, total: problems.length };
 }
 
 /** "1400 dtex · 470 TPM · 9.0k RPM" — the parameters people scan together. */
@@ -1090,7 +1072,7 @@ export function TwistingDataTable() {
             search={grid.search}
             onSearchChange={grid.setSearch}
             searchPlaceholder="Search machine, item, operator…"
-            emptyMessage="No twisting tension records match this search."
+            emptyMessage="No twisting tension records yet."
         />
     );
 }

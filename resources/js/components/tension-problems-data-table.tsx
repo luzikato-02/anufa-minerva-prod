@@ -1,6 +1,5 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -13,31 +12,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import {
-    ColumnDef,
-    flexRender,
-    getCoreRowModel,
-    getPaginationRowModel,
-    useReactTable,
-} from '@tanstack/react-table';
-import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { CodeCell, DateTimeCell, TextCell } from '@/components/data-grid-cells';
+import { DataGrid } from '@/components/data-grid';
+import { useServerTable } from '@/hooks/use-server-table';
+import { cn } from '@/lib/utils';
+import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { useMemo, useState } from 'react';
 
 interface TensionProblemResolution {
     action: string;
@@ -62,18 +43,6 @@ interface TensionProblem {
     status: 'open' | 'resolved';
     resolution: TensionProblemResolution | null;
 }
-
-interface LaravelPaginatedResponse<T> {
-    current_page: number;
-    data: T[];
-    last_page: number;
-    per_page: number;
-    total: number;
-}
-
-type TensionProblemsTableMeta = {
-    refetch: () => void;
-};
 
 const formatDate = (date?: string | null) =>
     date
@@ -144,7 +113,7 @@ function ResolveProblemDialog({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm">Resolve</Button>
+                <Button size="xs" variant="outline">Resolve</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
@@ -208,8 +177,8 @@ function ViewResolutionDialog({ problem }: { problem: TensionProblem }) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                    View Resolution
+                <Button size="xs" variant="outline">
+                    View resolution
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
@@ -253,263 +222,209 @@ function ViewResolutionDialog({ problem }: { problem: TensionProblem }) {
     );
 }
 
+function StatusCell({ status }: { status: TensionProblem['status'] }) {
+    const open = status !== 'resolved';
+    return (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+            <span
+                aria-hidden="true"
+                className={cn('size-1.5 rounded-full', open ? 'bg-orange-500' : 'bg-emerald-600')}
+            />
+            <span className={open ? 'text-orange-700 dark:text-orange-400' : 'text-emerald-700 dark:text-emerald-400'}>
+                {open ? 'Open' : 'Resolved'}
+            </span>
+        </span>
+    );
+}
+
+/** The server doesn't sort this flattened list, so sorting stays off here. */
 export const columns: ColumnDef<TensionProblem>[] = [
     {
-        accessorKey: 'Record Date',
-        header: 'Record Date',
+        id: 'recorded_at',
         accessorFn: (row) => row.record_created_at,
-        cell: ({ getValue }) => {
-            const value = getValue<string | null>();
-            if (!value) return <div>N/A</div>;
-            return (
-                <div>
-                    {new Date(value).toLocaleString('en-ID', {
-                        day: '2-digit',
-                        month: 'numeric',
-                        year: 'numeric',
-                    })}
-                </div>
-            );
-        },
+        header: 'Recorded',
+        cell: ({ getValue }) => <DateTimeCell value={getValue()} />,
+        meta: { label: 'Record date' },
     },
     {
-        accessorKey: 'Type',
-        header: 'Type',
+        id: 'type',
         accessorFn: (row) => row.record_type,
+        header: 'Type',
         cell: ({ getValue }) => (
-            <Badge variant="outline" className="capitalize">
-                {getValue<string>()}
-            </Badge>
+            <span className="text-xs text-muted-foreground capitalize">{String(getValue() ?? '')}</span>
         ),
+        meta: { label: 'Type' },
     },
     {
-        accessorKey: 'Item Number',
-        header: 'Item Number',
-        accessorFn: (row) => row.item_number,
-        cell: ({ getValue }) => <div className="capitalize">{String(getValue() ?? 'N/A')}</div>,
-    },
-    {
-        accessorKey: 'Operator',
-        header: 'Operator',
-        accessorFn: (row) => row.operator,
-        cell: ({ getValue }) => <div className="capitalize">{String(getValue() ?? 'N/A')}</div>,
-    },
-    {
-        accessorKey: 'Machine Number',
-        header: 'Machine Number',
+        id: 'machine',
         accessorFn: (row) => row.machine_number,
-        cell: ({ getValue }) => <div className="capitalize">{String(getValue() ?? 'N/A')}</div>,
+        header: 'Machine',
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+        meta: { label: 'Machine' },
     },
     {
-        accessorKey: 'Position',
-        header: 'Position/Spindle',
-        accessorFn: (row) => (row.spindle_number != null ? `Spindle ${row.spindle_number}` : row.position ?? 'N/A'),
-        cell: ({ getValue }) => <div>{String(getValue() ?? 'N/A')}</div>,
+        id: 'position',
+        accessorFn: (row) => (row.spindle_number != null ? `Sp ${row.spindle_number}` : row.position),
+        header: 'Position',
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+        meta: { label: 'Position / spindle' },
     },
     {
-        accessorKey: 'Description',
-        header: 'Description',
+        id: 'item_number',
+        accessorFn: (row) => row.item_number,
+        header: 'Item no.',
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+        meta: { label: 'Item number' },
+    },
+    {
+        id: 'operator',
+        accessorFn: (row) => row.operator,
+        header: 'Operator',
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+        meta: { label: 'Operator' },
+    },
+    {
+        id: 'description',
         accessorFn: (row) => row.description,
+        header: 'Description',
         cell: ({ getValue }) => {
-            const value = getValue<string | null>();
-            return (
-                <div className="max-w-[240px] truncate" title={value ?? ''}>
-                    {value ?? 'N/A'}
-                </div>
+            const value = getValue() as string | null;
+            return value ? (
+                <span className="block max-w-72 truncate" title={value}>
+                    {value}
+                </span>
+            ) : (
+                <TextCell value={null} />
             );
         },
+        meta: { label: 'Description' },
     },
     {
-        accessorKey: 'Status',
-        header: 'Status',
+        id: 'status',
         accessorFn: (row) => row.status,
-        cell: ({ getValue }) => {
-            const status = getValue<string>();
-            return (
-                <Badge variant={status === 'resolved' ? 'secondary' : 'destructive'} className="capitalize">
-                    {status}
-                </Badge>
-            );
-        },
+        header: 'Status',
+        cell: ({ row }) => <StatusCell status={row.original.status} />,
+        meta: { label: 'Status' },
     },
     {
         id: 'actions',
-        header: 'Actions',
+        header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
-        cell: ({ row, table }) => {
-            const problem = row.original;
-            const meta = table.options.meta as TensionProblemsTableMeta;
-            return problem.status === 'resolved' ? (
-                <ViewResolutionDialog problem={problem} />
+        cell: ({ row, table }) =>
+            row.original.status === 'resolved' ? (
+                <ViewResolutionDialog problem={row.original} />
             ) : (
-                <ResolveProblemDialog problem={problem} onResolved={meta.refetch} />
-            );
-        },
+                <ResolveProblemDialog problem={row.original} onResolved={() => table.options.meta?.refetch?.()} />
+            ),
+        meta: { className: 'w-32 text-right' },
     },
 ];
 
-export function TensionProblemsDataTable() {
-    const [data, setData] = useState<TensionProblem[]>([]);
-    const [pageCount, setPageCount] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
-    const [typeFilter, setTypeFilter] = useState<'all' | 'twisting' | 'weaving'>('all');
-    const [refreshKey, setRefreshKey] = useState(0);
+type StatusFilter = 'all' | 'open' | 'resolved';
+type TypeFilter = 'all' | 'twisting' | 'weaving';
 
-    const [pagination, setPagination] = useState({
-        pageIndex: 0,
-        pageSize: 10,
+/** Small segmented filter matching the density toggle. */
+function Segmented<T extends string>({
+    label,
+    value,
+    options,
+    onChange,
+}: {
+    label: string;
+    value: T;
+    options: { value: T; label: string }[];
+    onChange: (value: T) => void;
+}) {
+    return (
+        <div role="group" aria-label={label} className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
+            {options.map((option) => (
+                <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={value === option.value}
+                    onClick={() => onChange(option.value)}
+                    className={cn(
+                        'h-6 rounded-md px-2 text-xs font-medium transition-colors',
+                        value === option.value
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground',
+                    )}
+                >
+                    {option.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+export function TensionProblemsDataTable() {
+    // A problem queue starts on what still needs fixing.
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
+    const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+    const params = useMemo(
+        () => ({ status: statusFilter, type: typeFilter }),
+        [statusFilter, typeFilter],
+    );
+
+    const grid = useServerTable<TensionProblem>({
+        endpoint: '/tension-problems',
+        params,
+        storageKey: 'tension-problems',
     });
 
     const table = useReactTable({
-        data,
+        data: grid.data,
         columns,
+        getRowId: (row, index) => `${row.record_id}-${row.problem_id ?? index}`,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         manualPagination: true,
-        pageCount,
-        onPaginationChange: setPagination,
-        state: {
-            pagination,
-        },
-        meta: {
-            refetch: () => setRefreshKey((k) => k + 1),
-        },
+        manualFiltering: true,
+        enableSorting: false,
+        enableRowSelection: false,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+        meta: { refetch: grid.refetch },
     });
 
-    const baseUrl = window.location.origin;
-    useEffect(() => {
-        const controller = new AbortController();
-
-        const fetchData = async () => {
-            setLoading(true);
-
-            const params = new URLSearchParams({
-                page: (pagination.pageIndex + 1).toString(),
-                per_page: pagination.pageSize.toString(),
-            });
-
-            if (globalFilter) {
-                params.append('search', globalFilter);
-            }
-            if (statusFilter !== 'all') {
-                params.append('status', statusFilter);
-            }
-            if (typeFilter !== 'all') {
-                params.append('type', typeFilter);
-            }
-
-            try {
-                const response = await fetch(`${baseUrl}/tension-problems?${params.toString()}`, {
-                    credentials: 'include',
-                    signal: controller.signal,
-                });
-
-                const json: LaravelPaginatedResponse<TensionProblem> = await response.json();
-
-                setData(json.data);
-                setPageCount(json.last_page);
-            } catch (error: any) {
-                if (error.name !== 'AbortError') {
-                    console.error('Fetch error:', error);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-
-        return () => controller.abort();
-    }, [pagination.pageIndex, pagination.pageSize, globalFilter, statusFilter, typeFilter, refreshKey]);
-
     return (
-        <div className="w-full">
-            <div className="flex items-center gap-2 py-4">
-                <Input
-                    placeholder="Search value"
-                    value={globalFilter ?? ''}
-                    onChange={(e) => setGlobalFilter(e.target.value)}
-                    className="max-w-sm"
-                />
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'open' | 'resolved')}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as 'all' | 'twisting' | 'weaving')}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="twisting">Twisting</SelectItem>
-                        <SelectItem value="weaving">Weaving</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="overflow-hidden rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => (
-                                    <TableHead key={header.id}>
-                                        {header.isPlaceholder
-                                            ? null
-                                            : flexRender(header.column.columnDef.header, header.getContext())}
-                                    </TableHead>
-                                ))}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow key={row.id}>
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={columns.length} className="h-24 text-center">
-                                    {loading ? 'Loading...' : 'No reported problems found.'}
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <div className="space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-        </div>
+        <DataGrid
+            table={table}
+            label="Tension problems"
+            loading={grid.loading}
+            error={grid.error}
+            total={grid.total}
+            onRetry={grid.refetch}
+            search={grid.search}
+            onSearchChange={grid.setSearch}
+            searchPlaceholder="Search machine, position, description…"
+            emptyMessage={
+                statusFilter === 'open' ? 'No open problems. Everything reported has been resolved.' : 'No problems recorded.'
+            }
+            filters={
+                <>
+                    <Segmented
+                        label="Status"
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        options={[
+                            { value: 'open', label: 'Open' },
+                            { value: 'resolved', label: 'Resolved' },
+                            { value: 'all', label: 'All' },
+                        ]}
+                    />
+                    <Segmented
+                        label="Record type"
+                        value={typeFilter}
+                        onChange={setTypeFilter}
+                        options={[
+                            { value: 'all', label: 'Both types' },
+                            { value: 'twisting', label: 'Twisting' },
+                            { value: 'weaving', label: 'Weaving' },
+                        ]}
+                    />
+                </>
+            }
+        />
     );
 }
