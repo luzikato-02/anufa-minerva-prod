@@ -7,6 +7,8 @@ declare module '@tanstack/react-table' {
         allRoles?: { id: number; name: string }[];
         currentUserId?: number;
         onStatusChange?: (id: string, status: string) => void;
+        /** Opens a record in the side panel (row menu, keyboard users). */
+        openDetails?: (id: string) => void;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

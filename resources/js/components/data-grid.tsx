@@ -110,7 +110,14 @@ export interface DataGridProps<T> {
     /** Accessible name for the table, e.g. "Twisting tension records". */
     label: string;
     className?: string;
+    /** Opens a record when its row is clicked (ignored on buttons, inputs and checkboxes). */
+    onRowClick?: (rowId: string) => void;
+    /** Row shown as open in a side panel. */
+    activeRowId?: string | null;
 }
+
+const INTERACTIVE =
+    'button, a, input, select, textarea, label, [role="checkbox"], [role="menuitem"], [data-slot="dropdown-menu-trigger"]';
 
 /**
  * Dense, server-paginated table used by every review screen: a one-row
@@ -132,6 +139,8 @@ export function DataGrid<T>({
     emptyMessage = 'No records match these filters.',
     label,
     className,
+    onRowClick,
+    activeRowId,
 }: DataGridProps<T>) {
     const { pageIndex, pageSize } = table.getState().pagination;
     const rows = table.getRowModel().rows;
@@ -312,6 +321,32 @@ export function DataGrid<T>({
                                             ? 'selected'
                                             : undefined
                                     }
+                                    aria-current={
+                                        activeRowId === row.id
+                                            ? 'true'
+                                            : undefined
+                                    }
+                                    onClick={
+                                        onRowClick
+                                            ? (event) => {
+                                                  if (
+                                                      (
+                                                          event.target as HTMLElement
+                                                      ).closest(INTERACTIVE) ||
+                                                      window
+                                                          .getSelection()
+                                                          ?.toString()
+                                                  )
+                                                      return;
+                                                  onRowClick(row.id);
+                                              }
+                                            : undefined
+                                    }
+                                    className={cn(
+                                        onRowClick && 'cursor-pointer',
+                                        activeRowId === row.id &&
+                                            'bg-muted font-medium hover:bg-muted',
+                                    )}
                                 >
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell

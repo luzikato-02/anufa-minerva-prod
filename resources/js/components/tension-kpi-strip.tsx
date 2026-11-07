@@ -14,6 +14,12 @@ interface TensionSummary {
         previous_median: number | null;
         resolved_current: number;
     };
+    out_of_spec: {
+        current_pct: number | null;
+        previous_pct: number | null;
+        current_positions: number;
+        current_out: number;
+    };
     completion: { current_avg: number | null; previous_avg: number | null };
     machines: { checked_today: number; active_30d: number; overdue: number };
 }
@@ -46,9 +52,9 @@ export function buildTensionKpis(
         resolveSub = `${s.resolve_hours.resolved_current} resolved`;
     }
 
-    const { current_avg: doneNow, previous_avg: doneBefore } = s.completion;
-    const doneDiff =
-        doneNow !== null && doneBefore !== null ? doneNow - doneBefore : null;
+    const { current_pct: outNow, previous_pct: outBefore } = s.out_of_spec;
+    const outDiff =
+        outNow !== null && outBefore !== null ? outNow - outBefore : null;
 
     return [
         {
@@ -75,16 +81,17 @@ export function buildTensionKpis(
             tone: resolveTone,
         },
         {
-            label: 'Avg. completion · 7d',
-            value: doneNow !== null ? `${doneNow.toFixed(1)}%` : '—',
+            // Same rule as the heatmap: max above, or min below, spec ± tolerance.
+            label: 'Out of spec · 7d',
+            value: outNow !== null ? `${outNow.toFixed(1)}%` : '—',
             sub:
-                doneDiff !== null
-                    ? `${signed(doneDiff, 1)} pt vs prior`
-                    : 'nothing to compare',
+                outDiff !== null
+                    ? `${signed(outDiff, 1)} pt vs prior`
+                    : `${s.out_of_spec.current_out} of ${s.out_of_spec.current_positions.toLocaleString('en-US')} positions`,
             tone:
-                doneDiff === null || Math.abs(doneDiff) < 0.05
+                outDiff === null || Math.abs(outDiff) < 0.05
                     ? 'neutral'
-                    : doneDiff > 0
+                    : outDiff < 0
                       ? 'good'
                       : 'bad',
         },

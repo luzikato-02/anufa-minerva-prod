@@ -150,6 +150,68 @@ class TensionSummaryApiTest extends TestCase
         $this->assertSame(1, $bangkok['machines']['checked_today']);
     }
 
+    public function test_counts_out_of_spec_positions_for_twisting_and_weaving(): void
+    {
+        $twisting = TensionRecord::create([
+            'record_type' => 'twisting', 'csv_data' => '',
+            'form_data' => ['specTens' => '180', 'tensPlus' => '15'],          // limits 165–195
+            'measurement_data' => [
+                '1' => ['max' => 190, 'min' => 170],   // in spec
+                '2' => ['max' => 204, 'min' => 171],   // above
+                '3' => ['max' => 180, 'min' => 160],   // below
+                '4' => ['max' => null, 'min' => null], // not measured
+            ],
+            'metadata' => ['machine_number' => 'TW-01'], 'problems' => [],
+        ]);
+        $twisting->forceFill(['created_at' => '2026-11-06 08:00:00'])->save();
+
+        $weaving = TensionRecord::create([
+            'record_type' => 'weaving', 'csv_data' => '',
+            'form_data' => ['specTens' => 55, 'tensPlus' => 5],                // limits 50–60
+            'measurement_data' => [
+                'AO' => ['1' => ['1' => ['max' => 58, 'min' => 52], '2' => ['max' => 63, 'min' => 55]]],
+                'BI' => ['3' => ['4' => ['max' => 57, 'min' => 51]]],
+            ],
+            'metadata' => ['machine_number' => 'WV-01'], 'problems' => [],
+        ]);
+        $weaving->forceFill(['created_at' => '2026-11-06 09:00:00'])->save();
+
+        // Previous window: one record, half out of spec.
+        $older = TensionRecord::create([
+            'record_type' => 'twisting', 'csv_data' => '',
+            'form_data' => ['specTens' => '180', 'tensPlus' => '15'],
+            'measurement_data' => ['1' => ['max' => 200, 'min' => 170], '2' => ['max' => 190, 'min' => 170]],
+            'metadata' => ['machine_number' => 'TW-02'], 'problems' => [],
+        ]);
+        $older->forceFill(['created_at' => '2026-10-29 08:00:00'])->save();
+
+        $spec = $this->summary()->json('data.out_of_spec');
+
+        // Current: twisting 3 measured / 2 out, weaving 3 measured / 1 out → 3 of 6.
+        $this->assertSame(6, $spec['current_positions']);
+        $this->assertSame(3, $spec['current_out']);
+        $this->assertEquals(50.0, $spec['current_pct']);
+        $this->assertEquals(50.0, $spec['previous_pct']);
+
+        $this->assertSame(1, $this->summary(['type' => 'weaving'])->json('data.out_of_spec.current_out'));
+    }
+
+    public function test_records_without_a_spec_flag_nothing(): void
+    {
+        $record = TensionRecord::create([
+            'record_type' => 'twisting', 'csv_data' => '', 'form_data' => [],
+            'measurement_data' => ['1' => ['max' => 999, 'min' => 1]],
+            'metadata' => ['machine_number' => 'TW-01'], 'problems' => [],
+        ]);
+        $record->forceFill(['created_at' => '2026-11-06 08:00:00'])->save();
+
+        $spec = $this->summary()->json('data.out_of_spec');
+
+        $this->assertSame(1, $spec['current_positions']);
+        $this->assertSame(0, $spec['current_out']);
+        $this->assertNull($spec['previous_pct']);
+    }
+
     public function test_requires_the_view_permission_and_validates_input(): void
     {
         $this->actingAs(User::factory()->withoutTwoFactor()->create())->getJson('/tension-summary')->assertForbidden();

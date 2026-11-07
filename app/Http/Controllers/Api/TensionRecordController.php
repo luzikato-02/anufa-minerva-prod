@@ -335,7 +335,7 @@ class TensionRecordController extends Controller
         // Records created in the last 14 local days: counts, completion, daily series.
         $recent = $base()
             ->where('created_at', '>=', $toUtc($previousStart))
-            ->get(['id', 'created_at', 'metadata']);
+            ->get(['id', 'created_at', 'metadata', 'form_data', 'measurement_data']);
 
         $daily = [];
         for ($i = 0; $i < 7; $i++) {
@@ -345,6 +345,7 @@ class TensionRecordController extends Controller
         $previousCount = 0;
         $currentCompletion = [];
         $previousCompletion = [];
+        $spec = ['current' => [0, 0], 'previous' => [0, 0]]; // [positions measured, out of spec]
         $completionOf = function (array $meta): ?float {
             if (isset($meta['progress_percentage']) && is_numeric($meta['progress_percentage'])) {
                 return (float) $meta['progress_percentage'];
@@ -357,6 +358,11 @@ class TensionRecordController extends Controller
         foreach ($recent as $record) {
             $local = $toLocal($record->created_at);
             $completion = $completionOf($record->metadata ?? []);
+            [$measured, $out] = $this->outOfSpec($record->form_data ?? [], $record->measurement_data ?? []);
+            $window = $local->gte($currentStart) ? 'current' : 'previous';
+            $spec[$window][0] += $measured;
+            $spec[$window][1] += $out;
+
             if ($local->gte($currentStart)) {
                 $currentCount++;
                 $daily[$local->toDateString()] = ($daily[$local->toDateString()] ?? 0) + 1;
@@ -461,6 +467,12 @@ class TensionRecordController extends Controller
                     'previous_median' => $median($previousResolveHours),
                     'resolved_current' => count($currentResolveHours),
                 ],
+                'out_of_spec' => [
+                    'current_pct' => $spec['current'][0] ? round($spec['current'][1] / $spec['current'][0] * 100, 2) : null,
+                    'previous_pct' => $spec['previous'][0] ? round($spec['previous'][1] / $spec['previous'][0] * 100, 2) : null,
+                    'current_positions' => $spec['current'][0],
+                    'current_out' => $spec['current'][1],
+                ],
                 'completion' => [
                     'current_avg' => $avg($currentCompletion),
                     'previous_avg' => $avg($previousCompletion),
@@ -472,6 +484,56 @@ class TensionRecordController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Positions with a reading, and how many of them are out of spec, on one record.
+     * Out of spec: max above target + tolerance, or min below target − tolerance.
+     * Mirrors classify() in resources/js/lib/tension-heatmap.ts. Records without a
+     * usable spec count their positions as measured and none as out of spec.
+     *
+     * @return array{0: int, 1: int}
+     */
+    private function outOfSpec(array $form, array $measurements): array
+    {
+        $target = is_numeric($form['specTens'] ?? null) ? (float) $form['specTens'] : null;
+        $tolerance = is_numeric($form['tensPlus'] ?? null) ? (float) $form['tensPlus'] : null;
+        $hasSpec = $target !== null && $tolerance !== null && $tolerance > 0;
+
+        $measured = 0;
+        $out = 0;
+        $check = function ($reading) use (&$measured, &$out, $hasSpec, $target, $tolerance) {
+            if (! is_array($reading)) {
+                return;
+            }
+            $max = is_numeric($reading['max'] ?? null) ? (float) $reading['max'] : null;
+            $min = is_numeric($reading['min'] ?? null) ? (float) $reading['min'] : null;
+            if ($max === null && $min === null) {
+                return;
+            }
+            $measured++;
+            if ($hasSpec && (($max !== null && $max > $target + $tolerance) || ($min !== null && $min < $target - $tolerance))) {
+                $out++;
+            }
+        };
+
+        foreach ($measurements as $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+            // Twisting: spindle => {max, min}. Weaving: side => row => col => {max, min}.
+            if (array_key_exists('max', $value) || array_key_exists('min', $value)) {
+                $check($value);
+                continue;
+            }
+            foreach ($value as $row) {
+                foreach (is_array($row) ? $row : [] as $reading) {
+                    $check($reading);
+                }
+            }
+        }
+
+        return [$measured, $out];
     }
 
     /**

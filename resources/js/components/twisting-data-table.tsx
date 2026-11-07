@@ -1,5 +1,16 @@
-import { CodeCell, DateTimeCell, NumberCell, ProblemsCell, ProgressCell, TextCell } from '@/components/data-grid-cells';
 import { DataGrid } from '@/components/data-grid';
+import {
+    CodeCell,
+    DateTimeCell,
+    NumberCell,
+    ProblemsCell,
+    ProgressCell,
+    TextCell,
+} from '@/components/data-grid-cells';
+import {
+    type DetailRecord,
+    RecordDetailPanel,
+} from '@/components/record-detail-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -21,8 +32,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Table,
     TableBody,
@@ -31,16 +40,26 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useServerTable } from '@/hooks/use-server-table';
+import {
+    databaseService,
+    verifyPersistedRecord,
+} from '@/lib/databaseConnector';
 import { problemCounts, progressOf } from '@/lib/tension-record-summary';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
 import {
     DownloadIcon,
     EyeIcon,
     MoreHorizontal,
+    PanelRightOpen,
     PencilIcon,
 } from 'lucide-react';
-import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
     CartesianGrid,
@@ -54,7 +73,6 @@ import {
     YAxis,
 } from 'recharts';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
-import { databaseService, verifyPersistedRecord } from '@/lib/databaseConnector';
 
 interface TensionRecord {
     id: string;
@@ -107,9 +125,11 @@ function processSummary(form: ProcessFields | null | undefined): string | null {
 function TwistingRowActions({
     record,
     onSaved,
+    onOpenDetails,
 }: {
     record: TensionRecord;
     onSaved?: () => void;
+    onOpenDetails?: (id: string) => void;
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
 
@@ -130,14 +150,32 @@ function TwistingRowActions({
                     <MoreHorizontal />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+                {onOpenDetails && (
+                    <DropdownMenuItem
+                        onClick={() => onOpenDetails(String(record.id))}
+                    >
+                        <PanelRightOpen />
+                        Open details
+                    </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleDownload}>
                     <DownloadIcon />
                     Download
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <ViewTwistingRecordDialog record={record} onCloseMenu={() => setMenuOpen(false)} />
-                <EditTwistingRecordDialog record={record} onSaved={onSaved} onCloseMenu={() => setMenuOpen(false)} />
+                <ViewTwistingRecordDialog
+                    record={record}
+                    onCloseMenu={() => setMenuOpen(false)}
+                />
+                <EditTwistingRecordDialog
+                    record={record}
+                    onSaved={onSaved}
+                    onCloseMenu={() => setMenuOpen(false)}
+                />
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -156,7 +194,9 @@ export const columns: ColumnDef<TensionRecord>[] = [
                     table.getIsAllPageRowsSelected() ||
                     (table.getIsSomePageRowsSelected() && 'indeterminate')
                 }
-                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                onCheckedChange={(value) =>
+                    table.toggleAllPageRowsSelected(!!value)
+                }
                 aria-label="Select all rows on this page"
             />
         ),
@@ -180,7 +220,8 @@ export const columns: ColumnDef<TensionRecord>[] = [
     },
     {
         id: 'machine',
-        accessorFn: (row) => row.metadata?.machine_number ?? row.form_data?.machineNumber,
+        accessorFn: (row) =>
+            row.metadata?.machine_number ?? row.form_data?.machineNumber,
         header: 'Machine',
         cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
         meta: { label: 'Machine' },
@@ -214,7 +255,9 @@ export const columns: ColumnDef<TensionRecord>[] = [
         cell: ({ getValue }) => {
             const value = getValue() as string | null;
             return value ? (
-                <span className="text-xs text-muted-foreground tabular-nums">{value}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                    {value}
+                </span>
             ) : (
                 <TextCell value={null} />
             );
@@ -253,7 +296,11 @@ export const columns: ColumnDef<TensionRecord>[] = [
         cell: ({ row, getValue }) => (
             <NumberCell
                 value={getValue()}
-                suffix={row.original.form_data?.tensPlus ? `±${row.original.form_data.tensPlus}` : undefined}
+                suffix={
+                    row.original.form_data?.tensPlus
+                        ? `±${row.original.form_data.tensPlus}`
+                        : undefined
+                }
             />
         ),
         meta: { label: 'Spec. tension ± deviation (cN)', align: 'right' },
@@ -271,7 +318,9 @@ export const columns: ColumnDef<TensionRecord>[] = [
         accessorFn: (row) => progressOf(row),
         header: 'Progress',
         enableSorting: false,
-        cell: ({ getValue }) => <ProgressCell percent={getValue() as number | null} />,
+        cell: ({ getValue }) => (
+            <ProgressCell percent={getValue() as number | null} />
+        ),
         meta: { label: 'Progress' },
     },
     {
@@ -288,13 +337,23 @@ export const columns: ColumnDef<TensionRecord>[] = [
         enableSorting: false,
         enableHiding: false,
         cell: ({ row, table }) => (
-            <TwistingRowActions record={row.original} onSaved={table.options.meta?.refetch} />
+            <TwistingRowActions
+                record={row.original}
+                onSaved={table.options.meta?.refetch}
+                onOpenDetails={table.options.meta?.openDetails}
+            />
         ),
         meta: { className: 'w-10 px-1' },
     },
 ];
 
-function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionRecord; onCloseMenu?: () => void }) {
+function ViewTwistingRecordDialog({
+    record,
+    onCloseMenu,
+}: {
+    record: TensionRecord;
+    onCloseMenu?: () => void;
+}) {
     const [open, setOpen] = useState(false);
 
     // Close the parent row-actions dropdown once this dialog finishes closing,
@@ -366,54 +425,98 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
                     <div className="rounded-lg bg-gray-50 p-4">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Operator</p>
-                                <p className="mt-1 text-sm font-semibold">{record.metadata?.operator ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Operator
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.metadata?.operator ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Machine Number</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.machineNumber ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Machine Number
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.machineNumber ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Yarn Code</p>
-                                <p className="mt-1 text-sm font-semibold">{record.metadata?.yarn_code ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Yarn Code
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.metadata?.yarn_code ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Density (Dtex)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.dtexNumber ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Density (Dtex)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.dtexNumber ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Table Twist (TPM)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.tpm ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Table Twist (TPM)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.tpm ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Cycle Speed (RPM)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.rpm ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Cycle Speed (RPM)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.rpm ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Spec. Tension (cN)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.specTens ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Spec. Tension (cN)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.specTens ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Tens. Deviation (cN)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.tensPlus ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Tens. Deviation (cN)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.tensPlus ?? 'N/A'}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Meters Check (m)</p>
-                                <p className="mt-1 text-sm font-semibold">{record.form_data?.metersCheck ?? 'N/A'}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Meters Check (m)
+                                </p>
+                                <p className="mt-1 text-sm font-semibold">
+                                    {record.form_data?.metersCheck ?? 'N/A'}
+                                </p>
                             </div>
                         </div>
 
                         <div className="mt-4 flex items-center justify-between border-t pt-4">
                             <div>
-                                <p className="text-xs font-medium text-gray-500 uppercase">Record Date</p>
-                                <p className="mt-1 text-sm">{formatDate(record.created_at)}</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Record Date
+                                </p>
+                                <p className="mt-1 text-sm">
+                                    {formatDate(record.created_at)}
+                                </p>
                             </div>
                             <div className="text-right">
-                                <p className="text-xs font-medium text-gray-500 uppercase">Progress</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase">
+                                    Progress
+                                </p>
                                 <p className="mt-1 text-sm font-semibold">
-                                    {record.metadata?.completed_measurements ?? 0} /{' '}
-                                    {record.metadata?.total_measurements ?? 0} (
-                                    {record.metadata?.progress_percentage ?? 0}%)
+                                    {record.metadata?.completed_measurements ??
+                                        0}{' '}
+                                    / {record.metadata?.total_measurements ?? 0}{' '}
+                                    ({record.metadata?.progress_percentage ?? 0}
+                                    %)
                                 </p>
                             </div>
                         </div>
@@ -421,42 +524,95 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
 
                     {measurements.length > 0 && (
                         <div>
-                            <p className="mb-2 text-sm font-semibold">Tension Chart (Max/Min per Spindle)</p>
+                            <p className="mb-2 text-sm font-semibold">
+                                Tension Chart (Max/Min per Spindle)
+                            </p>
                             <div className="rounded-md border p-2">
                                 <ResponsiveContainer width="100%" height={250}>
                                     <LineChart data={measurements}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             dataKey="spindle"
-                                            label={{ value: 'Spindle', position: 'insideBottom', offset: -2 }}
+                                            label={{
+                                                value: 'Spindle',
+                                                position: 'insideBottom',
+                                                offset: -2,
+                                            }}
                                         />
-                                        <YAxis label={{ value: 'Tension (cN)', angle: -90, position: 'insideLeft' }} />
+                                        <YAxis
+                                            label={{
+                                                value: 'Tension (cN)',
+                                                angle: -90,
+                                                position: 'insideLeft',
+                                            }}
+                                        />
                                         <Tooltip />
                                         <Legend />
-                                        <Line type="monotone" dataKey="max" name="Max" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-                                        <Line type="monotone" dataKey="min" name="Min" stroke="#93c5fd" strokeWidth={2} dot={{ r: 3 }} />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="max"
+                                            name="Max"
+                                            stroke="#3b82f6"
+                                            strokeWidth={2}
+                                            dot={{ r: 3 }}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="min"
+                                            name="Min"
+                                            stroke="#93c5fd"
+                                            strokeWidth={2}
+                                            dot={{ r: 3 }}
+                                        />
                                         {record.form_data?.specTens != null && (
                                             <ReferenceLine
-                                                y={Number(record.form_data.specTens)}
+                                                y={Number(
+                                                    record.form_data.specTens,
+                                                )}
                                                 stroke="#16a34a"
                                                 strokeDasharray="4 4"
-                                                label={{ value: 'Spec', position: 'right', fill: '#16a34a', fontSize: 11 }}
+                                                label={{
+                                                    value: 'Spec',
+                                                    position: 'right',
+                                                    fill: '#16a34a',
+                                                    fontSize: 11,
+                                                }}
                                             />
                                         )}
-                                        {record.form_data?.specTens != null && record.form_data?.tensPlus != null && (
-                                            <>
-                                                <ReferenceLine
-                                                    y={Number(record.form_data.specTens) + Number(record.form_data.tensPlus)}
-                                                    stroke="#f97316"
-                                                    strokeDasharray="2 2"
-                                                />
-                                                <ReferenceLine
-                                                    y={Number(record.form_data.specTens) - Number(record.form_data.tensPlus)}
-                                                    stroke="#f97316"
-                                                    strokeDasharray="2 2"
-                                                />
-                                            </>
-                                        )}
+                                        {record.form_data?.specTens != null &&
+                                            record.form_data?.tensPlus !=
+                                                null && (
+                                                <>
+                                                    <ReferenceLine
+                                                        y={
+                                                            Number(
+                                                                record.form_data
+                                                                    .specTens,
+                                                            ) +
+                                                            Number(
+                                                                record.form_data
+                                                                    .tensPlus,
+                                                            )
+                                                        }
+                                                        stroke="#f97316"
+                                                        strokeDasharray="2 2"
+                                                    />
+                                                    <ReferenceLine
+                                                        y={
+                                                            Number(
+                                                                record.form_data
+                                                                    .specTens,
+                                                            ) -
+                                                            Number(
+                                                                record.form_data
+                                                                    .tensPlus,
+                                                            )
+                                                        }
+                                                        stroke="#f97316"
+                                                        strokeDasharray="2 2"
+                                                    />
+                                                </>
+                                            )}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -464,7 +620,9 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
                     )}
 
                     <div>
-                        <p className="mb-2 text-sm font-semibold">Measurement Data</p>
+                        <p className="mb-2 text-sm font-semibold">
+                            Measurement Data
+                        </p>
                         <div className="overflow-hidden rounded-md border">
                             <Table>
                                 <TableHeader>
@@ -480,25 +638,51 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
                                 <TableBody>
                                     {measurements.length ? (
                                         measurements.map((m) => {
-                                            const problem = problemsBySpindle.get(m.spindle);
-                                            const status = problem?.status ?? (problem ? 'open' : null);
-                                            const resolution = problem?.resolution;
+                                            const problem =
+                                                problemsBySpindle.get(
+                                                    m.spindle,
+                                                );
+                                            const status =
+                                                problem?.status ??
+                                                (problem ? 'open' : null);
+                                            const resolution =
+                                                problem?.resolution;
                                             return (
                                                 <TableRow key={m.spindle}>
-                                                    <TableCell>{m.spindle}</TableCell>
-                                                    <TableCell>{m.max ?? 'N/A'}</TableCell>
-                                                    <TableCell>{m.min ?? 'N/A'}</TableCell>
                                                     <TableCell>
-                                                        {status === 'resolved' ? (
-                                                            <Badge variant="secondary">Resolved</Badge>
-                                                        ) : status === 'open' ? (
-                                                            <Badge variant="destructive">Open</Badge>
+                                                        {m.spindle}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {m.max ?? 'N/A'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {m.min ?? 'N/A'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {status ===
+                                                        'resolved' ? (
+                                                            <Badge variant="secondary">
+                                                                Resolved
+                                                            </Badge>
+                                                        ) : status ===
+                                                          'open' ? (
+                                                            <Badge variant="destructive">
+                                                                Open
+                                                            </Badge>
                                                         ) : (
-                                                            <span className="text-muted-foreground">—</span>
+                                                            <span className="text-muted-foreground">
+                                                                —
+                                                            </span>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell>{resolution?.after_repair_max ?? '—'}</TableCell>
-                                                    <TableCell>{resolution?.after_repair_min ?? '—'}</TableCell>
+                                                    <TableCell>
+                                                        {resolution?.after_repair_max ??
+                                                            '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {resolution?.after_repair_min ??
+                                                            '—'}
+                                                    </TableCell>
                                                 </TableRow>
                                             );
                                         })
@@ -518,41 +702,110 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
                     </div>
 
                     <div>
-                        <p className="mb-2 text-sm font-semibold">Problem Reports</p>
+                        <p className="mb-2 text-sm font-semibold">
+                            Problem Reports
+                        </p>
                         {record.problems && record.problems.length > 0 ? (
                             <div className="space-y-2">
-                                {record.problems.map((problem: any, idx: number) => {
-                                    const status = problem.status ?? 'open';
-                                    return (
-                                        <div key={problem.id ?? idx} className="rounded-md border p-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="destructive">
-                                                        Spindle {problem.spindleNumber}
-                                                    </Badge>
-                                                    <Badge variant={status === 'resolved' ? 'secondary' : 'outline'}>
-                                                        {status === 'resolved' ? 'Resolved' : 'Open'}
-                                                    </Badge>
+                                {record.problems.map(
+                                    (problem: any, idx: number) => {
+                                        const status = problem.status ?? 'open';
+                                        return (
+                                            <div
+                                                key={problem.id ?? idx}
+                                                className="rounded-md border p-3"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="destructive">
+                                                            Spindle{' '}
+                                                            {
+                                                                problem.spindleNumber
+                                                            }
+                                                        </Badge>
+                                                        <Badge
+                                                            variant={
+                                                                status ===
+                                                                'resolved'
+                                                                    ? 'secondary'
+                                                                    : 'outline'
+                                                            }
+                                                        >
+                                                            {status ===
+                                                            'resolved'
+                                                                ? 'Resolved'
+                                                                : 'Open'}
+                                                        </Badge>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {formatDate(
+                                                            problem.timestamp,
+                                                        )}
+                                                    </span>
                                                 </div>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {formatDate(problem.timestamp)}
-                                                </span>
+                                                <p className="mt-2 text-sm">
+                                                    {problem.description}
+                                                </p>
+                                                {status === 'resolved' &&
+                                                    problem.resolution && (
+                                                        <div className="mt-2 rounded-md bg-gray-50 p-2 text-xs">
+                                                            <p>
+                                                                <span className="font-medium">
+                                                                    Action:
+                                                                </span>{' '}
+                                                                {
+                                                                    problem
+                                                                        .resolution
+                                                                        .action
+                                                                }
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">
+                                                                    After-Repair
+                                                                    Max:
+                                                                </span>{' '}
+                                                                {problem
+                                                                    .resolution
+                                                                    .after_repair_max ??
+                                                                    'N/A'}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">
+                                                                    After-Repair
+                                                                    Min:
+                                                                </span>{' '}
+                                                                {problem
+                                                                    .resolution
+                                                                    .after_repair_min ??
+                                                                    'N/A'}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">
+                                                                    Resolved By:
+                                                                </span>{' '}
+                                                                {
+                                                                    problem
+                                                                        .resolution
+                                                                        .resolved_by
+                                                                }{' '}
+                                                                on{' '}
+                                                                {formatDate(
+                                                                    problem
+                                                                        .resolution
+                                                                        .resolved_at,
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                             </div>
-                                            <p className="mt-2 text-sm">{problem.description}</p>
-                                            {status === 'resolved' && problem.resolution && (
-                                                <div className="mt-2 rounded-md bg-gray-50 p-2 text-xs">
-                                                    <p><span className="font-medium">Action:</span> {problem.resolution.action}</p>
-                                                    <p><span className="font-medium">After-Repair Max:</span> {problem.resolution.after_repair_max ?? 'N/A'}</p>
-                                                    <p><span className="font-medium">After-Repair Min:</span> {problem.resolution.after_repair_min ?? 'N/A'}</p>
-                                                    <p><span className="font-medium">Resolved By:</span> {problem.resolution.resolved_by} on {formatDate(problem.resolution.resolved_at)}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    },
+                                )}
                             </div>
                         ) : (
-                            <p className="text-sm text-muted-foreground">No problems reported.</p>
+                            <p className="text-sm text-muted-foreground">
+                                No problems reported.
+                            </p>
                         )}
                     </div>
                 </div>
@@ -562,7 +815,11 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
                         <DownloadIcon className="mr-2 h-4 w-4" />
                         Download CSV
                     </Button>
-                    <Button variant="outline" onClick={() => setOpen(false)} className="ml-auto">
+                    <Button
+                        variant="outline"
+                        onClick={() => setOpen(false)}
+                        className="ml-auto"
+                    >
                         Close
                     </Button>
                 </DialogFooter>
@@ -571,12 +828,25 @@ function ViewTwistingRecordDialog({ record, onCloseMenu }: { record: TensionReco
     );
 }
 
-function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: TensionRecord; onSaved?: () => void; onCloseMenu?: () => void }) {
+function EditTwistingRecordDialog({
+    record,
+    onSaved,
+    onCloseMenu,
+}: {
+    record: TensionRecord;
+    onSaved?: () => void;
+    onCloseMenu?: () => void;
+}) {
     const [open, setOpen] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [saveStatus, setSaveStatus] = useState<'saving' | 'success' | 'error'>('saving');
+    const [saveStatus, setSaveStatus] = useState<
+        'saving' | 'success' | 'error'
+    >('saving');
     const [saveSteps, setSaveSteps] = useState<SaveStep[]>([]);
-    const [saveError, setSaveError] = useState<{ message: string; details: string } | null>(null);
+    const [saveError, setSaveError] = useState<{
+        message: string;
+        details: string;
+    } | null>(null);
 
     // Close the parent row-actions dropdown once this dialog finishes closing,
     // so it doesn't reappear behind the now-closed dialog.
@@ -589,15 +859,23 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
     }, [open, onCloseMenu]);
 
     const [operator, setOperator] = useState(record.metadata?.operator ?? '');
-    const [itemNumber, setItemNumber] = useState(record.metadata?.item_number ?? '');
+    const [itemNumber, setItemNumber] = useState(
+        record.metadata?.item_number ?? '',
+    );
     const [yarnCode, setYarnCode] = useState(record.metadata?.yarn_code ?? '');
-    const [machineNumber, setMachineNumber] = useState(record.form_data?.machineNumber ?? '');
-    const [dtexNumber, setDtexNumber] = useState(record.form_data?.dtexNumber ?? '');
+    const [machineNumber, setMachineNumber] = useState(
+        record.form_data?.machineNumber ?? '',
+    );
+    const [dtexNumber, setDtexNumber] = useState(
+        record.form_data?.dtexNumber ?? '',
+    );
     const [tpm, setTpm] = useState(record.form_data?.tpm ?? '');
     const [rpm, setRpm] = useState(record.form_data?.rpm ?? '');
     const [specTens, setSpecTens] = useState(record.form_data?.specTens ?? '');
     const [tensPlus, setTensPlus] = useState(record.form_data?.tensPlus ?? '');
-    const [metersCheck, setMetersCheck] = useState(record.form_data?.metersCheck ?? '');
+    const [metersCheck, setMetersCheck] = useState(
+        record.form_data?.metersCheck ?? '',
+    );
 
     const [measurements, setMeasurements] = useState(() =>
         Object.entries(record.measurement_data ?? {})
@@ -609,20 +887,43 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
             .sort((a, b) => a.spindle - b.spindle),
     );
 
-    const updateMeasurement = (spindle: number, field: 'max' | 'min', value: string) => {
-        setMeasurements((prev) => prev.map((m) => (m.spindle === spindle ? { ...m, [field]: value } : m)));
+    const updateMeasurement = (
+        spindle: number,
+        field: 'max' | 'min',
+        value: string,
+    ) => {
+        setMeasurements((prev) =>
+            prev.map((m) =>
+                m.spindle === spindle ? { ...m, [field]: value } : m,
+            ),
+        );
     };
 
     const [problems, setProblems] = useState(() =>
-        (record.problems ?? []).map((p: any) => ({ ...p, resolution: p.resolution ? { ...p.resolution } : null })),
+        (record.problems ?? []).map((p: any) => ({
+            ...p,
+            resolution: p.resolution ? { ...p.resolution } : null,
+        })),
     );
 
     const updateProblem = (idx: number, field: string, value: any) => {
-        setProblems((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
+        setProblems((prev) =>
+            prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)),
+        );
     };
 
-    const updateProblemResolution = (idx: number, field: string, value: any) => {
-        setProblems((prev) => prev.map((p, i) => (i === idx ? { ...p, resolution: { ...p.resolution, [field]: value } } : p)));
+    const updateProblemResolution = (
+        idx: number,
+        field: string,
+        value: any,
+    ) => {
+        setProblems((prev) =>
+            prev.map((p, i) =>
+                i === idx
+                    ? { ...p, resolution: { ...p.resolution, [field]: value } }
+                    : p,
+            ),
+        );
     };
 
     const formatDate = (date?: string) =>
@@ -640,19 +941,33 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
         setSaveError(null);
         setSaveStatus('saving');
         setSaveSteps([
-            { key: 'update', label: 'Saving changes to database', status: 'active' },
-            { key: 'verify', label: 'Verifying saved changes', status: 'pending' },
+            {
+                key: 'update',
+                label: 'Saving changes to database',
+                status: 'active',
+            },
+            {
+                key: 'verify',
+                label: 'Verifying saved changes',
+                status: 'pending',
+            },
         ]);
         setSaveDialogOpen(true);
 
-        const measurement_data: Record<string, { max: number; min: number }> = {};
+        const measurement_data: Record<string, { max: number; min: number }> =
+            {};
         measurements.forEach((m) => {
             measurement_data[String(m.spindle)] = {
                 max: Number(m.max),
                 min: Number(m.min),
             };
         });
-        const metadata = { ...record.metadata, operator, item_number: itemNumber, yarn_code: yarnCode };
+        const metadata = {
+            ...record.metadata,
+            operator,
+            item_number: itemNumber,
+            yarn_code: yarnCode,
+        };
         const form_data = {
             ...record.form_data,
             machineNumber,
@@ -680,7 +995,12 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
                     'X-XSRF-TOKEN': csrfToken,
                 },
                 credentials: 'include',
-                body: JSON.stringify({ metadata, form_data, measurement_data, problems }),
+                body: JSON.stringify({
+                    metadata,
+                    form_data,
+                    measurement_data,
+                    problems,
+                }),
             });
 
             const resultText = await res.text();
@@ -692,7 +1012,11 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
             }
 
             if (!res.ok) {
-                setSaveSteps((prev) => prev.map((s) => (s.key === 'update' ? { ...s, status: 'error' } : s)));
+                setSaveSteps((prev) =>
+                    prev.map((s) =>
+                        s.key === 'update' ? { ...s, status: 'error' } : s,
+                    ),
+                );
                 setSaveStatus('error');
                 setSaveError({
                     message: result.message || `HTTP ${res.status}`,
@@ -715,10 +1039,18 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
             }
 
             setSaveSteps((prev) =>
-                prev.map((s) => (s.key === 'update' ? { ...s, status: 'done' } : s.key === 'verify' ? { ...s, status: 'active' } : s)),
+                prev.map((s) =>
+                    s.key === 'update'
+                        ? { ...s, status: 'done' }
+                        : s.key === 'verify'
+                          ? { ...s, status: 'active' }
+                          : s,
+                ),
             );
 
-            const fetched = await databaseService.getTensionRecord(String(record.id));
+            const fetched = await databaseService.getTensionRecord(
+                String(record.id),
+            );
             const verification = verifyPersistedRecord(
                 {
                     record_type: record.record_type,
@@ -733,7 +1065,11 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
             );
 
             if (!verification.ok) {
-                setSaveSteps((prev) => prev.map((s) => (s.key === 'verify' ? { ...s, status: 'error' } : s)));
+                setSaveSteps((prev) =>
+                    prev.map((s) =>
+                        s.key === 'verify' ? { ...s, status: 'error' } : s,
+                    ),
+                );
                 setSaveStatus('error');
                 setSaveError({
                     message: verification.reason ?? 'Verification failed.',
@@ -754,10 +1090,18 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
                 return;
             }
 
-            setSaveSteps((prev) => prev.map((s) => (s.key === 'verify' ? { ...s, status: 'done' } : s)));
+            setSaveSteps((prev) =>
+                prev.map((s) =>
+                    s.key === 'verify' ? { ...s, status: 'done' } : s,
+                ),
+            );
             setSaveStatus('success');
         } catch (e: any) {
-            setSaveSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)));
+            setSaveSteps((prev) =>
+                prev.map((s) =>
+                    s.status === 'active' ? { ...s, status: 'error' } : s,
+                ),
+            );
             setSaveStatus('error');
             setSaveError({
                 message: e.message ?? 'Error updating record',
@@ -792,245 +1136,487 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
 
     return (
         <>
-        <Dialog
-            open={open}
-            onOpenChange={(next) => {
-                if (!next && saveDialogOpen && saveStatus === 'saving') return;
-                setOpen(next);
-            }}
-        >
-            <DialogTrigger asChild>
-                <DropdownMenuItem
-                    onClick={(e) => {
-                        e.preventDefault();
-                        setOpen(true);
-                    }}
-                >
-                    <PencilIcon></PencilIcon>Update
-                </DropdownMenuItem>
-            </DialogTrigger>
-            <DialogContent className="grid-cols-[minmax(0,1fr)] p-0 sm:max-w-[800px]">
-                <DialogHeader className="px-6 pt-6">
-                    <DialogTitle>Edit Twisting Tension Record</DialogTitle>
-                    <DialogDescription>Item Number: {record.metadata?.item_number ?? 'N/A'}</DialogDescription>
-                </DialogHeader>
+            <Dialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!next && saveDialogOpen && saveStatus === 'saving')
+                        return;
+                    setOpen(next);
+                }}
+            >
+                <DialogTrigger asChild>
+                    <DropdownMenuItem
+                        onClick={(e) => {
+                            e.preventDefault();
+                            setOpen(true);
+                        }}
+                    >
+                        <PencilIcon></PencilIcon>Update
+                    </DropdownMenuItem>
+                </DialogTrigger>
+                <DialogContent className="grid-cols-[minmax(0,1fr)] p-0 sm:max-w-[800px]">
+                    <DialogHeader className="px-6 pt-6">
+                        <DialogTitle>Edit Twisting Tension Record</DialogTitle>
+                        <DialogDescription>
+                            Item Number: {record.metadata?.item_number ?? 'N/A'}
+                        </DialogDescription>
+                    </DialogHeader>
 
-                <Tabs defaultValue="tension" className="w-full min-w-0 gap-0">
-                    <TabsList className="mx-6 grid w-[calc(100%-3rem)] grid-cols-2">
-                        <TabsTrigger value="tension">Tension Values</TabsTrigger>
-                        <TabsTrigger value="problems">Problems</TabsTrigger>
-                    </TabsList>
+                    <Tabs
+                        defaultValue="tension"
+                        className="w-full min-w-0 gap-0"
+                    >
+                        <TabsList className="mx-6 grid w-[calc(100%-3rem)] grid-cols-2">
+                            <TabsTrigger value="tension">
+                                Tension Values
+                            </TabsTrigger>
+                            <TabsTrigger value="problems">Problems</TabsTrigger>
+                        </TabsList>
 
-                <TabsContent value="tension" className="max-h-[65vh] min-w-0 space-y-4 overflow-y-auto px-6 py-4">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-operator">Operator</Label>
-                            <Input id="edit-operator" value={operator} onChange={(e) => setOperator(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-item-number">Item Number</Label>
-                            <Input id="edit-item-number" value={itemNumber} onChange={(e) => setItemNumber(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-yarn-code">Yarn Code</Label>
-                            <Input id="edit-yarn-code" value={yarnCode} onChange={(e) => setYarnCode(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-machine-number">Machine Number</Label>
-                            <Input id="edit-machine-number" value={machineNumber} onChange={(e) => setMachineNumber(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-dtex">Density (Dtex)</Label>
-                            <Input id="edit-dtex" type="number" step="any" value={dtexNumber} onChange={(e) => setDtexNumber(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-tpm">Table Twist (TPM)</Label>
-                            <Input id="edit-tpm" type="number" step="any" value={tpm} onChange={(e) => setTpm(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-rpm">Cycle Speed (RPM)</Label>
-                            <Input id="edit-rpm" type="number" step="any" value={rpm} onChange={(e) => setRpm(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-spec-tens">Spec. Tension (cN)</Label>
-                            <Input id="edit-spec-tens" type="number" step="any" value={specTens} onChange={(e) => setSpecTens(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-tens-plus">Tens. Deviation (cN)</Label>
-                            <Input id="edit-tens-plus" type="number" step="any" value={tensPlus} onChange={(e) => setTensPlus(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-meters-check">Meters Check (m)</Label>
-                            <Input id="edit-meters-check" type="number" step="any" value={metersCheck} onChange={(e) => setMetersCheck(e.target.value)} />
-                        </div>
-                    </div>
+                        <TabsContent
+                            value="tension"
+                            className="max-h-[65vh] min-w-0 space-y-4 overflow-y-auto px-6 py-4"
+                        >
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-operator">
+                                        Operator
+                                    </Label>
+                                    <Input
+                                        id="edit-operator"
+                                        value={operator}
+                                        onChange={(e) =>
+                                            setOperator(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-item-number">
+                                        Item Number
+                                    </Label>
+                                    <Input
+                                        id="edit-item-number"
+                                        value={itemNumber}
+                                        onChange={(e) =>
+                                            setItemNumber(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-yarn-code">
+                                        Yarn Code
+                                    </Label>
+                                    <Input
+                                        id="edit-yarn-code"
+                                        value={yarnCode}
+                                        onChange={(e) =>
+                                            setYarnCode(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-machine-number">
+                                        Machine Number
+                                    </Label>
+                                    <Input
+                                        id="edit-machine-number"
+                                        value={machineNumber}
+                                        onChange={(e) =>
+                                            setMachineNumber(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-dtex">
+                                        Density (Dtex)
+                                    </Label>
+                                    <Input
+                                        id="edit-dtex"
+                                        type="number"
+                                        step="any"
+                                        value={dtexNumber}
+                                        onChange={(e) =>
+                                            setDtexNumber(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-tpm">
+                                        Table Twist (TPM)
+                                    </Label>
+                                    <Input
+                                        id="edit-tpm"
+                                        type="number"
+                                        step="any"
+                                        value={tpm}
+                                        onChange={(e) => setTpm(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-rpm">
+                                        Cycle Speed (RPM)
+                                    </Label>
+                                    <Input
+                                        id="edit-rpm"
+                                        type="number"
+                                        step="any"
+                                        value={rpm}
+                                        onChange={(e) => setRpm(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-spec-tens">
+                                        Spec. Tension (cN)
+                                    </Label>
+                                    <Input
+                                        id="edit-spec-tens"
+                                        type="number"
+                                        step="any"
+                                        value={specTens}
+                                        onChange={(e) =>
+                                            setSpecTens(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-tens-plus">
+                                        Tens. Deviation (cN)
+                                    </Label>
+                                    <Input
+                                        id="edit-tens-plus"
+                                        type="number"
+                                        step="any"
+                                        value={tensPlus}
+                                        onChange={(e) =>
+                                            setTensPlus(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-meters-check">
+                                        Meters Check (m)
+                                    </Label>
+                                    <Input
+                                        id="edit-meters-check"
+                                        type="number"
+                                        step="any"
+                                        value={metersCheck}
+                                        onChange={(e) =>
+                                            setMetersCheck(e.target.value)
+                                        }
+                                    />
+                                </div>
+                            </div>
 
-                    <div>
-                        <p className="mb-2 text-sm font-semibold">Measurement Data</p>
-                        <div className="overflow-hidden rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Spindle Number</TableHead>
-                                        <TableHead>Max Value</TableHead>
-                                        <TableHead>Min Value</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {measurements.length ? (
-                                        measurements.map((m) => (
-                                            <TableRow key={m.spindle}>
-                                                <TableCell>{m.spindle}</TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        type="number"
-                                                        step="any"
-                                                        className="h-8 w-24"
-                                                        value={m.max}
-                                                        onChange={(e) => updateMeasurement(m.spindle, 'max', e.target.value)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        type="number"
-                                                        step="any"
-                                                        className="h-8 w-24"
-                                                        value={m.min}
-                                                        onChange={(e) => updateMeasurement(m.spindle, 'min', e.target.value)}
-                                                    />
-                                                </TableCell>
+                            <div>
+                                <p className="mb-2 text-sm font-semibold">
+                                    Measurement Data
+                                </p>
+                                <div className="overflow-hidden rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>
+                                                    Spindle Number
+                                                </TableHead>
+                                                <TableHead>Max Value</TableHead>
+                                                <TableHead>Min Value</TableHead>
                                             </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="h-16 text-center text-sm text-muted-foreground">
-                                                No measurements recorded.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-
-                </TabsContent>
-
-                <TabsContent value="problems" className="max-h-[65vh] min-w-0 space-y-4 overflow-y-auto px-6 py-4">
-                    <div>
-                        <p className="mb-2 text-sm font-semibold">Problem Reports</p>
-                        <div className="overflow-x-auto rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Spindle Number</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Description</TableHead>
-                                        <TableHead>Resolution Action</TableHead>
-                                        <TableHead>After-Repair Max</TableHead>
-                                        <TableHead>After-Repair Min</TableHead>
-                                        <TableHead>Resolved</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {problems.length ? (
-                                        problems.map((problem: any, idx: number) => {
-                                            const status = problem.status ?? 'open';
-                                            const resolved = status === 'resolved' && problem.resolution;
-                                            return (
-                                                <TableRow key={problem.id ?? idx}>
-                                                    <TableCell>Spindle {problem.spindleNumber}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={resolved ? 'secondary' : 'destructive'}>
-                                                            {resolved ? 'Resolved' : 'Open'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Textarea
-                                                            className="min-w-[180px]"
-                                                            rows={2}
-                                                            value={problem.description ?? ''}
-                                                            onChange={(e) => updateProblem(idx, 'description', e.target.value)}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {resolved ? (
-                                                            <Textarea
-                                                                className="min-w-[180px]"
-                                                                rows={2}
-                                                                value={problem.resolution.action ?? ''}
-                                                                onChange={(e) => updateProblemResolution(idx, 'action', e.target.value)}
-                                                            />
-                                                        ) : (
-                                                            <span className="text-muted-foreground">—</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {resolved ? (
+                                        </TableHeader>
+                                        <TableBody>
+                                            {measurements.length ? (
+                                                measurements.map((m) => (
+                                                    <TableRow key={m.spindle}>
+                                                        <TableCell>
+                                                            {m.spindle}
+                                                        </TableCell>
+                                                        <TableCell>
                                                             <Input
                                                                 type="number"
                                                                 step="any"
                                                                 className="h-8 w-24"
-                                                                value={problem.resolution.after_repair_max ?? ''}
-                                                                onChange={(e) => updateProblemResolution(idx, 'after_repair_max', e.target.value)}
+                                                                value={m.max}
+                                                                onChange={(e) =>
+                                                                    updateMeasurement(
+                                                                        m.spindle,
+                                                                        'max',
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
                                                             />
-                                                        ) : (
-                                                            <span className="text-muted-foreground">—</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {resolved ? (
+                                                        </TableCell>
+                                                        <TableCell>
                                                             <Input
                                                                 type="number"
                                                                 step="any"
                                                                 className="h-8 w-24"
-                                                                value={problem.resolution.after_repair_min ?? ''}
-                                                                onChange={(e) => updateProblemResolution(idx, 'after_repair_min', e.target.value)}
+                                                                value={m.min}
+                                                                onChange={(e) =>
+                                                                    updateMeasurement(
+                                                                        m.spindle,
+                                                                        'min',
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
                                                             />
-                                                        ) : (
-                                                            <span className="text-muted-foreground">—</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs text-muted-foreground">
-                                                        {resolved
-                                                            ? `${problem.resolution.resolved_by} on ${formatDate(problem.resolution.resolved_at)}`
-                                                            : '—'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell
+                                                        colSpan={3}
+                                                        className="h-16 text-center text-sm text-muted-foreground"
+                                                    >
+                                                        No measurements
+                                                        recorded.
                                                     </TableCell>
                                                 </TableRow>
-                                            );
-                                        })
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="h-16 text-center text-sm text-muted-foreground">
-                                                No problems reported.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-                </TabsContent>
-                </Tabs>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        </TabsContent>
 
-                <DialogFooter className="px-6 pb-6">
-                    <Button variant="outline" onClick={() => setOpen(false)}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={saveDialogOpen && saveStatus === 'saving'}>
-                        {saveDialogOpen && saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-        <SaveStatusDialog
-            open={saveDialogOpen}
-            status={saveStatus}
-            steps={saveSteps}
-            errorMessage={saveError?.message}
-            errorDetails={saveError?.details}
-            onRetry={saveStatus === 'error' ? handleRetry : undefined}
-            onClose={handleSaveDialogClose}
-        />
+                        <TabsContent
+                            value="problems"
+                            className="max-h-[65vh] min-w-0 space-y-4 overflow-y-auto px-6 py-4"
+                        >
+                            <div>
+                                <p className="mb-2 text-sm font-semibold">
+                                    Problem Reports
+                                </p>
+                                <div className="overflow-x-auto rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>
+                                                    Spindle Number
+                                                </TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>
+                                                    Description
+                                                </TableHead>
+                                                <TableHead>
+                                                    Resolution Action
+                                                </TableHead>
+                                                <TableHead>
+                                                    After-Repair Max
+                                                </TableHead>
+                                                <TableHead>
+                                                    After-Repair Min
+                                                </TableHead>
+                                                <TableHead>Resolved</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {problems.length ? (
+                                                problems.map(
+                                                    (
+                                                        problem: any,
+                                                        idx: number,
+                                                    ) => {
+                                                        const status =
+                                                            problem.status ??
+                                                            'open';
+                                                        const resolved =
+                                                            status ===
+                                                                'resolved' &&
+                                                            problem.resolution;
+                                                        return (
+                                                            <TableRow
+                                                                key={
+                                                                    problem.id ??
+                                                                    idx
+                                                                }
+                                                            >
+                                                                <TableCell>
+                                                                    Spindle{' '}
+                                                                    {
+                                                                        problem.spindleNumber
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge
+                                                                        variant={
+                                                                            resolved
+                                                                                ? 'secondary'
+                                                                                : 'destructive'
+                                                                        }
+                                                                    >
+                                                                        {resolved
+                                                                            ? 'Resolved'
+                                                                            : 'Open'}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Textarea
+                                                                        className="min-w-[180px]"
+                                                                        rows={2}
+                                                                        value={
+                                                                            problem.description ??
+                                                                            ''
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
+                                                                            updateProblem(
+                                                                                idx,
+                                                                                'description',
+                                                                                e
+                                                                                    .target
+                                                                                    .value,
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {resolved ? (
+                                                                        <Textarea
+                                                                            className="min-w-[180px]"
+                                                                            rows={
+                                                                                2
+                                                                            }
+                                                                            value={
+                                                                                problem
+                                                                                    .resolution
+                                                                                    .action ??
+                                                                                ''
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                updateProblemResolution(
+                                                                                    idx,
+                                                                                    'action',
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground">
+                                                                            —
+                                                                        </span>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {resolved ? (
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="any"
+                                                                            className="h-8 w-24"
+                                                                            value={
+                                                                                problem
+                                                                                    .resolution
+                                                                                    .after_repair_max ??
+                                                                                ''
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                updateProblemResolution(
+                                                                                    idx,
+                                                                                    'after_repair_max',
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground">
+                                                                            —
+                                                                        </span>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {resolved ? (
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="any"
+                                                                            className="h-8 w-24"
+                                                                            value={
+                                                                                problem
+                                                                                    .resolution
+                                                                                    .after_repair_min ??
+                                                                                ''
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                updateProblemResolution(
+                                                                                    idx,
+                                                                                    'after_repair_min',
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground">
+                                                                            —
+                                                                        </span>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {resolved
+                                                                        ? `${problem.resolution.resolved_by} on ${formatDate(problem.resolution.resolved_at)}`
+                                                                        : '—'}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    },
+                                                )
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell
+                                                        colSpan={7}
+                                                        className="h-16 text-center text-sm text-muted-foreground"
+                                                    >
+                                                        No problems reported.
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+
+                    <DialogFooter className="px-6 pb-6">
+                        <Button
+                            variant="outline"
+                            onClick={() => setOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={saveDialogOpen && saveStatus === 'saving'}
+                        >
+                            {saveDialogOpen && saveStatus === 'saving'
+                                ? 'Saving...'
+                                : 'Save Changes'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <SaveStatusDialog
+                open={saveDialogOpen}
+                status={saveStatus}
+                steps={saveSteps}
+                errorMessage={saveError?.message}
+                errorDetails={saveError?.details}
+                onRetry={saveStatus === 'error' ? handleRetry : undefined}
+                onClose={handleSaveDialogClose}
+            />
         </>
     );
 }
@@ -1038,12 +1624,18 @@ function EditTwistingRecordDialog({ record, onSaved, onCloseMenu }: { record: Te
 const TWISTING_PARAMS = { type: 'twisting' };
 
 export function TwistingDataTable() {
+    const [activeId, setActiveId] = useState<string | null>(null);
     const grid = useServerTable<TensionRecord>({
         endpoint: '/tension-records',
         params: TWISTING_PARAMS,
         storageKey: 'twisting-tension-records',
         // The combined Process column covers these; they stay one click away.
-        defaultColumnVisibility: { dtex: false, tpm: false, rpm: false, meters: false },
+        defaultColumnVisibility: {
+            dtex: false,
+            tpm: false,
+            rpm: false,
+            meters: false,
+        },
     });
 
     const table = useReactTable({
@@ -1058,21 +1650,47 @@ export function TwistingDataTable() {
         pageCount: grid.pageCount,
         state: grid.state,
         ...grid.handlers,
-        meta: { refetch: grid.refetch },
+        meta: { refetch: grid.refetch, openDetails: setActiveId },
     });
 
+    const activeIndex = activeId
+        ? grid.data.findIndex((r) => String(r.id) === activeId)
+        : -1;
+    const activeRecord = activeIndex >= 0 ? grid.data[activeIndex] : null;
+    const goTo = (index: number) => {
+        const target = grid.data[index];
+        if (target) setActiveId(String(target.id));
+    };
+
     return (
-        <DataGrid
-            table={table}
-            label="Twisting tension records"
-            loading={grid.loading}
-            error={grid.error}
-            total={grid.total}
-            onRetry={grid.refetch}
-            search={grid.search}
-            onSearchChange={grid.setSearch}
-            searchPlaceholder="Search machine, item, operator…"
-            emptyMessage="No twisting tension records yet."
-        />
+        <>
+            <DataGrid
+                onRowClick={setActiveId}
+                activeRowId={activeRecord ? activeId : null}
+                table={table}
+                label="Twisting tension records"
+                loading={grid.loading}
+                error={grid.error}
+                total={grid.total}
+                onRetry={grid.refetch}
+                search={grid.search}
+                onSearchChange={grid.setSearch}
+                searchPlaceholder="Search machine, item, operator…"
+                emptyMessage="No twisting tension records yet."
+            />
+            <RecordDetailPanel
+                record={activeRecord as DetailRecord | null}
+                open={activeRecord !== null}
+                onOpenChange={(open) => !open && setActiveId(null)}
+                onPrevious={
+                    activeIndex > 0 ? () => goTo(activeIndex - 1) : undefined
+                }
+                onNext={
+                    activeIndex >= 0 && activeIndex < grid.data.length - 1
+                        ? () => goTo(activeIndex + 1)
+                        : undefined
+                }
+            />
+        </>
     );
 }
