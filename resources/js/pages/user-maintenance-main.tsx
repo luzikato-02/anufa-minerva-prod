@@ -1,7 +1,8 @@
+import { PageHeader } from '@/components/page-header';
 import { RoleDataTable } from '@/components/role-table';
-import { UserManagementStatsCards } from '@/components/user-management-stats-cards';
-import { UserDataTable } from '@/components/user-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserKpiStrip } from '@/components/user-kpi-strip';
+import { UserDataTable } from '@/components/user-table';
 import AppLayout from '@/layouts/app-layout';
 import { usePermissions } from '@/lib/permissions';
 import { type BreadcrumbItem } from '@/types';
@@ -19,33 +20,49 @@ export default function UserMaintenancePage() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="User & Role Management" />
-            <div className="flex flex-1 flex-col">
-                <div className="@container/main flex flex-1 flex-col gap-2">
-                    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        <UserManagementStatsCards />
-
-                        <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                            <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                                {canManageRoles ? (
-                                    <Tabs defaultValue="users">
-                                        <TabsList>
-                                            <TabsTrigger value="users">Users</TabsTrigger>
-                                            <TabsTrigger value="roles">Roles</TabsTrigger>
-                                        </TabsList>
-                                        <TabsContent value="users">
-                                            <UserDataTable />
-                                        </TabsContent>
-                                        <TabsContent value="roles">
-                                            <RoleDataTable />
-                                        </TabsContent>
-                                    </Tabs>
-                                ) : (
-                                    <UserDataTable />
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div className="@container/main flex min-w-0 flex-1 flex-col gap-(--density-gutter) p-4">
+                <UserKpiStrip />
+                {canManageRoles ? (
+                    <Tabs
+                        defaultValue="users"
+                        className="flex min-w-0 flex-col gap-(--density-gutter)"
+                    >
+                        <PageHeader
+                            title="Users & Roles"
+                            meta="Accounts, roles and what each role can do"
+                            tabs={
+                                <TabsList className="h-8">
+                                    <TabsTrigger
+                                        value="users"
+                                        className="text-xs"
+                                    >
+                                        Users
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="roles"
+                                        className="text-xs"
+                                    >
+                                        Roles
+                                    </TabsTrigger>
+                                </TabsList>
+                            }
+                        />
+                        <TabsContent value="users" className="mt-0">
+                            <UserDataTable />
+                        </TabsContent>
+                        <TabsContent value="roles" className="mt-0">
+                            <RoleDataTable />
+                        </TabsContent>
+                    </Tabs>
+                ) : (
+                    <>
+                        <PageHeader
+                            title="Users"
+                            meta="Accounts and their roles"
+                        />
+                        <UserDataTable />
+                    </>
+                )}
             </div>
         </AppLayout>
     );

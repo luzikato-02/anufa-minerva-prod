@@ -110,8 +110,9 @@ function ResolveProblemDialog({
             setAfterMax('');
             setAfterMin('');
             onResolved();
-        } catch (e: any) {
-            setError(e.message ?? 'Error resolving problem');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            setError(message || 'Error resolving problem');
         } finally {
             setSubmitting(false);
         }

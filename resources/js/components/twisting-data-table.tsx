@@ -47,6 +47,11 @@ import {
     databaseService,
     verifyPersistedRecord,
 } from '@/lib/databaseConnector';
+import {
+    type FormValue,
+    type ProblemLike,
+    type StoredReading,
+} from '@/lib/tension-heatmap';
 import { problemCounts, progressOf } from '@/lib/tension-record-summary';
 import {
     type ColumnDef,
@@ -79,9 +84,9 @@ interface TensionRecord {
     record_type: 'twisting' | 'weaving';
     timestamp: string;
     // csv_data: string;
-    form_data: any;
-    measurement_data: any;
-    problems: any[];
+    form_data: Record<string, FormValue>;
+    measurement_data: Record<string, StoredReading>;
+    problems: ProblemLike[];
     metadata: {
         total_measurements: number;
         completed_measurements: number;
@@ -375,7 +380,7 @@ function ViewTwistingRecordDialog({
     };
 
     const measurements = Object.entries(record.measurement_data ?? {})
-        .map(([spindle, values]: [string, any]) => ({
+        .map(([spindle, values]: [string, StoredReading]) => ({
             spindle: Number(spindle),
             max: values?.max,
             min: values?.min,
@@ -383,8 +388,8 @@ function ViewTwistingRecordDialog({
         .sort((a, b) => a.spindle - b.spindle);
 
     // Build a lookup of problems by spindle number for cross-referencing in Measurement Data table
-    const problemsBySpindle = new Map<number, any>();
-    (record.problems ?? []).forEach((p: any) => {
+    const problemsBySpindle = new Map<number, ProblemLike>();
+    (record.problems ?? []).forEach((p: ProblemLike) => {
         if (p?.spindleNumber != null) {
             problemsBySpindle.set(Number(p.spindleNumber), p);
         }
@@ -708,7 +713,7 @@ function ViewTwistingRecordDialog({
                         {record.problems && record.problems.length > 0 ? (
                             <div className="space-y-2">
                                 {record.problems.map(
-                                    (problem: any, idx: number) => {
+                                    (problem: ProblemLike, idx: number) => {
                                         const status = problem.status ?? 'open';
                                         return (
                                             <div
@@ -756,7 +761,7 @@ function ViewTwistingRecordDialog({
                                                                 {
                                                                     problem
                                                                         .resolution
-                                                                        .action
+                                                                        ?.action
                                                                 }
                                                             </p>
                                                             <p>
@@ -766,7 +771,7 @@ function ViewTwistingRecordDialog({
                                                                 </span>{' '}
                                                                 {problem
                                                                     .resolution
-                                                                    .after_repair_max ??
+                                                                    ?.after_repair_max ??
                                                                     'N/A'}
                                                             </p>
                                                             <p>
@@ -776,7 +781,7 @@ function ViewTwistingRecordDialog({
                                                                 </span>{' '}
                                                                 {problem
                                                                     .resolution
-                                                                    .after_repair_min ??
+                                                                    ?.after_repair_min ??
                                                                     'N/A'}
                                                             </p>
                                                             <p>
@@ -786,13 +791,13 @@ function ViewTwistingRecordDialog({
                                                                 {
                                                                     problem
                                                                         .resolution
-                                                                        .resolved_by
+                                                                        ?.resolved_by
                                                                 }{' '}
                                                                 on{' '}
                                                                 {formatDate(
                                                                     problem
                                                                         .resolution
-                                                                        .resolved_at,
+                                                                        ?.resolved_at,
                                                                 )}
                                                             </p>
                                                         </div>
@@ -879,7 +884,7 @@ function EditTwistingRecordDialog({
 
     const [measurements, setMeasurements] = useState(() =>
         Object.entries(record.measurement_data ?? {})
-            .map(([spindle, values]: [string, any]) => ({
+            .map(([spindle, values]: [string, StoredReading]) => ({
                 spindle: Number(spindle),
                 max: values?.max ?? '',
                 min: values?.min ?? '',
@@ -900,13 +905,17 @@ function EditTwistingRecordDialog({
     };
 
     const [problems, setProblems] = useState(() =>
-        (record.problems ?? []).map((p: any) => ({
+        (record.problems ?? []).map((p: ProblemLike) => ({
             ...p,
             resolution: p.resolution ? { ...p.resolution } : null,
         })),
     );
 
-    const updateProblem = (idx: number, field: string, value: any) => {
+    const updateProblem = (
+        idx: number,
+        field: string,
+        value: string | number | null,
+    ) => {
         setProblems((prev) =>
             prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)),
         );
@@ -915,7 +924,7 @@ function EditTwistingRecordDialog({
     const updateProblemResolution = (
         idx: number,
         field: string,
-        value: any,
+        value: string | number | null,
     ) => {
         setProblems((prev) =>
             prev.map((p, i) =>
@@ -1004,7 +1013,7 @@ function EditTwistingRecordDialog({
             });
 
             const resultText = await res.text();
-            let result: any;
+            let result: { message?: string } & Record<string, unknown>;
             try {
                 result = JSON.parse(resultText);
             } catch {
@@ -1096,7 +1105,8 @@ function EditTwistingRecordDialog({
                 ),
             );
             setSaveStatus('success');
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             setSaveSteps((prev) =>
                 prev.map((s) =>
                     s.status === 'active' ? { ...s, status: 'error' } : s,
@@ -1104,7 +1114,7 @@ function EditTwistingRecordDialog({
             );
             setSaveStatus('error');
             setSaveError({
-                message: e.message ?? 'Error updating record',
+                message: message || 'Error updating record',
                 details: JSON.stringify(
                     {
                         step: 'update',
@@ -1112,7 +1122,7 @@ function EditTwistingRecordDialog({
                         recordId: record.id,
                         itemNumber,
                         machineNumber,
-                        error: e.message,
+                        error: message,
                         timestamp: new Date().toISOString(),
                     },
                     null,
@@ -1416,7 +1426,7 @@ function EditTwistingRecordDialog({
                                             {problems.length ? (
                                                 problems.map(
                                                     (
-                                                        problem: any,
+                                                        problem: ProblemLike,
                                                         idx: number,
                                                     ) => {
                                                         const status =
@@ -1483,7 +1493,7 @@ function EditTwistingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .action ??
+                                                                                    ?.action ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1513,7 +1523,7 @@ function EditTwistingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .after_repair_max ??
+                                                                                    ?.after_repair_max ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1543,7 +1553,7 @@ function EditTwistingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .after_repair_min ??
+                                                                                    ?.after_repair_min ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1566,7 +1576,7 @@ function EditTwistingRecordDialog({
                                                                 </TableCell>
                                                                 <TableCell className="text-xs text-muted-foreground">
                                                                     {resolved
-                                                                        ? `${problem.resolution.resolved_by} on ${formatDate(problem.resolution.resolved_at)}`
+                                                                        ? `${problem.resolution?.resolved_by} on ${formatDate(problem.resolution?.resolved_at)}`
                                                                         : '—'}
                                                                 </TableCell>
                                                             </TableRow>

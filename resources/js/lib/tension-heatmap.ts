@@ -237,3 +237,12 @@ export function countBands(cells: HeatCell[]): BandCounts {
     }
     return counts;
 }
+
+/** Scalar stored in a tension record's form_data (strings from inputs, numbers from older records). */
+export type FormValue = string | number | null | undefined;
+
+/** Max/min pair as stored in measurement_data; values may arrive as strings. */
+export interface StoredReading {
+    max?: FormValue;
+    min?: FormValue;
+}

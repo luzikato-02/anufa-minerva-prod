@@ -15,6 +15,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useJson } from '@/hooks/use-json';
 import AppLayout from '@/layouts/app-layout';
 import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
@@ -26,7 +27,7 @@ import {
     ScanBarcodeIcon,
     ZapIcon,
 } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type ReactNode } from 'react';
 import {
     Bar,
     BarChart,
@@ -124,37 +125,6 @@ const QUICK_ACTIONS = [
 const OVERDUE_DAYS = 3;
 
 const tzOffset = () => -new Date().getTimezoneOffset();
-
-function useJson<T>(url: string | null) {
-    const [data, setData] = useState<T | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [attempt, setAttempt] = useState(0);
-    const retry = useCallback(() => setAttempt((a) => a + 1), []);
-
-    useEffect(() => {
-        if (!url) return;
-        const controller = new AbortController();
-        setError(null);
-        fetch(url, {
-            credentials: 'include',
-            headers: { Accept: 'application/json' },
-            signal: controller.signal,
-        })
-            .then(async (res) => {
-                if (!res.ok) throw new Error(`Server responded ${res.status}`);
-                return (await res.json()) as T;
-            })
-            .then(setData)
-            .catch((err: unknown) => {
-                if (err instanceof DOMException && err.name === 'AbortError')
-                    return;
-                setError(err instanceof Error ? err.message : 'Request failed');
-            });
-        return () => controller.abort();
-    }, [url, attempt]);
-
-    return { data, error, retry };
-}
 
 const formatAge = (hours: number | null) => {
     if (hours === null) return null;

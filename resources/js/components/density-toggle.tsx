@@ -46,7 +46,7 @@ export function DensityToggle({
                                 : 'px-3.5 py-1.5 text-sm',
                             active
                                 ? 'bg-background text-foreground shadow-xs'
-                                : 'text-muted-foreground hover:text-foreground',
+                                : 'text-muted-on-muted hover:text-foreground',
                         )}
                     >
                         <Icon className={small ? 'size-3.5' : 'size-4'} />

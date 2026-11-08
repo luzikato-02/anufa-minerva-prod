@@ -192,7 +192,7 @@ function UserFormDialog({
             });
 
             const resultText = await res.text();
-            let result: any;
+            let result: { message?: string } & Record<string, unknown>;
             try {
                 result = JSON.parse(resultText);
             } catch {
@@ -213,13 +213,14 @@ function UserFormDialog({
 
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })));
             setSaveStatus('success');
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             setSaveSteps((prev) =>
                 prev.map((s) => ({ ...s, status: 'error' })),
             );
             setSaveStatus('error');
             setSaveError({
-                message: e.message ?? 'Error saving user',
+                message: message || 'Error saving user',
                 details: String(e),
             });
         }
@@ -444,7 +445,7 @@ function ManageRolesDialog({
             });
 
             const resultText = await res.text();
-            let result: any;
+            let result: { message?: string } & Record<string, unknown>;
             try {
                 result = JSON.parse(resultText);
             } catch {
@@ -465,13 +466,14 @@ function ManageRolesDialog({
 
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })));
             setSaveStatus('success');
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             setSaveSteps((prev) =>
                 prev.map((s) => ({ ...s, status: 'error' })),
             );
             setSaveStatus('error');
             setSaveError({
-                message: e.message ?? 'Error updating roles',
+                message: message || 'Error updating roles',
                 details: String(e),
             });
         }

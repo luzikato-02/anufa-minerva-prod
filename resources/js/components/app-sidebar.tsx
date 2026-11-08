@@ -223,7 +223,7 @@ export function AppSidebar() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            <Sidebar collapsible="icon" variant="inset">
+            <Sidebar collapsible="icon" variant="inset" role="navigation" aria-label="Main">
                 <SidebarHeader>
                     <SidebarMenu>
                         <SidebarMenuItem>

@@ -28,7 +28,7 @@ function Table({
         className={cn(
           "w-full caption-bottom text-sm",
           size === "dense" &&
-            "text-[13px] tabular-nums [&_td]:h-(--density-row-h) [&_td]:px-(--density-cell-px) [&_td]:py-0 [&_th]:h-(--density-head-h) [&_th]:px-(--density-cell-px) [&_th]:text-xs [&_th]:text-muted-foreground",
+            "text-[13px] tabular-nums [&_td]:h-(--density-row-h) [&_td]:px-(--density-cell-px) [&_td]:py-0 [&_th]:h-(--density-head-h) [&_th]:px-(--density-cell-px) [&_th]:text-xs [&_th]:text-muted-on-muted",
           className
         )}
         {...props}

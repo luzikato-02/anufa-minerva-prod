@@ -1,5 +1,3 @@
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';

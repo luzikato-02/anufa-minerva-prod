@@ -1,5 +1,5 @@
 import { type KpiItem, KpiStrip } from '@/components/kpi-strip';
-import { useCallback, useEffect, useState } from 'react';
+import { useJson } from '@/hooks/use-json';
 
 interface StockTakeStats {
     total_sessions: number;
@@ -15,31 +15,10 @@ const n = (v: number) => v.toLocaleString('en-US');
 
 /** Key figures for the stock take records page, from /stock-take-statistics. */
 export function StockTakeKpiStrip({ className }: { className?: string }) {
-    const [stats, setStats] = useState<StockTakeStats | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [attempt, setAttempt] = useState(0);
-    const retry = useCallback(() => setAttempt((a) => a + 1), []);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        setError(null);
-        fetch('/stock-take-statistics', {
-            credentials: 'include',
-            headers: { Accept: 'application/json' },
-            signal: controller.signal,
-        })
-            .then(async (res) => {
-                if (!res.ok) throw new Error(`Server responded ${res.status}`);
-                return ((await res.json()) as { data: StockTakeStats }).data;
-            })
-            .then(setStats)
-            .catch((err: unknown) => {
-                if (err instanceof DOMException && err.name === 'AbortError')
-                    return;
-                setError(err instanceof Error ? err.message : 'Request failed');
-            });
-        return () => controller.abort();
-    }, [attempt]);
+    const { data, error, retry } = useJson<{ data: StockTakeStats }>(
+        '/stock-take-statistics',
+    );
+    const stats = data?.data ?? null;
 
     const items: KpiItem[] = stats
         ? [

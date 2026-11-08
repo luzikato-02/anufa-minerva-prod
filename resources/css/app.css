@@ -168,3 +168,12 @@
         @apply bg-background text-foreground;
     }
 }
+
+/*
+ * Muted text that sits on a muted surface (table headers, segmented controls).
+ * Plain --muted-foreground on --muted is 4.3:1 in light mode; nudging it 18%
+ * toward --foreground clears 4.5:1 in both themes without a new colour token.
+ */
+@utility text-muted-on-muted {
+    color: color-mix(in oklab, var(--muted-foreground), var(--foreground) 18%);
+}

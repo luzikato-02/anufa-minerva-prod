@@ -110,7 +110,10 @@ export interface DataGridProps<T> {
     /** Accessible name for the table, e.g. "Twisting tension records". */
     label: string;
     className?: string;
-    /** Opens a record when its row is clicked (ignored on buttons, inputs and checkboxes). */
+    /**
+     * Opens a record when its row is clicked (ignored on buttons, inputs and
+     * checkboxes). Rows then also take focus: Enter or Space opens, ↑/↓ move.
+     */
     onRowClick?: (rowId: string) => void;
     /** Row shown as open in a side panel. */
     activeRowId?: string | null;
@@ -342,8 +345,46 @@ export function DataGrid<T>({
                                               }
                                             : undefined
                                     }
+                                    tabIndex={onRowClick ? 0 : undefined}
+                                    onKeyDown={
+                                        onRowClick
+                                            ? (event) => {
+                                                  if (
+                                                      event.target !==
+                                                      event.currentTarget
+                                                  )
+                                                      return;
+                                                  if (
+                                                      event.key === 'Enter' ||
+                                                      event.key === ' '
+                                                  ) {
+                                                      event.preventDefault();
+                                                      onRowClick(row.id);
+                                                  } else if (
+                                                      event.key ===
+                                                          'ArrowDown' ||
+                                                      event.key === 'ArrowUp'
+                                                  ) {
+                                                      event.preventDefault();
+                                                      const next =
+                                                          event.key ===
+                                                          'ArrowDown'
+                                                              ? event
+                                                                    .currentTarget
+                                                                    .nextElementSibling
+                                                              : event
+                                                                    .currentTarget
+                                                                    .previousElementSibling;
+                                                      (
+                                                          next as HTMLElement | null
+                                                      )?.focus();
+                                                  }
+                                              }
+                                            : undefined
+                                    }
                                     className={cn(
-                                        onRowClick && 'cursor-pointer',
+                                        onRowClick &&
+                                            'cursor-pointer focus-visible:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
                                         activeRowId === row.id &&
                                             'bg-muted font-medium hover:bg-muted',
                                     )}

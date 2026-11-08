@@ -68,11 +68,26 @@ interface StockTakeRecord {
         session_status: string;
         total_materials: number;
     };
-    indv_batch_data: any;
-    stock_take_summary: any;
+    indv_batch_data: unknown;
+    stock_take_summary: StockTakeBatch[] | null;
     created_at?: string;
     updated_at?: string;
-    session_id?: any;
+    session_id?: string;
+}
+
+/** One row of a session's stock take summary. */
+interface StockTakeBatch {
+    material_code?: string;
+    material_description?: string;
+    batch_number?: string;
+    is_recorded?: boolean | null;
+    actual_weight?: string | number | null;
+    total_bobbins?: string | number | null;
+    line_position?: string | number | null;
+    row_position?: string | number | null;
+    user_found?: string | null;
+    explanation?: string | null;
+    [key: string]: unknown;
 }
 
 // Percentage of batches that have been checked/found relative to the total.
@@ -527,10 +542,7 @@ function ViewSessionDialog({
                                                     .slice(0, 10)
                                                     .map(
                                                         (
-                                                            batch: Record<
-                                                                string,
-                                                                any
-                                                            >,
+                                                            batch: StockTakeBatch,
                                                             idx: number,
                                                         ) => (
                                                             <TableRow key={idx}>

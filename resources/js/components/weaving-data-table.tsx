@@ -34,6 +34,11 @@ import {
     verifyPersistedRecord,
 } from '@/lib/databaseConnector';
 import {
+    type FormValue,
+    type ProblemLike,
+    type StoredReading,
+} from '@/lib/tension-heatmap';
+import {
     ColumnDef,
     getCoreRowModel,
     useReactTable,
@@ -80,9 +85,12 @@ interface TensionRecord {
     record_type: 'twisting' | 'weaving';
     timestamp: string;
     csv_data: string;
-    form_data: any;
-    measurement_data: any;
-    problems: any[];
+    form_data: Record<string, FormValue>;
+    measurement_data: Record<
+        string,
+        Record<string, Record<string, StoredReading>>
+    >;
+    problems: ProblemLike[];
     metadata: {
         total_measurements: number;
         completed_measurements: number;
@@ -350,8 +358,8 @@ function ViewWeavingRecordDialog({
         side: string;
         row: string;
         col: string;
-        max: any;
-        min: any;
+        max: FormValue;
+        min: FormValue;
     }[] = [];
     const measurementData = record.measurement_data ?? {};
     for (const side of Object.keys(measurementData)) {
@@ -374,8 +382,8 @@ function ViewWeavingRecordDialog({
     }
 
     // Build a lookup of problems by position for cross-referencing in Measurement Data table
-    const problemsByPosition = new Map<string, any>();
-    (record.problems ?? []).forEach((p: any) => {
+    const problemsByPosition = new Map<string, ProblemLike>();
+    (record.problems ?? []).forEach((p: ProblemLike) => {
         if (p?.position) {
             problemsByPosition.set(p.position, p);
         }
@@ -711,7 +719,7 @@ function ViewWeavingRecordDialog({
                         {record.problems && record.problems.length > 0 ? (
                             <div className="space-y-2">
                                 {record.problems.map(
-                                    (problem: any, idx: number) => {
+                                    (problem: ProblemLike, idx: number) => {
                                         const status = problem.status ?? 'open';
                                         return (
                                             <div
@@ -756,7 +764,7 @@ function ViewWeavingRecordDialog({
                                                                 {
                                                                     problem
                                                                         .resolution
-                                                                        .action
+                                                                        ?.action
                                                                 }
                                                             </p>
                                                             <p>
@@ -766,7 +774,7 @@ function ViewWeavingRecordDialog({
                                                                 </span>{' '}
                                                                 {problem
                                                                     .resolution
-                                                                    .after_repair_max ??
+                                                                    ?.after_repair_max ??
                                                                     'N/A'}
                                                             </p>
                                                             <p>
@@ -776,7 +784,7 @@ function ViewWeavingRecordDialog({
                                                                 </span>{' '}
                                                                 {problem
                                                                     .resolution
-                                                                    .after_repair_min ??
+                                                                    ?.after_repair_min ??
                                                                     'N/A'}
                                                             </p>
                                                             <p>
@@ -786,13 +794,13 @@ function ViewWeavingRecordDialog({
                                                                 {
                                                                     problem
                                                                         .resolution
-                                                                        .resolved_by
+                                                                        ?.resolved_by
                                                                 }{' '}
                                                                 on{' '}
                                                                 {formatDate(
                                                                     problem
                                                                         .resolution
-                                                                        .resolved_at,
+                                                                        ?.resolved_at,
                                                                 )}
                                                             </p>
                                                         </div>
@@ -889,8 +897,8 @@ function EditWeavingRecordDialog({
             side: string;
             row: string;
             col: string;
-            max: any;
-            min: any;
+            max: FormValue;
+            min: FormValue;
         }[] = [];
         const measurementData = record.measurement_data ?? {};
         for (const side of Object.keys(measurementData)) {
@@ -927,13 +935,17 @@ function EditWeavingRecordDialog({
     };
 
     const [problems, setProblems] = useState(() =>
-        (record.problems ?? []).map((p: any) => ({
+        (record.problems ?? []).map((p: ProblemLike) => ({
             ...p,
             resolution: p.resolution ? { ...p.resolution } : null,
         })),
     );
 
-    const updateProblem = (idx: number, field: string, value: any) => {
+    const updateProblem = (
+        idx: number,
+        field: string,
+        value: string | number | null,
+    ) => {
         setProblems((prev) =>
             prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)),
         );
@@ -942,7 +954,7 @@ function EditWeavingRecordDialog({
     const updateProblemResolution = (
         idx: number,
         field: string,
-        value: any,
+        value: string | number | null,
     ) => {
         setProblems((prev) =>
             prev.map((p, i) =>
@@ -1041,7 +1053,7 @@ function EditWeavingRecordDialog({
             });
 
             const resultText = await res.text();
-            let result: any;
+            let result: { message?: string } & Record<string, unknown>;
             try {
                 result = JSON.parse(resultText);
             } catch {
@@ -1133,7 +1145,8 @@ function EditWeavingRecordDialog({
                 ),
             );
             setSaveStatus('success');
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             setSaveSteps((prev) =>
                 prev.map((s) =>
                     s.status === 'active' ? { ...s, status: 'error' } : s,
@@ -1141,7 +1154,7 @@ function EditWeavingRecordDialog({
             );
             setSaveStatus('error');
             setSaveError({
-                message: e.message ?? 'Error updating record',
+                message: message || 'Error updating record',
                 details: JSON.stringify(
                     {
                         step: 'update',
@@ -1149,7 +1162,7 @@ function EditWeavingRecordDialog({
                         recordId: record.id,
                         itemNumber,
                         machineNumber,
-                        error: e.message,
+                        error: message,
                         timestamp: new Date().toISOString(),
                     },
                     null,
@@ -1368,7 +1381,7 @@ function EditWeavingRecordDialog({
                                                                 type="number"
                                                                 step="any"
                                                                 className="h-8 w-24"
-                                                                value={m.max}
+                                                                value={m.max ?? ''}
                                                                 onChange={(e) =>
                                                                     updateMeasurement(
                                                                         m.position,
@@ -1384,7 +1397,7 @@ function EditWeavingRecordDialog({
                                                                 type="number"
                                                                 step="any"
                                                                 className="h-8 w-24"
-                                                                value={m.min}
+                                                                value={m.min ?? ''}
                                                                 onChange={(e) =>
                                                                     updateMeasurement(
                                                                         m.position,
@@ -1447,7 +1460,7 @@ function EditWeavingRecordDialog({
                                             {problems.length ? (
                                                 problems.map(
                                                     (
-                                                        problem: any,
+                                                        problem: ProblemLike,
                                                         idx: number,
                                                     ) => {
                                                         const status =
@@ -1513,7 +1526,7 @@ function EditWeavingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .action ??
+                                                                                    ?.action ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1543,7 +1556,7 @@ function EditWeavingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .after_repair_max ??
+                                                                                    ?.after_repair_max ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1573,7 +1586,7 @@ function EditWeavingRecordDialog({
                                                                             value={
                                                                                 problem
                                                                                     .resolution
-                                                                                    .after_repair_min ??
+                                                                                    ?.after_repair_min ??
                                                                                 ''
                                                                             }
                                                                             onChange={(
@@ -1596,7 +1609,7 @@ function EditWeavingRecordDialog({
                                                                 </TableCell>
                                                                 <TableCell className="text-xs text-muted-foreground">
                                                                     {resolved
-                                                                        ? `${problem.resolution.resolved_by} on ${formatDate(problem.resolution.resolved_at)}`
+                                                                        ? `${problem.resolution?.resolved_by} on ${formatDate(problem.resolution?.resolved_at)}`
                                                                         : '—'}
                                                                 </TableCell>
                                                             </TableRow>

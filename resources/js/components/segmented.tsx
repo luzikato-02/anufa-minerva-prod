@@ -28,7 +28,7 @@ export function Segmented<T extends string>({
                         'h-6 rounded-md px-2 text-xs font-medium transition-colors',
                         value === option.value
                             ? 'bg-background text-foreground shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground',
+                            : 'text-muted-on-muted hover:text-foreground',
                     )}
                 >
                     {option.label}
