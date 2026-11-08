@@ -1,40 +1,24 @@
+import { FinishEarlierDataTable } from '@/components/finish-earlier-data-table';
+import { PageHeader } from '@/components/page-header';
 import AppLayout from '@/layouts/app-layout';
-import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { FinishEarlierDataTable } from '@/components/finish-earlier-data-table';
+
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard().url,
-    },
+    { title: 'Finish Earlier Records', href: '/finish-earlier-display' },
+    { title: 'Display', href: '/finish-earlier-display' },
 ];
 
 export default function FinishEarlierRecordDisplay() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Finish Earlier Records" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-semibold">Finish Earlier Records</h1>
-                        <p className="text-sm text-muted-foreground">Yarn packages that finished before the expected length</p>
-                    </div>
-                </div>
-                {/* <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div> */}
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                     <FinishEarlierDataTable></FinishEarlierDataTable>
-                </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-(--density-gutter) p-4">
+                <PageHeader
+                    title="Finish Earlier Records"
+                    meta="Yarn packages that finished before the expected length"
+                />
+                <FinishEarlierDataTable />
             </div>
         </AppLayout>
     );

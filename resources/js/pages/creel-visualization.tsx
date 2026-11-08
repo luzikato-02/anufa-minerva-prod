@@ -1,3 +1,12 @@
+import { DataGrid } from '@/components/data-grid';
+import {
+    CodeCell,
+    DateTimeCell,
+    Empty,
+    NumberCell,
+    TextCell,
+} from '@/components/data-grid-cells';
+import { PageHeader } from '@/components/page-header';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -26,15 +35,28 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useServerTable } from '@/hooks/use-server-table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
 import axios from 'axios';
-import { AlertCircle, CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    AlertCircle,
+    CheckCircle2,
+    Eye,
+    Loader2,
+    Pencil,
+    Trash2,
+    Upload,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inventory Management', href: '#' },
     { title: 'Creel Visualization', href: '/creel-visualization' },
 ];
 
@@ -53,13 +75,6 @@ interface CreelRecordSummary {
         total_weight: number;
     } | null;
     created_at: string;
-}
-
-interface PaginatedResponse {
-    data: CreelRecordSummary[];
-    total: number;
-    last_page: number;
-    current_page: number;
 }
 
 interface RawBatch {
@@ -99,12 +114,12 @@ function EditDialog({
     onClose: () => void;
 }) {
     const [record, setRecord] = useState<FullCreelRecord | null>(null);
-    const [rows, setRows]     = useState<RawBatch[]>([]);
-    const [loading, setLoading]   = useState(true);
-    const [saving, setSaving]     = useState(false);
-    const [error, setError]       = useState<string | null>(null);
-    const [search, setSearch]     = useState('');
-    const [page, setPage]         = useState(0);
+    const [rows, setRows] = useState<RawBatch[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(0);
 
     useEffect(() => {
         setLoading(true);
@@ -118,13 +133,21 @@ function EditDialog({
             .finally(() => setLoading(false));
     }, [recordId]);
 
-    const filtered  = rows.filter((b) => !search || b.batch.toLowerCase().includes(search.toLowerCase()));
+    const filtered = rows.filter(
+        (b) => !search || b.batch.toLowerCase().includes(search.toLowerCase()),
+    );
     const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
-    const visible   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    const visible = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-    const updateRow = (batchId: string, field: keyof RawBatch, value: string | number) => {
+    const updateRow = (
+        batchId: string,
+        field: keyof RawBatch,
+        value: string | number,
+    ) => {
         setRows((prev) =>
-            prev.map((b) => (b.batch === batchId ? { ...b, [field]: value } : b)),
+            prev.map((b) =>
+                b.batch === batchId ? { ...b, [field]: value } : b,
+            ),
         );
     };
 
@@ -151,7 +174,12 @@ function EditDialog({
     };
 
     return (
-        <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+        <Dialog
+            open
+            onOpenChange={(v) => {
+                if (!v) onClose();
+            }}
+        >
             <DialogContent className="flex max-h-[92vh] flex-col sm:max-w-[1100px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -159,12 +187,15 @@ function EditDialog({
                         Edit Raw Batch Data
                         {record && (
                             <span className="ml-1 font-mono text-sm font-normal text-muted-foreground">
-                                — {record.order_number} · {record.machine ?? '—'} · {record.date_string ?? '—'}
+                                — {record.order_number} ·{' '}
+                                {record.machine ?? '—'} ·{' '}
+                                {record.date_string ?? '—'}
                             </span>
                         )}
                     </DialogTitle>
                     <DialogDescription>
-                        Edit ERP import metadata. Assigned bobbin positions are not affected.
+                        Edit ERP import metadata. Assigned bobbin positions are
+                        not affected.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -178,7 +209,10 @@ function EditDialog({
                             <Input
                                 placeholder="Search batch…"
                                 value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                                onChange={(e) => {
+                                    setSearch(e.target.value);
+                                    setPage(0);
+                                }}
                                 className="max-w-xs"
                             />
                             <span className="text-sm text-muted-foreground">
@@ -190,32 +224,64 @@ function EditDialog({
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-background">
                                     <TableRow>
-                                        <TableHead className="w-[140px]">Batch</TableHead>
-                                        <TableHead className="w-[130px]">Material</TableHead>
-                                        <TableHead className="w-[80px] text-right">Wt (kg)</TableHead>
-                                        <TableHead className="w-[120px]">Side</TableHead>
-                                        <TableHead className="w-[100px]">From</TableHead>
-                                        <TableHead className="w-[100px]">To</TableHead>
-                                        <TableHead className="w-[70px] text-right">Quota</TableHead>
+                                        <TableHead className="w-[140px]">
+                                            Batch
+                                        </TableHead>
+                                        <TableHead className="w-[130px]">
+                                            Material
+                                        </TableHead>
+                                        <TableHead className="w-[80px] text-right">
+                                            Wt (kg)
+                                        </TableHead>
+                                        <TableHead className="w-[120px]">
+                                            Side
+                                        </TableHead>
+                                        <TableHead className="w-[100px]">
+                                            From
+                                        </TableHead>
+                                        <TableHead className="w-[100px]">
+                                            To
+                                        </TableHead>
+                                        <TableHead className="w-[70px] text-right">
+                                            Quota
+                                        </TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {visible.map((b) => (
                                         <TableRow key={b.batch}>
-                                            <TableCell className="font-mono text-xs">{b.batch}</TableCell>
-                                            <TableCell className="font-mono text-xs text-muted-foreground">{b.material ?? '—'}</TableCell>
-                                            <TableCell className="text-right text-xs">{b.net_weight.toFixed(1)}</TableCell>
+                                            <TableCell className="font-mono text-xs">
+                                                {b.batch}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs text-muted-foreground">
+                                                {b.material ?? '—'}
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs">
+                                                {b.net_weight.toFixed(1)}
+                                            </TableCell>
                                             <TableCell>
                                                 <Input
                                                     value={b.creel_side}
-                                                    onChange={(e) => updateRow(b.batch, 'creel_side', e.target.value.toUpperCase())}
+                                                    onChange={(e) =>
+                                                        updateRow(
+                                                            b.batch,
+                                                            'creel_side',
+                                                            e.target.value.toUpperCase(),
+                                                        )
+                                                    }
                                                     className="h-7 px-2 font-mono text-xs uppercase"
                                                 />
                                             </TableCell>
                                             <TableCell>
                                                 <Input
                                                     value={b.creel_from}
-                                                    onChange={(e) => updateRow(b.batch, 'creel_from', e.target.value.toUpperCase())}
+                                                    onChange={(e) =>
+                                                        updateRow(
+                                                            b.batch,
+                                                            'creel_from',
+                                                            e.target.value.toUpperCase(),
+                                                        )
+                                                    }
                                                     className="h-7 px-2 font-mono text-xs uppercase"
                                                     placeholder="e.g. 1A"
                                                 />
@@ -223,7 +289,13 @@ function EditDialog({
                                             <TableCell>
                                                 <Input
                                                     value={b.creel_to}
-                                                    onChange={(e) => updateRow(b.batch, 'creel_to', e.target.value.toUpperCase())}
+                                                    onChange={(e) =>
+                                                        updateRow(
+                                                            b.batch,
+                                                            'creel_to',
+                                                            e.target.value.toUpperCase(),
+                                                        )
+                                                    }
                                                     className="h-7 px-2 font-mono text-xs uppercase"
                                                     placeholder="e.g. 12E"
                                                 />
@@ -232,7 +304,15 @@ function EditDialog({
                                                 <Input
                                                     type="number"
                                                     value={b.count}
-                                                    onChange={(e) => updateRow(b.batch, 'count', parseInt(e.target.value) || 0)}
+                                                    onChange={(e) =>
+                                                        updateRow(
+                                                            b.batch,
+                                                            'count',
+                                                            parseInt(
+                                                                e.target.value,
+                                                            ) || 0,
+                                                        )
+                                                    }
                                                     className="h-7 px-2 text-right text-xs"
                                                 />
                                             </TableCell>
@@ -247,10 +327,22 @@ function EditDialog({
                                 <span className="text-xs text-muted-foreground">
                                     Page {page + 1} of {pageCount}
                                 </span>
-                                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                        setPage((p) => Math.max(0, p - 1))
+                                    }
+                                    disabled={page === 0}
+                                >
                                     Previous
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= pageCount}>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPage((p) => p + 1)}
+                                    disabled={page + 1 >= pageCount}
+                                >
                                     Next
                                 </Button>
                             </div>
@@ -264,11 +356,25 @@ function EditDialog({
                         )}
 
                         <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                            <Button
+                                variant="outline"
+                                onClick={onClose}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </Button>
                             <Button onClick={handleSave} disabled={saving}>
-                                {saving
-                                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
-                                    : <><CheckCircle2 className="mr-2 h-4 w-4" />Save Changes</>}
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Saving…
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                                        Save Changes
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </>
@@ -281,9 +387,9 @@ function EditDialog({
 // ── Upload dialog ─────────────────────────────────────────────────────────────
 
 function UploadDialog({ onUploaded }: { onUploaded: () => void }) {
-    const [open, setOpen]         = useState(false);
+    const [open, setOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [error, setError]       = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [dragActive, setDragActive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -323,18 +429,25 @@ function UploadDialog({ onUploaded }: { onUploaded: () => void }) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={(v) => { if (!v) close(); else setOpen(true); }}>
+        <Dialog
+            open={open}
+            onOpenChange={(v) => {
+                if (!v) close();
+                else setOpen(true);
+            }}
+        >
             <DialogTrigger asChild>
-                <Button size="sm">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Creel Export
+                <Button size="xs">
+                    <Upload />
+                    Upload creel export
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>Upload Creel Export</DialogTitle>
                     <DialogDescription>
-                        Select or drag an XLSX export from the manufacturing system.
+                        Select or drag an XLSX export from the manufacturing
+                        system.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -345,7 +458,10 @@ function UploadDialog({ onUploaded }: { onUploaded: () => void }) {
                             : 'border-muted-foreground/40 hover:border-primary/60 hover:bg-muted/20'
                     }`}
                     onClick={() => fileInputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                    }}
                     onDragLeave={() => setDragActive(false)}
                     onDrop={(e) => {
                         e.preventDefault();
@@ -360,9 +476,13 @@ function UploadDialog({ onUploaded }: { onUploaded: () => void }) {
                         <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
                     )}
                     <p className="text-sm text-muted-foreground">
-                        {uploading ? 'Uploading…' : 'Drop file here, or click to select'}
+                        {uploading
+                            ? 'Uploading…'
+                            : 'Drop file here, or click to select'}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground/60">.xlsx / .xls · max 10 MB</p>
+                    <p className="mt-1 text-xs text-muted-foreground/60">
+                        .xlsx / .xls · max 10 MB
+                    </p>
                 </div>
 
                 <input
@@ -390,33 +510,158 @@ function UploadDialog({ onUploaded }: { onUploaded: () => void }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const roundWeight = (w: number | null) =>
+    w == null ? null : Math.round(w * 10) / 10;
+
+const openViewer = (id: number | string) =>
+    window.open(`/creel-viewer/${id}`, '_blank', 'noopener');
+
+const buildColumns = (
+    edit: (id: number) => void,
+    remove: (id: number) => void,
+): ColumnDef<CreelRecordSummary>[] => [
+    {
+        id: 'order',
+        accessorKey: 'order_number',
+        header: 'Order no.',
+        meta: { label: 'Order no.' },
+        cell: ({ getValue }) => <CodeCell value={getValue()} strong />,
+    },
+    {
+        id: 'machine',
+        accessorKey: 'machine',
+        header: 'Machine',
+        meta: { label: 'Machine' },
+        cell: ({ getValue }) => <CodeCell value={getValue()} />,
+    },
+    {
+        id: 'date',
+        accessorKey: 'date_string',
+        header: 'Date',
+        enableSorting: false,
+        meta: { label: 'Date', className: 'whitespace-nowrap' },
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+    },
+    {
+        id: 'operator',
+        accessorKey: 'operator',
+        header: 'Operator',
+        meta: { label: 'Operator' },
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+    },
+    {
+        id: 'batches',
+        accessorFn: (r) => r.metadata?.batch_count ?? 0,
+        header: 'Batches',
+        meta: { label: 'Batches', align: 'right' },
+        cell: ({ getValue }) => <NumberCell value={getValue<number>()} />,
+    },
+    {
+        id: 'weight',
+        accessorFn: (r) => r.metadata?.total_weight ?? null,
+        header: 'Total weight',
+        meta: { label: 'Total weight', align: 'right' },
+        cell: ({ getValue }) => (
+            <NumberCell
+                value={roundWeight(getValue<number | null>())}
+                suffix="kg"
+            />
+        ),
+    },
+    {
+        id: 'file',
+        accessorFn: (r) => r.metadata?.file_name ?? null,
+        header: 'File',
+        enableSorting: false,
+        meta: { label: 'File', className: 'max-w-48' },
+        cell: ({ getValue }) => {
+            const name = getValue<string | null>();
+            return name ? (
+                <span
+                    className="block truncate text-xs text-muted-foreground"
+                    title={name}
+                >
+                    {name}
+                </span>
+            ) : (
+                <Empty />
+            );
+        },
+    },
+    {
+        id: 'uploaded',
+        accessorKey: 'created_at',
+        header: 'Uploaded',
+        meta: { label: 'Uploaded', className: 'whitespace-nowrap' },
+        cell: ({ getValue }) => <DateTimeCell value={getValue<string>()} />,
+    },
+    {
+        id: 'actions',
+        header: () => <span className="sr-only">Actions</span>,
+        enableSorting: false,
+        enableHiding: false,
+        meta: { label: 'Actions', align: 'right' },
+        cell: ({ row }) => {
+            return (
+                <span className="inline-flex items-center gap-0.5">
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => openViewer(row.original.id)}
+                    >
+                        <Eye />
+                        View
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Edit batches for ${row.original.order_number}`}
+                        onClick={() => edit(row.original.id)}
+                    >
+                        <Pencil />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Delete ${row.original.order_number}`}
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => remove(row.original.id)}
+                    >
+                        <Trash2 />
+                    </Button>
+                </span>
+            );
+        },
+    },
+];
+
 export default function CreelVisualization() {
-    const [records, setRecords]   = useState<CreelRecordSummary[]>([]);
-    const [total, setTotal]       = useState(0);
-    const [pageCount, setPageCount] = useState(0);
-    const [pageIndex, setPageIndex] = useState(0);
-    const [loading, setLoading]   = useState(false);
-    const [search, setSearch]     = useState('');
-    const [editingId, setEditingId]     = useState<number | null>(null);
-    const [deletingId, setDeletingId]   = useState<number | null>(null);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
-    const fetchRecords = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await axios.get<PaginatedResponse>('/creel-records', {
-                params: { search, page: pageIndex + 1 },
-            });
-            setRecords(res.data.data ?? []);
-            setTotal(res.data.total ?? 0);
-            setPageCount(res.data.last_page ?? 0);
-        } catch {
-            // silent
-        } finally {
-            setLoading(false);
-        }
-    }, [search, pageIndex]);
+    const grid = useServerTable<CreelRecordSummary>({
+        endpoint: '/creel-records',
+        storageKey: 'creel-records',
+    });
 
-    useEffect(() => { fetchRecords(); }, [fetchRecords]);
+    const columns = useMemo(
+        () => buildColumns(setEditingId, setDeletingId),
+        [],
+    );
+
+    const table = useReactTable({
+        data: grid.data,
+        columns,
+        getRowId: (row) => String(row.id),
+        getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
+        manualSorting: true,
+        manualFiltering: true,
+        enableSortingRemoval: true,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+    });
 
     const handleDelete = async () => {
         if (deletingId === null) return;
@@ -425,9 +670,9 @@ export default function CreelVisualization() {
             await axios.delete(`/creel-records/${deletingId}`, {
                 headers: { 'X-CSRF-TOKEN': csrfRes.data.csrfToken },
             });
-            await fetchRecords();
+            grid.refetch();
         } catch {
-            // silent
+            // The row stays in the list, which shows the delete didn't happen.
         } finally {
             setDeletingId(null);
         }
@@ -436,147 +681,60 @@ export default function CreelVisualization() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Creel Visualization" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl md:min-h-min dark:border-sidebar-border">
-                    <div className="w-full">
-
-                        {/* Toolbar */}
-                        <div className="flex items-center justify-between gap-3 py-4">
-                            <Input
-                                placeholder="Search order / machine / operator…"
-                                value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPageIndex(0); }}
-                                className="max-w-xs"
-                            />
-                            <UploadDialog onUploaded={() => { setPageIndex(0); fetchRecords(); }} />
-                        </div>
-
-                        {/* Table */}
-                        <div className="overflow-hidden rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Order No.</TableHead>
-                                        <TableHead>Machine</TableHead>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Operator</TableHead>
-                                        <TableHead className="text-right">Batches</TableHead>
-                                        <TableHead className="text-right">Total Weight</TableHead>
-                                        <TableHead>File</TableHead>
-                                        <TableHead>Uploaded</TableHead>
-                                        <TableHead className="w-[110px]">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {records.length ? (
-                                        records.map((r) => (
-                                            <TableRow key={r.id}>
-                                                <TableCell className="font-mono">{r.order_number}</TableCell>
-                                                <TableCell>{r.machine ?? '—'}</TableCell>
-                                                <TableCell className="whitespace-nowrap">{r.date_string ?? '—'}</TableCell>
-                                                <TableCell>{r.operator ?? '—'}</TableCell>
-                                                <TableCell className="text-right">{r.metadata?.batch_count ?? 0}</TableCell>
-                                                <TableCell className="text-right">
-                                                    {r.metadata?.total_weight != null
-                                                        ? `${r.metadata.total_weight.toFixed(1)} kg`
-                                                        : '—'}
-                                                </TableCell>
-                                                <TableCell
-                                                    className="max-w-[160px] truncate text-xs text-muted-foreground"
-                                                    title={r.metadata?.file_name}
-                                                >
-                                                    {r.metadata?.file_name ?? '—'}
-                                                </TableCell>
-                                                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                                                    {new Date(r.created_at).toLocaleDateString('en-ID', {
-                                                        day: '2-digit', month: 'short', year: 'numeric',
-                                                    })}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => window.open(`/creel-viewer/${r.id}`, '_blank')}
-                                                        >
-                                                            <Eye className="size-4" />
-                                                            View
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => setEditingId(r.id)}
-                                                        >
-                                                            <Pencil className="size-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => setDeletingId(r.id)}
-                                                            className="text-destructive hover:text-destructive"
-                                                        >
-                                                            <Trash2 className="size-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={9} className="h-24 text-center">
-                                                {loading ? 'Loading…' : 'No creel records yet. Upload an XLSX export to get started.'}
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        {/* Pagination */}
-                        <div className="flex items-center justify-end gap-2 py-4">
-                            <div className="flex-1 text-sm text-muted-foreground">{total} record(s).</div>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                                    disabled={pageIndex === 0}
-                                >
-                                    Previous
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPageIndex((p) => p + 1)}
-                                    disabled={pageIndex + 1 >= pageCount}
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-(--density-gutter) p-4">
+                <PageHeader
+                    title="Creel Visualization"
+                    meta="Production orders imported from creel exports; open one to see it in 3D"
+                    actions={<UploadDialog onUploaded={grid.refetch} />}
+                />
+                <DataGrid
+                    table={table}
+                    label="Creel records"
+                    loading={grid.loading}
+                    error={grid.error}
+                    total={grid.total}
+                    onRetry={grid.refetch}
+                    search={grid.search}
+                    onSearchChange={grid.setSearch}
+                    searchPlaceholder="Order, machine or operator"
+                    emptyMessage="No creel records yet. Upload an XLSX export to get started."
+                    onRowClick={openViewer}
+                />
             </div>
 
             {editingId !== null && (
                 <EditDialog
                     recordId={editingId}
-                    onDone={() => { setEditingId(null); fetchRecords(); }}
+                    onDone={() => {
+                        setEditingId(null);
+                        grid.refetch();
+                    }}
                     onClose={() => setEditingId(null)}
                 />
             )}
 
-            <AlertDialog open={deletingId !== null} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
+            <AlertDialog
+                open={deletingId !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDeletingId(null);
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete creel record?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            Delete creel record?
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action cannot be undone. The record and all its bobbin assignments will be permanently deleted.
+                            This action cannot be undone. The record and all its
+                            bobbin assignments will be permanently deleted.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>

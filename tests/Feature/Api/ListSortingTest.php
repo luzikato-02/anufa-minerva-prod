@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\CreelRecord;
 use App\Models\CreelType;
 use App\Models\FinishEarlierRecord;
 use App\Models\StockSheet;
@@ -129,5 +130,20 @@ class ListSortingTest extends TestCase
 
         $this->assertSame(['TW-1', 'TW-2', 'TW-10'], $machines('sort_by=machine&sort_dir=asc'));
         $this->assertSame(['TW-10', 'TW-2', 'TW-1'], $machines('sort_by=machine&sort_dir=desc'));
+    }
+
+    public function test_creel_records_page_size_and_numeric_sort(): void
+    {
+        $this->actingAs($this->user(['creel.view']));
+        foreach ([['PO-1', 9], ['PO-2', 120], ['PO-3', 15]] as [$po, $n]) {
+            CreelRecord::create(['order_number' => $po, 'metadata' => ['batch_count' => $n], 'batches' => [], 'raw_batches' => []]);
+        }
+
+        $orders = fn (string $q) => array_column($this->getJson("/creel-records?{$q}")->assertOk()->json('data'), 'order_number');
+
+        $this->assertSame(['PO-2', 'PO-3', 'PO-1'], $orders('sort_by=batches&sort_dir=desc'));
+        $this->assertSame(['PO-1', 'PO-3', 'PO-2'], $orders('sort_by=batches&sort_dir=asc'));
+        $this->assertSame(2, $this->getJson('/creel-records?per_page=2')->json('per_page'));
+        $this->assertSame(200, $this->getJson('/creel-records?per_page=5000')->json('per_page'));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\HandlesJsonColumns;
 use App\Http\Controllers\Controller;
 use App\Models\CreelRecord;
 use Illuminate\Http\Request;
@@ -9,6 +10,8 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class CreelRecordController extends Controller
 {
+    use HandlesJsonColumns;
+
     public function index(Request $request)
     {
         $query = CreelRecord::query()->select([
@@ -24,7 +27,25 @@ class CreelRecordController extends Controller
             });
         }
 
-        $records = $query->orderBy('created_at', 'desc')->paginate(15);
+        // Whitelisted sort ids only, so sort_by never reaches SQL as-is; newest upload first otherwise.
+        $number = fn (string $field) => 'CAST('.$this->jsonExtract('metadata', "$.{$field}").' AS DECIMAL(12,2))';
+        $sortable = [
+            'uploaded' => 'created_at',
+            'order'    => 'order_number',
+            'machine'  => 'machine',
+            'operator' => 'operator',
+            'batches'  => $number('batch_count'),
+            'weight'   => $number('total_weight'),
+        ];
+        $sortBy = $request->input('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $dir = strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc';
+            $query->orderByRaw("{$sortable[$sortBy]} {$dir}");
+        }
+
+        // 15 per page by default (the old page size); the shared table asks for 25–200.
+        $perPage = min(max((int) $request->input('per_page', 15), 1), 200);
+        $records = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')->paginate($perPage);
 
         return response()->json($records);
     }
