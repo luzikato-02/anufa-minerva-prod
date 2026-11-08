@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header';
 import { TorqueChecksTable } from '@/components/torque-checks-table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -12,11 +13,11 @@ export default function TorqueChecksDisplay() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Torque Checks" />
-            <div className="flex flex-col gap-4 p-4">
-                <div>
-                    <h1 className="text-xl font-semibold">Torque Checks</h1>
-                    <p className="text-sm text-muted-foreground">Creel adaptor torque check sheets, newest first</p>
-                </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-(--density-gutter) p-4">
+                <PageHeader
+                    title="Torque Checks"
+                    meta="Creel adaptor torque check sheets"
+                />
                 <TorqueChecksTable />
             </div>
         </AppLayout>

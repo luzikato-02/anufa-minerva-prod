@@ -64,6 +64,19 @@ class StockSheetController extends Controller
             });
         }
 
+        // Whitelisted sort ids only, so sort_by never reaches SQL as-is; newest first otherwise.
+        $sortable = [
+            'sheet_date' => 'sheet_date',
+            'session'    => 'session_id',
+            'leader'     => 'leader',
+            'rows'       => 'rows_count',
+            'bobbins'    => 'total_chs',
+            'weight'     => 'total_weight',
+        ];
+        $sortBy = $request->input('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $query->orderBy($sortable[$sortBy], strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc');
+        }
         $query->orderByDesc('sheet_date')->orderByDesc('id');
 
         return response()->json($query->paginate(min((int) $request->get('per_page', 10), 200)));

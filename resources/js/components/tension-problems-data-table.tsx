@@ -1,5 +1,8 @@
 'use client';
 
+import { DataGrid } from '@/components/data-grid';
+import { CodeCell, DateTimeCell, TextCell } from '@/components/data-grid-cells';
+import { Segmented } from '@/components/segmented';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -13,11 +16,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { CodeCell, DateTimeCell, TextCell } from '@/components/data-grid-cells';
-import { DataGrid } from '@/components/data-grid';
 import { useServerTable } from '@/hooks/use-server-table';
 import { cn } from '@/lib/utils';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 
 interface TensionProblemResolution {
@@ -90,8 +95,10 @@ function ResolveProblemDialog({
                     credentials: 'include',
                     body: JSON.stringify({
                         action,
-                        after_repair_max: afterMax === '' ? null : Number(afterMax),
-                        after_repair_min: afterMin === '' ? null : Number(afterMin),
+                        after_repair_max:
+                            afterMax === '' ? null : Number(afterMax),
+                        after_repair_min:
+                            afterMin === '' ? null : Number(afterMin),
                     }),
                 },
             );
@@ -113,20 +120,26 @@ function ResolveProblemDialog({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="xs" variant="outline">Resolve</Button>
+                <Button size="xs" variant="outline">
+                    Resolve
+                </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>Resolve Issue</DialogTitle>
                     <DialogDescription>
-                        {problem.spindle_number != null ? `Spindle ${problem.spindle_number}` : problem.position}
+                        {problem.spindle_number != null
+                            ? `Spindle ${problem.spindle_number}`
+                            : problem.position}
                         {' — '}
                         {problem.item_number ?? 'N/A'}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                     <div className="space-y-1">
-                        <Label htmlFor="resolution-action">Resolution Action</Label>
+                        <Label htmlFor="resolution-action">
+                            Resolution Action
+                        </Label>
                         <Textarea
                             id="resolution-action"
                             value={action}
@@ -136,7 +149,9 @@ function ResolveProblemDialog({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <Label htmlFor="after-repair-max">After-Repair Max</Label>
+                            <Label htmlFor="after-repair-max">
+                                After-Repair Max
+                            </Label>
                             <Input
                                 id="after-repair-max"
                                 type="number"
@@ -146,7 +161,9 @@ function ResolveProblemDialog({
                             />
                         </div>
                         <div className="space-y-1">
-                            <Label htmlFor="after-repair-min">After-Repair Min</Label>
+                            <Label htmlFor="after-repair-min">
+                                After-Repair Min
+                            </Label>
                             <Input
                                 id="after-repair-min"
                                 type="number"
@@ -156,13 +173,18 @@ function ResolveProblemDialog({
                             />
                         </div>
                     </div>
-                    {error && <p className="text-sm text-destructive">{error}</p>}
+                    {error && (
+                        <p className="text-sm text-destructive">{error}</p>
+                    )}
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setOpen(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={submitting || !action.trim()}>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={submitting || !action.trim()}
+                    >
                         {submitting ? 'Saving...' : 'Mark Resolved'}
                     </Button>
                 </DialogFooter>
@@ -185,30 +207,47 @@ function ViewResolutionDialog({ problem }: { problem: TensionProblem }) {
                 <DialogHeader>
                     <DialogTitle>Resolution Details</DialogTitle>
                     <DialogDescription>
-                        {problem.spindle_number != null ? `Spindle ${problem.spindle_number}` : problem.position}
+                        {problem.spindle_number != null
+                            ? `Spindle ${problem.spindle_number}`
+                            : problem.position}
                         {' — '}
                         {problem.item_number ?? 'N/A'}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3 text-sm">
                     <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase">Action Taken</p>
-                        <p className="mt-1">{problem.resolution?.action ?? 'N/A'}</p>
+                        <p className="text-xs font-medium text-gray-500 uppercase">
+                            Action Taken
+                        </p>
+                        <p className="mt-1">
+                            {problem.resolution?.action ?? 'N/A'}
+                        </p>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <p className="text-xs font-medium text-gray-500 uppercase">After-Repair Max</p>
-                            <p className="mt-1 font-semibold">{problem.resolution?.after_repair_max ?? 'N/A'}</p>
+                            <p className="text-xs font-medium text-gray-500 uppercase">
+                                After-Repair Max
+                            </p>
+                            <p className="mt-1 font-semibold">
+                                {problem.resolution?.after_repair_max ?? 'N/A'}
+                            </p>
                         </div>
                         <div>
-                            <p className="text-xs font-medium text-gray-500 uppercase">After-Repair Min</p>
-                            <p className="mt-1 font-semibold">{problem.resolution?.after_repair_min ?? 'N/A'}</p>
+                            <p className="text-xs font-medium text-gray-500 uppercase">
+                                After-Repair Min
+                            </p>
+                            <p className="mt-1 font-semibold">
+                                {problem.resolution?.after_repair_min ?? 'N/A'}
+                            </p>
                         </div>
                     </div>
                     <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase">Resolved By</p>
+                        <p className="text-xs font-medium text-gray-500 uppercase">
+                            Resolved By
+                        </p>
                         <p className="mt-1">
-                            {problem.resolution?.resolved_by ?? 'N/A'} on {formatDate(problem.resolution?.resolved_at)}
+                            {problem.resolution?.resolved_by ?? 'N/A'} on{' '}
+                            {formatDate(problem.resolution?.resolved_at)}
                         </p>
                     </div>
                 </div>
@@ -228,9 +267,18 @@ function StatusCell({ status }: { status: TensionProblem['status'] }) {
         <span className="inline-flex items-center gap-1.5 text-xs">
             <span
                 aria-hidden="true"
-                className={cn('size-1.5 rounded-full', open ? 'bg-orange-500' : 'bg-emerald-600')}
+                className={cn(
+                    'size-1.5 rounded-full',
+                    open ? 'bg-orange-500' : 'bg-emerald-600',
+                )}
             />
-            <span className={open ? 'text-orange-700 dark:text-orange-400' : 'text-emerald-700 dark:text-emerald-400'}>
+            <span
+                className={
+                    open
+                        ? 'text-orange-700 dark:text-orange-400'
+                        : 'text-emerald-700 dark:text-emerald-400'
+                }
+            >
                 {open ? 'Open' : 'Resolved'}
             </span>
         </span>
@@ -251,7 +299,9 @@ export const columns: ColumnDef<TensionProblem>[] = [
         accessorFn: (row) => row.record_type,
         header: 'Type',
         cell: ({ getValue }) => (
-            <span className="text-xs text-muted-foreground capitalize">{String(getValue() ?? '')}</span>
+            <span className="text-xs text-muted-foreground capitalize">
+                {String(getValue() ?? '')}
+            </span>
         ),
         meta: { label: 'Type' },
     },
@@ -264,7 +314,10 @@ export const columns: ColumnDef<TensionProblem>[] = [
     },
     {
         id: 'position',
-        accessorFn: (row) => (row.spindle_number != null ? `Sp ${row.spindle_number}` : row.position),
+        accessorFn: (row) =>
+            row.spindle_number != null
+                ? `Sp ${row.spindle_number}`
+                : row.position,
         header: 'Position',
         cell: ({ getValue }) => <CodeCell value={getValue()} />,
         meta: { label: 'Position / spindle' },
@@ -314,7 +367,10 @@ export const columns: ColumnDef<TensionProblem>[] = [
             row.original.status === 'resolved' ? (
                 <ViewResolutionDialog problem={row.original} />
             ) : (
-                <ResolveProblemDialog problem={row.original} onResolved={() => table.options.meta?.refetch?.()} />
+                <ResolveProblemDialog
+                    problem={row.original}
+                    onResolved={() => table.options.meta?.refetch?.()}
+                />
             ),
         meta: { className: 'w-32 text-right' },
     },
@@ -322,40 +378,6 @@ export const columns: ColumnDef<TensionProblem>[] = [
 
 type StatusFilter = 'all' | 'open' | 'resolved';
 type TypeFilter = 'all' | 'twisting' | 'weaving';
-
-/** Small segmented filter matching the density toggle. */
-function Segmented<T extends string>({
-    label,
-    value,
-    options,
-    onChange,
-}: {
-    label: string;
-    value: T;
-    options: { value: T; label: string }[];
-    onChange: (value: T) => void;
-}) {
-    return (
-        <div role="group" aria-label={label} className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
-            {options.map((option) => (
-                <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={value === option.value}
-                    onClick={() => onChange(option.value)}
-                    className={cn(
-                        'h-6 rounded-md px-2 text-xs font-medium transition-colors',
-                        value === option.value
-                            ? 'bg-background text-foreground shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground',
-                    )}
-                >
-                    {option.label}
-                </button>
-            ))}
-        </div>
-    );
-}
 
 export function TensionProblemsDataTable() {
     // A problem queue starts on what still needs fixing.
@@ -399,7 +421,9 @@ export function TensionProblemsDataTable() {
             onSearchChange={grid.setSearch}
             searchPlaceholder="Search machine, position, description…"
             emptyMessage={
-                statusFilter === 'open' ? 'No open problems. Everything reported has been resolved.' : 'No problems recorded.'
+                statusFilter === 'open'
+                    ? 'No open problems. Everything reported has been resolved.'
+                    : 'No problems recorded.'
             }
             filters={
                 <>

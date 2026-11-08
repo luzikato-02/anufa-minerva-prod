@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header';
 import { StockSheetsTable } from '@/components/stock-sheets-table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -12,11 +13,11 @@ export default function StockSheetsDisplay() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Stock Sheets" />
-            <div className="flex flex-col gap-4 p-4">
-                <div>
-                    <h1 className="text-xl font-semibold">Stock Sheets</h1>
-                    <p className="text-sm text-muted-foreground">Recorded stock sheets, newest first</p>
-                </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-(--density-gutter) p-4">
+                <PageHeader
+                    title="Stock Sheets"
+                    meta="Recorded paper stock sheets"
+                />
                 <StockSheetsTable />
             </div>
         </AppLayout>

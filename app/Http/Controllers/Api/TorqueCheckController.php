@@ -34,6 +34,19 @@ class TorqueCheckController extends Controller
             });
         }
 
+        // Whitelisted sort ids only, so sort_by never reaches SQL as-is; newest first otherwise.
+        $sortable = [
+            'check_date'   => 'check_date',
+            'session'      => 'session_id',
+            'operator'     => 'operator_name',
+            'machine'      => 'machine_number',
+            'filled'       => 'readings_count',
+            'out_of_range' => 'out_of_range_count',
+        ];
+        $sortBy = $request->input('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $query->orderBy($sortable[$sortBy], strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc');
+        }
         $query->orderByDesc('check_date')->orderByDesc('id');
 
         $page = $query->paginate(min((int) $request->get('per_page', 10), 200));

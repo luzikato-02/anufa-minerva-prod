@@ -1,124 +1,192 @@
-import { type RowDraft, RowFieldsForm, draftFrom, readDraft } from '@/components/stock-sheet-row-fields';
+import { DataGrid } from '@/components/data-grid';
+import { CodeCell, NumberCell, TextCell } from '@/components/data-grid-cells';
+import {
+    type RowDraft,
+    RowFieldsForm,
+    draftFrom,
+    readDraft,
+} from '@/components/stock-sheet-row-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { useServerTable } from '@/hooks/use-server-table';
 import { usePermissions } from '@/lib/permissions';
-import { type SheetRow, type StockSheetDetail, type StockSheetSummary, formatNumber, rowsToCsv, saveCsv, stockSheetApi } from '@/lib/stock-sheets';
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import {
+    type SheetRow,
+    type StockSheetDetail,
+    type StockSheetSummary,
+    formatNumber,
+    rowsToCsv,
+    saveCsv,
+    stockSheetApi,
+} from '@/lib/stock-sheets';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
+import { DownloadIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-const PAGE_SIZE = 10;
-const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const day = (iso: string) =>
+    new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+const shortDay = (iso: string) =>
+    new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+    });
+
+const columns: ColumnDef<StockSheetSummary>[] = [
+    {
+        id: 'sheet_date',
+        accessorKey: 'sheet_date',
+        header: 'Date',
+        meta: { label: 'Date', className: 'whitespace-nowrap' },
+        cell: ({ row }) => (
+            <time
+                dateTime={row.original.sheet_date.slice(0, 10)}
+                title={day(row.original.sheet_date)}
+                className="tabular-nums"
+            >
+                {shortDay(row.original.sheet_date)}
+            </time>
+        ),
+    },
+    {
+        id: 'leader',
+        accessorKey: 'leader',
+        header: 'Recorded by',
+        meta: { label: 'Recorded by' },
+        cell: ({ getValue }) => <TextCell value={getValue()} />,
+    },
+    {
+        id: 'session',
+        accessorKey: 'session_id',
+        header: 'Session',
+        meta: { label: 'Session' },
+        cell: ({ getValue }) => <CodeCell value={getValue()} muted />,
+    },
+    {
+        id: 'rows',
+        accessorKey: 'rows_count',
+        header: 'Rows',
+        meta: { label: 'Rows', align: 'right' },
+        cell: ({ getValue }) => <NumberCell value={getValue()} />,
+    },
+    {
+        id: 'bobbins',
+        accessorKey: 'total_chs',
+        header: 'Bobbins',
+        meta: { label: 'Bobbins', align: 'right' },
+        cell: ({ getValue }) => <NumberCell value={getValue() ?? 0} />,
+    },
+    {
+        id: 'weight',
+        accessorKey: 'total_weight',
+        header: 'Weight',
+        meta: { label: 'Weight (kg)', align: 'right' },
+        cell: ({ getValue }) => (
+            <NumberCell value={getValue() ?? 0} suffix="kg" />
+        ),
+    },
+];
 
 export function StockSheetsTable() {
     const { can } = usePermissions();
-    const [search, setSearch] = useState('');
-    const [debounced, setDebounced] = useState('');
-    const [page, setPage] = useState(1);
-    const [rows, setRows] = useState<StockSheetSummary[]>([]);
-    const [lastPage, setLastPage] = useState(1);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [openId, setOpenId] = useState<number | null>(null);
+    const grid = useServerTable<StockSheetSummary>({
+        endpoint: '/stock-sheets',
+        storageKey: 'stock-sheets',
+    });
 
-    useEffect(() => {
-        const t = setTimeout(() => {
-            setDebounced(search);
-            setPage(1);
-        }, 300);
-        return () => clearTimeout(t);
-    }, [search]);
-
-    const reload = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const params = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
-            if (debounced) params.set('search', debounced);
-            const json = await stockSheetApi.list(params);
-            setRows(json.data);
-            setLastPage(json.last_page);
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setLoading(false);
-        }
-    }, [page, debounced]);
-
-    useEffect(() => {
-        void reload();
-    }, [reload]);
+    const table = useReactTable({
+        data: grid.data,
+        columns,
+        getRowId: (row) => String(row.id),
+        getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
+        manualSorting: true,
+        manualFiltering: true,
+        enableSortingRemoval: true,
+        pageCount: grid.pageCount,
+        state: grid.state,
+        ...grid.handlers,
+    });
 
     return (
-        <div className="space-y-4">
-            <Input aria-label="Search stock sheets" placeholder="Search leader, batch, material or colour" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-            {error && (
-                <Alert variant="destructive" role="alert">
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-            <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Session</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Recorded by</TableHead>
-                            <TableHead className="text-right">Rows</TableHead>
-                            <TableHead className="text-right">Bobbins</TableHead>
-                            <TableHead className="text-right">Weight (kg)</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {rows.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                    {loading ? 'Loading…' : 'No stock sheets yet.'}
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            rows.map((s) => (
-                                <TableRow key={s.id} className="cursor-pointer" tabIndex={0} onClick={() => setOpenId(s.id)} onKeyDown={(e) => e.key === 'Enter' && setOpenId(s.id)}>
-                                    <TableCell className="font-mono text-sm">{s.session_id ?? '—'}</TableCell>
-                                    <TableCell className="font-medium">{day(s.sheet_date)}</TableCell>
-                                    <TableCell>{s.leader}</TableCell>
-                                    <TableCell className="text-right">{s.rows_count}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(s.total_chs ?? 0)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(s.total_weight ?? 0)}</TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-                <span className="text-sm text-muted-foreground">
-                    Page {page} of {lastPage}
-                </span>
-                <Button variant="outline" size="icon" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    <ChevronLeftIcon />
-                </Button>
-                <Button variant="outline" size="icon" aria-label="Next page" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>
-                    <ChevronRightIcon />
-                </Button>
-            </div>
+        <>
+            <DataGrid
+                table={table}
+                label="Stock sheets"
+                loading={grid.loading}
+                error={grid.error}
+                total={grid.total}
+                onRetry={grid.refetch}
+                search={grid.search}
+                onSearchChange={grid.setSearch}
+                searchPlaceholder="Search leader, batch, material or colour"
+                emptyMessage="No stock sheets yet."
+                onRowClick={(id) => setOpenId(Number(id))}
+                activeRowId={openId === null ? null : String(openId)}
+            />
             {openId !== null && (
                 <SheetDialog
                     id={openId}
                     canEdit={can('stock-take.edit')}
                     canDelete={can('stock-take.delete')}
                     onClose={() => setOpenId(null)}
-                    onChanged={() => void reload()}
+                    onChanged={grid.refetch}
                 />
             )}
-        </div>
+        </>
     );
 }
 
-function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: number; canEdit: boolean; canDelete: boolean; onClose: () => void; onChanged: () => void }) {
+function SheetDialog({
+    id,
+    canEdit,
+    canDelete,
+    onClose,
+    onChanged,
+}: {
+    id: number;
+    canEdit: boolean;
+    canDelete: boolean;
+    onClose: () => void;
+    onChanged: () => void;
+}) {
     const [sheet, setSheet] = useState<StockSheetDetail | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState<SheetRow | null>(null);
@@ -139,7 +207,10 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
     const download = async () => {
         try {
             const { summary } = await stockSheetApi.download(id);
-            saveCsv(`stock_sheet_${sheet?.sheet_date.slice(0, 10) ?? id}.csv`, rowsToCsv(summary));
+            saveCsv(
+                `stock_sheet_${sheet?.sheet_date.slice(0, 10) ?? id}.csv`,
+                rowsToCsv(summary),
+            );
         } catch (e) {
             setError((e as Error).message);
         }
@@ -165,9 +236,13 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
             <Dialog open onOpenChange={(o) => !o && onClose()}>
                 <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
                     <DialogHeader>
-                        <DialogTitle>{sheet ? day(sheet.sheet_date) : 'Stock sheet'}</DialogTitle>
+                        <DialogTitle>
+                            {sheet ? day(sheet.sheet_date) : 'Stock sheet'}
+                        </DialogTitle>
                         <DialogDescription>
-                            {sheet ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} bobbins · ${formatNumber(kg)} kg` : 'Loading…'}
+                            {sheet
+                                ? `${sheet.session_id ? `Session ${sheet.session_id} · ` : ''}Recorded by ${sheet.leader} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${formatNumber(chs)} bobbins · ${formatNumber(kg)} kg`
+                                : 'Loading…'}
                         </DialogDescription>
                     </DialogHeader>
                     {error && (
@@ -183,13 +258,27 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                                 <TableHead>Material</TableHead>
                                 <TableHead>Batch</TableHead>
                                 <TableHead>Prod date</TableHead>
-                                <TableHead className="text-right">Original (kg)</TableHead>
-                                <TableHead className="text-right">Total bobbins</TableHead>
-                                <TableHead className="text-right">Actual bobbins</TableHead>
-                                <TableHead className="text-right">Actual (kg)</TableHead>
-                                <TableHead className="text-right">Position</TableHead>
+                                <TableHead className="text-right">
+                                    Original (kg)
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    Total bobbins
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    Actual bobbins
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    Actual (kg)
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    Position
+                                </TableHead>
                                 <TableHead>Remark</TableHead>
-                                {canEdit && <TableHead className="w-12"><span className="sr-only">Edit</span></TableHead>}
+                                {canEdit && (
+                                    <TableHead className="w-12">
+                                        <span className="sr-only">Edit</span>
+                                    </TableHead>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -199,16 +288,35 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                                     <TableCell>{r.color ?? '—'}</TableCell>
                                     <TableCell>{r.material_code}</TableCell>
                                     <TableCell>{r.batch}</TableCell>
-                                    <TableCell>{r.prod_date ? r.prod_date.slice(0, 10) : '—'}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(r.original_weight)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(r.total_bobbins)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(r.chs)}</TableCell>
-                                    <TableCell className="text-right">{formatNumber(r.actual_weight)}</TableCell>
-                                    <TableCell className="text-right">{r.position ?? '—'}</TableCell>
+                                    <TableCell>
+                                        {r.prod_date
+                                            ? r.prod_date.slice(0, 10)
+                                            : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {formatNumber(r.original_weight)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {formatNumber(r.total_bobbins)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {formatNumber(r.chs)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {formatNumber(r.actual_weight)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {r.position ?? '—'}
+                                    </TableCell>
                                     <TableCell>{r.remark ?? '—'}</TableCell>
                                     {canEdit && (
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" aria-label={`Edit row ${r.line_no}`} onClick={() => setEditing(r)}>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label={`Edit row ${r.line_no}`}
+                                                onClick={() => setEditing(r)}
+                                            >
                                                 <PencilIcon />
                                             </Button>
                                         </TableCell>
@@ -219,13 +327,20 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                     </Table>
                     <DialogFooter className="gap-2 sm:justify-between">
                         {canDelete ? (
-                            <Button variant="destructive" onClick={() => setConfirm('sheet')}>
+                            <Button
+                                variant="destructive"
+                                onClick={() => setConfirm('sheet')}
+                            >
                                 <Trash2Icon /> Delete sheet
                             </Button>
                         ) : (
                             <span />
                         )}
-                        <Button variant="outline" onClick={() => void download()} disabled={rows.length === 0}>
+                        <Button
+                            variant="outline"
+                            onClick={() => void download()}
+                            disabled={rows.length === 0}
+                        >
                             <DownloadIcon /> Download CSV
                         </Button>
                     </DialogFooter>
@@ -245,15 +360,23 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
                 />
             )}
 
-            <AlertDialog open={confirm === 'sheet'} onOpenChange={(o) => !o && setConfirm(null)}>
+            <AlertDialog
+                open={confirm === 'sheet'}
+                onOpenChange={(o) => !o && setConfirm(null)}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete this sheet?</AlertDialogTitle>
-                        <AlertDialogDescription>This permanently deletes the sheet and its {rows.length} rows.</AlertDialogDescription>
+                        <AlertDialogDescription>
+                            This permanently deletes the sheet and its{' '}
+                            {rows.length} rows.
+                        </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => void removeSheet()}>Delete sheet</AlertDialogAction>
+                        <AlertDialogAction onClick={() => void removeSheet()}>
+                            Delete sheet
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -261,8 +384,23 @@ function SheetDialog({ id, canEdit, canDelete, onClose, onChanged }: { id: numbe
     );
 }
 
-function EditRowDialog({ row, canDelete, onClose, onSaved }: { row: SheetRow; canDelete: boolean; onClose: () => void; onSaved: () => void }) {
-    const [draft, setDraft] = useState<RowDraft>(draftFrom({ ...row, prod_date: row.prod_date ? row.prod_date.slice(0, 10) : null }));
+function EditRowDialog({
+    row,
+    canDelete,
+    onClose,
+    onSaved,
+}: {
+    row: SheetRow;
+    canDelete: boolean;
+    onClose: () => void;
+    onSaved: () => void;
+}) {
+    const [draft, setDraft] = useState<RowDraft>(
+        draftFrom({
+            ...row,
+            prod_date: row.prod_date ? row.prod_date.slice(0, 10) : null,
+        }),
+    );
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     // Rows are addressed by their numeric id here; the server accepts that as well as the client uuid.
@@ -298,17 +436,31 @@ function EditRowDialog({ row, canDelete, onClose, onSaved }: { row: SheetRow; ca
                         <AlertDescription>{error}</AlertDescription>
                     </Alert>
                 )}
-                <RowFieldsForm draft={draft} onChange={setDraft} idPrefix="edit" />
+                <RowFieldsForm
+                    draft={draft}
+                    onChange={setDraft}
+                    idPrefix="edit"
+                />
                 <DialogFooter className="gap-2 sm:justify-between">
                     {canDelete ? (
-                        <Button variant="destructive" disabled={busy} onClick={() => void run(() => stockSheetApi.deleteRow(handle))}>
+                        <Button
+                            variant="destructive"
+                            disabled={busy}
+                            onClick={() =>
+                                void run(() => stockSheetApi.deleteRow(handle))
+                            }
+                        >
                             <Trash2Icon /> Delete row
                         </Button>
                     ) : (
                         <span />
                     )}
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose} disabled={busy}>
+                        <Button
+                            variant="outline"
+                            onClick={onClose}
+                            disabled={busy}
+                        >
                             Cancel
                         </Button>
                         <Button onClick={save} disabled={busy}>
