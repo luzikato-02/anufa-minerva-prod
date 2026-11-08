@@ -167,7 +167,7 @@ function RoleFormDialog({
             });
 
             const resultText = await res.text();
-            let result: any;
+            let result: { message?: string };
             try {
                 result = JSON.parse(resultText);
             } catch {
@@ -186,10 +186,10 @@ function RoleFormDialog({
 
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })));
             setSaveStatus('success');
-        } catch (e: any) {
+        } catch (e) {
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'error' })));
             setSaveStatus('error');
-            setSaveError({ message: e.message ?? 'Error saving role', details: String(e) });
+            setSaveError({ message: (e as Error).message ?? 'Error saving role', details: String(e) });
         }
     };
 

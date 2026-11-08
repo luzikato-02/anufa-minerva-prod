@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, ExternalLink, FileText, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -77,7 +77,6 @@ export default function FinishEarlierScan() {
     const [ocrText, setOcrText] = useState<string>('');
     const [rawTab, setRawTab] = useState<'json' | 'ocr'>('json');
     const [showRaw, setShowRaw] = useState(false);
-    const [savedId, setSavedId] = useState<number | null>(null);
     const [conflict, setConflict] = useState<ConflictInfo | null>(null);
     const [logLines, setLogLines] = useState<string[]>([]);
     const [typingText, setTypingText] = useState('');
@@ -137,7 +136,8 @@ export default function FinishEarlierScan() {
             setMetadata(res.data.metadata ?? emptyMeta());
             setEntries(res.data.entries ?? []);
             setState('review');
-        } catch (e: any) {
+        } catch (caught) {
+            const e = caught as AxiosError<{ message?: string }>;
             setError(e.response?.data?.message ?? e.message ?? 'Extraction failed.');
             setState('error');
         }
@@ -166,14 +166,19 @@ export default function FinishEarlierScan() {
                 entries: entries.map((e) => ({ ...e, meters_finish: Number(e.meters_finish) })),
             };
             if (resolution) payload.conflict_resolution = resolution;
-            const res = await axios.post('/finish-earlier/submit-scan', payload, {
+            await axios.post('/finish-earlier/submit-scan', payload, {
                 headers: { 'X-CSRF-TOKEN': csrfRes.data.csrfToken },
             });
-            setSavedId(res.data.id);
             setState('done');
-        } catch (e: any) {
+        } catch (caught) {
+            const e = caught as AxiosError<{
+                message?: string;
+                errors?: Record<string, string[]>;
+                conflict?: boolean;
+                existing?: ConflictInfo;
+            }>;
             if (e.response?.status === 409 && e.response.data?.conflict) {
-                setConflict(e.response.data.existing);
+                setConflict(e.response.data.existing ?? null);
                 setState('review');
             } else {
                 const msg = e.response?.data?.errors
@@ -195,7 +200,6 @@ export default function FinishEarlierScan() {
         setRawTab('json');
         setShowRaw(false);
         setError('');
-        setSavedId(null);
         setConflict(null);
         setLogLines([]);
         setTypingText('');

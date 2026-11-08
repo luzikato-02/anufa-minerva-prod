@@ -74,7 +74,6 @@ export default function TwistingNumpad({
     spindleData,
     setSpindleData,
     formData,
-    problems,
     onReportProblem,
     onOpenRecorder,
     onDataCleared,

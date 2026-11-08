@@ -34,7 +34,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { usePermissions } from '@/lib/permissions';
 import { type BreadcrumbItem } from '@/types';

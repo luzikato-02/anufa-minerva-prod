@@ -49,14 +49,14 @@ export function clearAllAppData(): void {
   })
 }
 
-export function restoreProblemsWithDates<T extends { timestamp: any }>(problems: any[]): T[] {
+export function restoreProblemsWithDates<T extends { timestamp: Date }>(problems: unknown[]): T[] {
   if (!Array.isArray(problems)) {
     return []
   }
 
   return problems.map((problem) => ({
-    ...problem,
-    timestamp: new Date(problem.timestamp),
+    ...(problem as object),
+    timestamp: new Date((problem as { timestamp: string | number | Date }).timestamp),
   })) as T[]
 }
 

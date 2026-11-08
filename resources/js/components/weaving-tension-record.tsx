@@ -188,7 +188,7 @@ export default function WeavingTensionPage() {
 
   // Merge server measurement_data into current local creelData state.
   // Uses functional setState so `prev` is always the hydrated local value.
-  const applyServerMerge = (serverData: any) => {
+  const applyServerMerge = (serverData: CreelData | null | undefined) => {
     const serverGrid = serverData && Object.keys(serverData).length > 0
       ? serverData
       : { AI: {}, BI: {}, AO: {}, BO: {} }

@@ -32,7 +32,6 @@ import {
 } from '@/components/ui/dialog';
 import { DialogDescription } from '@/components/ui/dialog';
 import { AlertCircle, Check } from 'lucide-react';
-import { Alert } from '@/components/ui/alert';
 
 interface SpindleData {
     max: number | null;
@@ -83,7 +82,6 @@ export default function WeavingNumpad({
     creelData,
     setCreelData,
     formData,
-    problems,
     onReportProblem,
     onOpenRecorder,
     onDataCleared,

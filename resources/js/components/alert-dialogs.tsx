@@ -7,12 +7,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import * as React from "react";
 
 export function PostFinish() {
-    const [open, setOpen] = React.useState(false);
   return (
     <AlertDialog>
       <AlertDialogContent>

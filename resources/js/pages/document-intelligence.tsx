@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import { Code, Download, FileText, Loader2, RefreshCw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -127,7 +127,8 @@ export default function DocumentIntelligence() {
             });
             setResult(res.data);
             setState('done');
-        } catch (e: any) {
+        } catch (caught) {
+            const e = caught as AxiosError<{ error?: string; message?: string }>;
             const msg = e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Processing failed.';
             setError(msg);
             setState('error');

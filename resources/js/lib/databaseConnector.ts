@@ -1,13 +1,60 @@
 import { loadFromLocalStorage, restoreProblemsWithDates } from "./localStorage"
 
+interface Measurement {
+  max: number | null
+  min: number | null
+  updatedAt?: string
+}
+
+type SpindleMeasurements = Record<string, Measurement>
+type CreelMeasurements = Record<string, Record<string, Record<string, Measurement>>>
+
+interface TwistingFormData {
+  machineNumber: string
+  itemNumber: string
+  metersCheck: string
+  operator: string
+  dtexNumber: string
+  tpm: string
+  specTens: string
+  tensPlus: string
+  rpm: string
+  yarnCode: string
+}
+
+export interface WeavingFormData {
+  machineNumber: string
+  metersCheck: string
+  itemNumber: string
+  itemDescription: string
+  operator: string
+  productionOrder: string
+  baleNumber: string
+  colorCode: string
+  specTens: string
+  tensPlus: string
+}
+
+interface TwistingProblem {
+  spindleNumber: number
+  description: string
+  timestamp: Date
+}
+
+interface WeavingProblem {
+  position: string
+  description: string
+  timestamp: Date
+}
+
 interface TensionRecord {
   id?: string
   record_type: "twisting" | "weaving"
   timestamp: string
   csv_data: string
-  form_data: any
-  measurement_data: any
-  problems: any[]
+  form_data: object
+  measurement_data: object
+  problems: unknown[]
   metadata: {
     total_measurements: number
     completed_measurements: number
@@ -18,20 +65,6 @@ interface TensionRecord {
     item_description?: string
     yarn_code?: string
   }
-}
-
-interface LaravelResponse<T> {
-  data: T
-  message?: string
-  status: string
-}
-
-interface LaravelPaginatedResponse<T> {
-  data: T[]
-  current_page: number
-  last_page: number
-  per_page: number
-  total: number
 }
 
 export interface StockTakeBatch {
@@ -59,7 +92,7 @@ interface StockTakeSessionResponse {
 interface StockTakeBatchCheckResponse {
   exists: boolean
   already_recorded?: boolean
-  batch_data?: Record<string, any>
+  batch_data?: Record<string, string>
   message?: string
 }
 
@@ -99,7 +132,7 @@ export class LaravelDatabaseService {
     return headers
   }
 
-  async saveTensionRecord(recordData: any): Promise<{ success: boolean; id?: number; message?: string; data?: any; error?: string }> {
+  async saveTensionRecord(recordData: TensionRecord): Promise<{ success: boolean; id?: number; message?: string; data?: { id?: number }; error?: string }> {
     try {
       await fetch(`${this.baseUrl}/csrf-token`, { credentials: "include" })
 
@@ -118,7 +151,7 @@ export class LaravelDatabaseService {
 
       const resultText = await response.text()
 
-      let result: any
+      let result: { status?: string; success?: boolean; id?: number; message?: string; error?: string; data?: { id?: number } }
       try {
         result = JSON.parse(resultText)
       } catch {
@@ -139,10 +172,10 @@ export class LaravelDatabaseService {
         message: result.message,
         data: result.data,
       }
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
-        error: err.message || "Unknown error",
+        error: (err instanceof Error && err.message) || "Unknown error",
       }
     }
   }
@@ -177,7 +210,7 @@ export class LaravelDatabaseService {
 
       if (result.data && Array.isArray(result.data)) {
         return {
-          records: result.data.map((record: any) => ({
+          records: result.data.map((record: TensionRecord & { created_at?: string }) => ({
             ...record,
             timestamp: record.timestamp || record.created_at,
           })),
@@ -192,7 +225,7 @@ export class LaravelDatabaseService {
 
       const records = Array.isArray(result) ? result : result.data || []
       return {
-        records: records.map((record: any) => ({
+        records: records.map((record: TensionRecord & { created_at?: string }) => ({
           ...record,
           timestamp: record.timestamp || record.created_at,
         })),
@@ -306,9 +339,16 @@ export async function recordStockBatch(payload: RecordStockBatchPayload): Promis
   return response.json()
 }
 
+export interface WeavingSession {
+  id: number
+  form_data: Partial<WeavingFormData>
+  measurement_data: CreelMeasurements | null
+  problems?: unknown[]
+}
+
 export async function startWeavingSession(
-  formData: any,
-): Promise<{ success: boolean; data?: any; message?: string }> {
+  formData: WeavingFormData,
+): Promise<{ success: boolean; data?: WeavingSession; message?: string }> {
   try {
     await fetch(`${window.location.origin}/csrf-token`, { credentials: "include" })
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
@@ -338,7 +378,7 @@ export async function startWeavingSession(
 
 export async function getWeavingSession(
   productionOrder: string,
-): Promise<{ success: boolean; data?: any; message?: string }> {
+): Promise<{ success: boolean; data?: WeavingSession; message?: string }> {
   try {
     const response = await fetch(`/tension-records/session/${encodeURIComponent(productionOrder)}`, {
       headers: { Accept: "application/json" },
@@ -362,9 +402,9 @@ export async function getWeavingSession(
 
 export async function updateWeavingSession(
   id: number,
-  record: any,
+  record: TensionRecord,
   status: "in_progress" | "completed" = "in_progress",
-): Promise<{ success: boolean; id?: number; data?: any; message?: string; error?: string }> {
+): Promise<{ success: boolean; id?: number; data?: { id?: number }; message?: string; error?: string }> {
   try {
     await fetch(`${window.location.origin}/csrf-token`, { credentials: "include" })
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
@@ -396,8 +436,8 @@ export async function updateWeavingSession(
 }
 
 export function prepareTwistingDataForDatabase(): TensionRecord {
-  const spindleData = loadFromLocalStorage("twisting-spindle-data", {})
-  const formData = loadFromLocalStorage("twisting-form-data", {
+  const spindleData = loadFromLocalStorage<SpindleMeasurements>("twisting-spindle-data", {})
+  const formData = loadFromLocalStorage<TwistingFormData>("twisting-form-data", {
     machineNumber: "",
     itemNumber: "",
     metersCheck: "",
@@ -409,16 +449,14 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
     rpm: "",
     yarnCode: "",
   })
-  const problems = loadFromLocalStorage("twisting-problems", [])
-  const restoredProblems = restoreProblemsWithDates(problems)
+  const problems = loadFromLocalStorage<unknown[]>("twisting-problems", [])
+  const restoredProblems = restoreProblemsWithDates<TwistingProblem>(problems)
 
   const csvData = generateTwistingCSV(spindleData, formData, restoredProblems)
 
   const entries = Object.entries(spindleData)
   const totalMeasurements = entries.length
-  const completedMeasurements = entries.filter(
-    ([_, data]: [string, any]) => data.max !== null && data.min !== null,
-  ).length
+  const completedMeasurements = entries.filter(([, data]) => data.max !== null && data.min !== null).length
   const progressPercentage = totalMeasurements > 0 ? Math.round((completedMeasurements / totalMeasurements) * 100) : 0
 
   return {
@@ -441,13 +479,13 @@ export function prepareTwistingDataForDatabase(): TensionRecord {
 }
 
 export function prepareWeavingDataForDatabase(): TensionRecord {
-  const creelData = loadFromLocalStorage("weaving-creel-data", {
+  const creelData = loadFromLocalStorage<CreelMeasurements>("weaving-creel-data", {
     AI: {},
     BI: {},
     AO: {},
     BO: {},
   })
-  const formData = loadFromLocalStorage("weaving-form-data", {
+  const formData = loadFromLocalStorage<WeavingFormData>("weaving-form-data", {
     machineNumber: "",
     metersCheck: "",
     itemNumber: "",
@@ -459,17 +497,17 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
     specTens: "",
     tensPlus: "",
   })
-  const problems = loadFromLocalStorage("weaving-problems", [])
-  const restoredProblems = restoreProblemsWithDates(problems)
+  const problems = loadFromLocalStorage<unknown[]>("weaving-problems", [])
+  const restoredProblems = restoreProblemsWithDates<WeavingProblem>(problems)
 
   const csvData = generateWeavingCSV(creelData, formData, restoredProblems)
 
   let totalMeasurements = 0
   let completedMeasurements = 0
 
-  Object.values(creelData).forEach((sides: any) => {
-    Object.values(sides).forEach((rows: any) => {
-      Object.values(rows).forEach((data: any) => {
+  Object.values(creelData).forEach((rows) => {
+    Object.values(rows).forEach((columns) => {
+      Object.values(columns).forEach((data) => {
         totalMeasurements++
         if (data.max !== null && data.min !== null) {
           completedMeasurements++
@@ -499,7 +537,7 @@ export function prepareWeavingDataForDatabase(): TensionRecord {
   }
 }
 
-function countMeasurementLeaves(node: any): number {
+function countMeasurementLeaves(node: unknown): number {
   if (!node || typeof node !== "object") return 0
   if ("max" in node && "min" in node) return 1
   return Object.values(node).reduce((sum: number, child) => sum + countMeasurementLeaves(child), 0)
@@ -541,7 +579,7 @@ export function verifyPersistedRecord(
   return { ok: true }
 }
 
-function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): string {
+function generateTwistingCSV(spindleData: SpindleMeasurements, formData: TwistingFormData, problems: TwistingProblem[]): string {
   const csvRows: string[] = []
 
   csvRows.push("TWISTING TENSION DATA EXPORT")
@@ -563,7 +601,7 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Spindle Number,Max Value,Min Value")
 
-  Object.entries(spindleData).forEach(([spindleNumber, data]: [string, any]) => {
+  Object.entries(spindleData).forEach(([spindleNumber, data]) => {
     const maxValue = data.max !== null ? data.max : ""
     const minValue = data.min !== null ? data.min : ""
     csvRows.push(`${spindleNumber},${maxValue},${minValue}`)
@@ -586,7 +624,7 @@ function generateTwistingCSV(spindleData: any, formData: any, problems: any[]): 
   return csvRows.join("\n")
 }
 
-function generateWeavingCSV(creelData: any, formData: any, problems: any[]): string {
+function generateWeavingCSV(creelData: CreelMeasurements, formData: WeavingFormData, problems: WeavingProblem[]): string {
   const csvRows: string[] = []
 
   csvRows.push("WEAVING TENSION DATA EXPORT")
@@ -608,9 +646,9 @@ function generateWeavingCSV(creelData: any, formData: any, problems: any[]): str
   csvRows.push("=== TENSION MEASUREMENT DATA ===")
   csvRows.push("Position,Creel Side,Row,Column,Max Value,Min Value")
 
-  Object.entries(creelData).forEach(([side, rows]: [string, any]) => {
-    Object.entries(rows).forEach(([row, columns]: [string, any]) => {
-      Object.entries(columns).forEach(([col, data]: [string, any]) => {
+  Object.entries(creelData).forEach(([side, rows]) => {
+    Object.entries(rows).forEach(([row, columns]) => {
+      Object.entries(columns).forEach(([col, data]) => {
         const position = `${side}-${row}-Col${col}`
         const maxValue = data.max !== null ? data.max : ""
         const minValue = data.min !== null ? data.min : ""

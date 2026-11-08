@@ -288,9 +288,10 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                         console.error('Barcode detection error:', err);
                     }
                 }, SCAN_INTERVAL_MS);
-            } catch (err: any) {
+            } catch (caught) {
                 if (!isMountedRef.current) return;
 
+                const err = caught as Error;
                 console.error('Scanner error:', err);
                 if (err.name === 'NotAllowedError') {
                     setScanError(
@@ -345,9 +346,9 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
             }
 
             setSelectedDeviceId(deviceId);
-        } catch (err: any) {
+        } catch (err) {
             console.error('Camera switch error:', err);
-            setScanError(`Unable to switch camera: ${err.message}`);
+            setScanError(`Unable to switch camera: ${(err as Error).message}`);
         }
     };
 
