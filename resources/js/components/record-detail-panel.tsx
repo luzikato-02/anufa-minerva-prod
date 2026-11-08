@@ -27,7 +27,13 @@ import {
     twistingCells,
 } from '@/lib/tension-heatmap';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronUp, DownloadIcon } from 'lucide-react';
+import {
+    ChartSpline,
+    ChevronDown,
+    ChevronUp,
+    DownloadIcon,
+    Grid3x3,
+} from 'lucide-react';
 import {
     type KeyboardEvent,
     type ReactNode,
@@ -36,6 +42,41 @@ import {
     useRef,
     useState,
 } from 'react';
+import { CHART_COLORS, TensionChart } from './tension-chart';
+
+type View = 'heatmap' | 'chart';
+const VIEW_KEY = 'tension-detail-view';
+
+const readView = (): View => {
+    try {
+        return window.localStorage.getItem(VIEW_KEY) === 'chart'
+            ? 'chart'
+            : 'heatmap';
+    } catch {
+        return 'heatmap';
+    }
+};
+
+/** Heatmap or line chart, remembered per browser for every record. */
+function useDetailView() {
+    const [view, setView] = useState<View>(readView);
+    const update = (next: View) => {
+        setView(next);
+        try {
+            window.localStorage.setItem(VIEW_KEY, next);
+        } catch {
+            // Not remembered when storage is unavailable; the switch still works.
+        }
+    };
+    return [view, update] as const;
+}
+
+const CHART_LEGEND: { label: string; color: string; dashed?: boolean }[] = [
+    { label: 'Max', color: CHART_COLORS.max },
+    { label: 'Min', color: CHART_COLORS.min },
+    { label: 'Spec', color: CHART_COLORS.spec, dashed: true },
+    { label: 'Limits', color: CHART_COLORS.limit, dashed: true },
+];
 
 export interface DetailRecord {
     id: string;
@@ -320,6 +361,7 @@ export function RecordDetailPanel({
     onNext?: () => void;
 }) {
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
+    const [view, setView] = useDetailView();
 
     const model = useMemo(() => {
         if (!record) return null;
@@ -535,6 +577,34 @@ export function RecordDetailPanel({
                             <h3 className="text-[13px] font-semibold">
                                 {isWeaving ? 'Creel positions' : 'Spindles'}
                             </h3>
+                            <div
+                                role="group"
+                                aria-label="Show readings as"
+                                className="inline-flex gap-0.5 rounded-md bg-muted p-0.5"
+                            >
+                                {(
+                                    [
+                                        ['heatmap', 'Heatmap', Grid3x3],
+                                        ['chart', 'Chart', ChartSpline],
+                                    ] as const
+                                ).map(([value, label, Icon]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        aria-pressed={view === value}
+                                        onClick={() => setView(value)}
+                                        className={cn(
+                                            'inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium transition-colors',
+                                            view === value
+                                                ? 'bg-background text-foreground shadow-xs'
+                                                : 'text-muted-foreground hover:text-foreground',
+                                        )}
+                                    >
+                                        <Icon className="size-3.5" />
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                             {!model.spec && (
                                 <span className="text-xs text-muted-foreground">
                                     No spec on this record, so nothing is
@@ -542,21 +612,53 @@ export function RecordDetailPanel({
                                 </span>
                             )}
                             <ul className="ml-auto flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
-                                {LEGEND.map((band) => (
-                                    <li
-                                        key={band}
-                                        className="inline-flex items-center gap-1"
-                                    >
+                                {view === 'heatmap'
+                                    ? LEGEND.map((band) => (
+                                          <li
+                                              key={band}
+                                              className="inline-flex items-center gap-1"
+                                          >
+                                              <span
+                                                  aria-hidden="true"
+                                                  className={cn(
+                                                      'inline-block size-2.5 rounded-[2px]',
+                                                      BAND_CLASS[band],
+                                                  )}
+                                              />
+                                              {BAND_LABEL[band]}
+                                          </li>
+                                      ))
+                                    : CHART_LEGEND.map((item) => (
+                                          <li
+                                              key={item.label}
+                                              className="inline-flex items-center gap-1"
+                                          >
+                                              <span
+                                                  aria-hidden="true"
+                                                  className="inline-block w-3.5 border-t-2"
+                                                  style={{
+                                                      borderColor: item.color,
+                                                      borderStyle: item.dashed
+                                                          ? 'dashed'
+                                                          : 'solid',
+                                                  }}
+                                              />
+                                              {item.label}
+                                          </li>
+                                      ))}
+                                {view === 'chart' && (
+                                    <li className="inline-flex items-center gap-1">
                                         <span
                                             aria-hidden="true"
-                                            className={cn(
-                                                'inline-block size-2.5 rounded-[2px]',
-                                                BAND_CLASS[band],
-                                            )}
+                                            className="inline-block size-2 rounded-full bg-orange-500"
                                         />
-                                        {BAND_LABEL[band]}
+                                        <span
+                                            aria-hidden="true"
+                                            className="-ml-0.5 inline-block size-2 rounded-full bg-blue-600"
+                                        />
+                                        out of spec
                                     </li>
-                                ))}
+                                )}
                             </ul>
                         </div>
 
@@ -564,6 +666,14 @@ export function RecordDetailPanel({
                             <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                                 No readings recorded yet.
                             </p>
+                        ) : view === 'chart' ? (
+                            <TensionChart
+                                cells={model.cells}
+                                spec={model.spec}
+                                weaving={isWeaving}
+                                selectedKey={selectedKey}
+                                onSelect={(cell) => setSelectedKey(cell.key)}
+                            />
                         ) : model.sides ? (
                             <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
                                 {model.sides.map((side) => {
