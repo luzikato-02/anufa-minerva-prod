@@ -34,6 +34,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('home');
 
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('dashboard-overview', [DashboardController::class, 'overview'])->name('dashboard.overview');
 
     Route::get('under-construction', function () {
         return Inertia::render('under-construction');

@@ -1,7 +1,7 @@
 import { type KpiItem, KpiStrip } from '@/components/kpi-strip';
 import { useCallback, useEffect, useState } from 'react';
 
-interface TensionSummary {
+export interface TensionSummary {
     records: { current: number; previous: number; daily: number[] };
     open_problems: {
         open: number;

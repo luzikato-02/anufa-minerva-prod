@@ -22,7 +22,16 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function TensionRecordsDisplay() {
-    const [tab, setTab] = useState('twisting');
+    // ?tab=weaving|problems opens that tab, e.g. from a dashboard link.
+    const [tab, setTab] = useState(() => {
+        const requested =
+            typeof window === 'undefined'
+                ? null
+                : new URLSearchParams(window.location.search).get('tab');
+        return requested === 'weaving' || requested === 'problems'
+            ? requested
+            : 'twisting';
+    });
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
