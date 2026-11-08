@@ -1,3 +1,10 @@
+import { DataGrid } from '@/components/data-grid';
+import {
+    CodeCell,
+    DateTimeCell,
+    NumberCell,
+    TextCell,
+} from '@/components/data-grid-cells';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -25,10 +32,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { CodeCell, DateTimeCell, NumberCell, TextCell } from '@/components/data-grid-cells';
-import { DataGrid } from '@/components/data-grid';
 import { useServerTable } from '@/hooks/use-server-table';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
 import {
     DownloadIcon,
     EyeIcon,
@@ -39,7 +48,6 @@ import {
     PlusIcon,
     TrashIcon,
 } from 'lucide-react';
-import * as React from 'react';
 import { useEffect, useState } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -72,11 +80,17 @@ function getCsrfToken(): string {
     return match ? decodeURIComponent(match[1]) : '';
 }
 
-async function patchRecord(id: string, body: object): Promise<FinishEarlierRecord> {
+async function patchRecord(
+    id: string,
+    body: object,
+): Promise<FinishEarlierRecord> {
     const res = await fetch(`/finish-earlier/${id}`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getCsrfToken() },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': getCsrfToken(),
+        },
         body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error('Request failed');
@@ -101,9 +115,13 @@ function ViewDialog({
                 { credentials: 'include' },
             );
             const data = await res.json();
-            if (!data.metadata) { alert('Session not found'); return; }
+            if (!data.metadata) {
+                alert('Session not found');
+                return;
+            }
 
-            let csv = 'Machine,Style,Production Order,Total Finish Earlier,Average Meters Finish\n';
+            let csv =
+                'Machine,Style,Production Order,Total Finish Earlier,Average Meters Finish\n';
             csv += `${data.metadata.machine_number},${data.metadata.style},${data.metadata.production_order},${data.metadata.total_finish_earlier},${data.metadata.average_meters_finish}\n\n`;
             csv += 'No,Side,Row,Col,Meters\n';
             for (let i = 0; i < 80; i++) {
@@ -126,10 +144,18 @@ function ViewDialog({
     const handleViewCreel = async () => {
         const po = record.metadata.production_order;
         try {
-            const res = await fetch(`/creel-records/by-order/${encodeURIComponent(po)}`);
-            if (!res.ok) { alert(`No creel record found for "${po}".`); return; }
+            const res = await fetch(
+                `/creel-records/by-order/${encodeURIComponent(po)}`,
+            );
+            if (!res.ok) {
+                alert(`No creel record found for "${po}".`);
+                return;
+            }
             const { id } = await res.json();
-            if (!id) { alert(`No creel record found for "${po}".`); return; }
+            if (!id) {
+                alert(`No creel record found for "${po}".`);
+                return;
+            }
             window.open(`/creel-viewer/${id}`, '_blank');
         } catch {
             alert('Failed to look up creel record.');
@@ -151,33 +177,60 @@ function ViewDialog({
                         <div className="flex gap-8">
                             <div className="flex-1 space-y-2">
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Material Description</p>
-                                    <p className="text-sm font-semibold">{record.metadata.style}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Material Description
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                        {record.metadata.style}
+                                    </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Machine Number</p>
-                                    <p className="text-sm font-semibold">{record.metadata.machine_number}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Machine Number
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                        {record.metadata.machine_number}
+                                    </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Shift Group</p>
-                                    <p className="text-sm font-semibold">{record.metadata.shift_group}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Shift Group
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                        {record.metadata.shift_group}
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex-1 space-y-2">
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Total Finish Earlier Bobbins</p>
-                                    <p className="text-sm font-semibold">{record.metadata.total_finish_earlier}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Total Finish Earlier Bobbins
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                        {record.metadata.total_finish_earlier}
+                                    </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Average Meters Finish</p>
-                                    <p className="text-sm font-semibold text-green-600">{record.metadata.average_meters_finish}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Average Meters Finish
+                                    </p>
+                                    <p className="text-sm font-semibold text-green-600">
+                                        {record.metadata.average_meters_finish}
+                                    </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">Record Date</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">
+                                        Record Date
+                                    </p>
                                     <p className="text-sm">
-                                        {new Date(record.created_at || '').toLocaleString('en-ID', {
-                                            day: '2-digit', month: 'long', year: 'numeric',
-                                            hour: '2-digit', minute: '2-digit',
+                                        {new Date(
+                                            record.created_at || '',
+                                        ).toLocaleString('en-ID', {
+                                            day: '2-digit',
+                                            month: 'long',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
                                         })}
                                     </p>
                                 </div>
@@ -187,14 +240,16 @@ function ViewDialog({
 
                     {record.entries?.length > 0 && (
                         <div>
-                            <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">
                                 Entries ({record.entries.length})
                             </p>
                             <div className="overflow-hidden rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-10">#</TableHead>
+                                            <TableHead className="w-10">
+                                                #
+                                            </TableHead>
                                             <TableHead>Side</TableHead>
                                             <TableHead>Row</TableHead>
                                             <TableHead>Column</TableHead>
@@ -204,11 +259,21 @@ function ViewDialog({
                                     <TableBody>
                                         {record.entries.map((e, i) => (
                                             <TableRow key={i}>
-                                                <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                                                <TableCell>{e.creel_side}</TableCell>
-                                                <TableCell>{e.row_number}</TableCell>
-                                                <TableCell>{e.column_number}</TableCell>
-                                                <TableCell>{e.meters_finish}</TableCell>
+                                                <TableCell className="text-muted-foreground">
+                                                    {i + 1}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {e.creel_side}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {e.row_number}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {e.column_number}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {e.meters_finish}
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -225,7 +290,11 @@ function ViewDialog({
                     <Button variant="outline" onClick={handleViewCreel}>
                         <LayoutGrid className="mr-2 h-4 w-4" /> View Creel
                     </Button>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} className="ml-auto">
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        className="ml-auto"
+                    >
                         Close
                     </Button>
                 </DialogFooter>
@@ -279,7 +348,9 @@ function EditRecordDialog({
             <Input
                 className="col-span-3"
                 value={(form[key] as string) ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                onChange={(e) =>
+                    setForm((f) => ({ ...f, [key]: e.target.value }))
+                }
             />
         </div>
     );
@@ -290,7 +361,8 @@ function EditRecordDialog({
                 <DialogHeader>
                     <DialogTitle>Edit Record</DialogTitle>
                     <DialogDescription>
-                        Update metadata for production order {record.metadata.production_order}
+                        Update metadata for production order{' '}
+                        {record.metadata.production_order}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
@@ -301,7 +373,12 @@ function EditRecordDialog({
                     {field('Roll Construction', 'roll_construction')}
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Cancel
+                    </Button>
                     <Button onClick={handleSave} disabled={saving}>
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
@@ -334,12 +411,28 @@ function EditEntriesDialog({
     const update = (i: number, key: keyof Entry, value: string) =>
         setEntries((prev) =>
             prev.map((e, idx) =>
-                idx === i ? { ...e, [key]: key === 'meters_finish' ? parseFloat(value) || 0 : value } : e,
+                idx === i
+                    ? {
+                          ...e,
+                          [key]:
+                              key === 'meters_finish'
+                                  ? parseFloat(value) || 0
+                                  : value,
+                      }
+                    : e,
             ),
         );
 
     const addRow = () =>
-        setEntries((prev) => [...prev, { creel_side: '', row_number: '', column_number: '', meters_finish: 0 }]);
+        setEntries((prev) => [
+            ...prev,
+            {
+                creel_side: '',
+                row_number: '',
+                column_number: '',
+                meters_finish: 0,
+            },
+        ]);
 
     const removeRow = (i: number) =>
         setEntries((prev) => prev.filter((_, idx) => idx !== i));
@@ -363,7 +456,8 @@ function EditEntriesDialog({
                 <DialogHeader className="px-6 pt-6">
                     <DialogTitle>Edit Entries</DialogTitle>
                     <DialogDescription>
-                        {record.metadata.production_order} — {entries.length} entries
+                        {record.metadata.production_order} — {entries.length}{' '}
+                        entries
                     </DialogDescription>
                 </DialogHeader>
 
@@ -383,20 +477,31 @@ function EditEntriesDialog({
                             <TableBody>
                                 {entries.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
+                                        <TableCell
+                                            colSpan={6}
+                                            className="h-16 text-center text-sm text-muted-foreground"
+                                        >
                                             No entries. Add one below.
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {entries.map((e, i) => (
                                     <TableRow key={i}>
-                                        <TableCell className="text-center text-xs text-muted-foreground">{i + 1}</TableCell>
+                                        <TableCell className="text-center text-xs text-muted-foreground">
+                                            {i + 1}
+                                        </TableCell>
                                         <TableCell className="p-1">
                                             <Input
                                                 className="h-8 w-16 text-sm"
                                                 value={e.creel_side}
                                                 placeholder="AI"
-                                                onChange={(ev) => update(i, 'creel_side', ev.target.value)}
+                                                onChange={(ev) =>
+                                                    update(
+                                                        i,
+                                                        'creel_side',
+                                                        ev.target.value,
+                                                    )
+                                                }
                                             />
                                         </TableCell>
                                         <TableCell className="p-1">
@@ -404,7 +509,13 @@ function EditEntriesDialog({
                                                 className="h-8 w-16 text-sm"
                                                 value={e.row_number}
                                                 placeholder="A"
-                                                onChange={(ev) => update(i, 'row_number', ev.target.value)}
+                                                onChange={(ev) =>
+                                                    update(
+                                                        i,
+                                                        'row_number',
+                                                        ev.target.value,
+                                                    )
+                                                }
                                             />
                                         </TableCell>
                                         <TableCell className="p-1">
@@ -412,7 +523,13 @@ function EditEntriesDialog({
                                                 className="h-8 w-16 text-sm"
                                                 value={e.column_number}
                                                 placeholder="1"
-                                                onChange={(ev) => update(i, 'column_number', ev.target.value)}
+                                                onChange={(ev) =>
+                                                    update(
+                                                        i,
+                                                        'column_number',
+                                                        ev.target.value,
+                                                    )
+                                                }
                                             />
                                         </TableCell>
                                         <TableCell className="p-1">
@@ -420,7 +537,13 @@ function EditEntriesDialog({
                                                 className="h-8 w-20 text-sm"
                                                 type="number"
                                                 value={e.meters_finish}
-                                                onChange={(ev) => update(i, 'meters_finish', ev.target.value)}
+                                                onChange={(ev) =>
+                                                    update(
+                                                        i,
+                                                        'meters_finish',
+                                                        ev.target.value,
+                                                    )
+                                                }
                                             />
                                         </TableCell>
                                         <TableCell className="p-1">
@@ -439,13 +562,23 @@ function EditEntriesDialog({
                         </Table>
                     </div>
 
-                    <Button variant="outline" size="sm" className="my-3 w-full" onClick={addRow}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="my-3 w-full"
+                        onClick={addRow}
+                    >
                         <PlusIcon className="mr-2 size-4" /> Add Entry
                     </Button>
                 </div>
 
                 <DialogFooter className="px-6 pb-6">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Cancel
+                    </Button>
                     <Button onClick={handleSave} disabled={saving}>
                         {saving ? 'Saving…' : 'Save Entries'}
                     </Button>
@@ -478,7 +611,10 @@ function DeleteDialog({
                 credentials: 'include',
                 headers: { 'X-XSRF-TOKEN': getCsrfToken() },
             });
-            if (!res.ok) { alert('Failed to delete record.'); return; }
+            if (!res.ok) {
+                alert('Failed to delete record.');
+                return;
+            }
             onDeleted(record.id);
             onOpenChange(false);
         } catch {
@@ -495,12 +631,22 @@ function DeleteDialog({
                     <DialogTitle>Delete Record</DialogTitle>
                     <DialogDescription>
                         Permanently delete the record for production order{' '}
-                        <strong>{record.metadata.production_order}</strong>? This cannot be undone.
+                        <strong>{record.metadata.production_order}</strong>?
+                        This cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                    >
                         {deleting ? 'Deleting…' : 'Delete'}
                     </Button>
                 </DialogFooter>
@@ -529,7 +675,11 @@ function RecordActions({
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-xs" aria-label={`Actions for PO ${record.metadata?.production_order ?? ''}`}>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Actions for PO ${record.metadata?.production_order ?? ''}`}
+                    >
                         <MoreHorizontal />
                     </Button>
                 </DropdownMenuTrigger>
@@ -553,10 +703,31 @@ function RecordActions({
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <ViewDialog record={record} open={viewOpen} onOpenChange={setViewOpen} />
-            <EditRecordDialog record={record} open={editOpen} onOpenChange={setEditOpen} onSaved={onSaved} />
-            <EditEntriesDialog record={record} open={editEntriesOpen} onOpenChange={setEditEntriesOpen} onSaved={onSaved} />
-            <DeleteDialog record={record} open={deleteOpen} onOpenChange={onOpenChange => { setDeleteOpen(onOpenChange); }} onDeleted={onDeleted} />
+            <ViewDialog
+                record={record}
+                open={viewOpen}
+                onOpenChange={setViewOpen}
+            />
+            <EditRecordDialog
+                record={record}
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                onSaved={onSaved}
+            />
+            <EditEntriesDialog
+                record={record}
+                open={editEntriesOpen}
+                onOpenChange={setEditEntriesOpen}
+                onSaved={onSaved}
+            />
+            <DeleteDialog
+                record={record}
+                open={deleteOpen}
+                onOpenChange={(onOpenChange) => {
+                    setDeleteOpen(onOpenChange);
+                }}
+                onDeleted={onDeleted}
+            />
         </>
     );
 }
@@ -582,9 +753,13 @@ function BobbinCountCell({ value }: { value: number | null | undefined }) {
 const columns: ColumnDef<FinishEarlierRecord>[] = [
     {
         id: 'select',
+        enableSorting: false,
         header: ({ table }) => (
             <Checkbox
-                checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                checked={
+                    table.getIsAllPageRowsSelected() ||
+                    (table.getIsSomePageRowsSelected() && 'indeterminate')
+                }
                 onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
                 aria-label="Select all rows on this page"
             />
@@ -627,7 +802,10 @@ const columns: ColumnDef<FinishEarlierRecord>[] = [
         cell: ({ getValue }) => {
             const value = getValue() as string | undefined;
             return value ? (
-                <span className="block max-w-60 truncate text-xs text-muted-foreground" title={value}>
+                <span
+                    className="block max-w-60 truncate text-xs text-muted-foreground"
+                    title={value}
+                >
                     {value}
                 </span>
             ) : (
@@ -647,7 +825,9 @@ const columns: ColumnDef<FinishEarlierRecord>[] = [
         id: 'fe_bobbins',
         accessorFn: (row) => row.metadata?.total_finish_earlier,
         header: 'FE bobbins',
-        cell: ({ getValue }) => <BobbinCountCell value={getValue() as number | undefined} />,
+        cell: ({ getValue }) => (
+            <BobbinCountCell value={getValue() as number | undefined} />
+        ),
         meta: { label: 'Finish-earlier bobbins', align: 'right' },
     },
     {
@@ -659,6 +839,7 @@ const columns: ColumnDef<FinishEarlierRecord>[] = [
     },
     {
         id: 'actions',
+        enableSorting: false,
         header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
         cell: ({ row, table }) => (
@@ -685,7 +866,8 @@ export function FinishEarlierDataTable() {
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualFiltering: true,
-        enableSorting: false,
+        manualSorting: true,
+        enableSortingRemoval: true,
         pageCount: grid.pageCount,
         state: grid.state,
         ...grid.handlers,

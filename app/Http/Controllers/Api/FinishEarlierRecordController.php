@@ -33,6 +33,23 @@ class FinishEarlierRecordController extends Controller
             });
         }
 
+        // Whitelisted sort ids only, so sort_by never reaches SQL as-is; newest first otherwise.
+        $number = fn (string $field) => 'CAST('.$this->jsonExtract('metadata', "$.{$field}").' AS DECIMAL(12,2))';
+        $sortable = [
+            'recorded_at'      => 'created_at',
+            'production_order' => $this->jsonExtract('metadata', '$.production_order'),
+            'machine'          => $this->jsonExtract('metadata', '$.machine_number'),
+            'material'         => $this->jsonExtract('metadata', '$.style'),
+            'shift'            => $this->jsonExtract('metadata', '$.shift_group'),
+            'fe_bobbins'       => $number('total_finish_earlier'),
+            'avg_meters'       => $number('average_meters_finish'),
+        ];
+        $sortBy = $request->input('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $dir = strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc';
+            $query->orderByRaw("{$sortable[$sortBy]} {$dir}");
+        }
+
         $records = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json($records);

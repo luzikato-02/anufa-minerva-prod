@@ -27,7 +27,14 @@ class UserController extends Controller
 
         $perPage = max(1, min((int) $request->query('per_page', 10), 200));
 
-        return $query->orderBy('name')->paginate($perPage)->withQueryString();
+        // Whitelisted sort ids only; alphabetical by name otherwise.
+        $sortable = ['name' => 'name', 'username' => 'username', 'email' => 'email', 'status' => 'status'];
+        $sortBy = $request->query('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $query->orderBy($sortable[$sortBy], strtolower((string) $request->query('sort_dir')) === 'asc' ? 'asc' : 'desc');
+        }
+
+        return $query->orderBy('name')->orderBy('id')->paginate($perPage)->withQueryString();
     }
 
     public function statistics()

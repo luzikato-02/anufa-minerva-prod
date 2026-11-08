@@ -1,5 +1,7 @@
 'use client';
 
+import { DataGrid } from '@/components/data-grid';
+import { CodeCell } from '@/components/data-grid-cells';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -31,14 +33,23 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { type SharedData } from '@/types';
-import { usePage } from '@inertiajs/react';
-import { CodeCell } from '@/components/data-grid-cells';
-import { DataGrid } from '@/components/data-grid';
 import { useServerTable } from '@/hooks/use-server-table';
 import { cn } from '@/lib/utils';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { MoreHorizontal, PencilIcon, PlusIcon, PowerIcon, ShieldIcon, Trash2Icon } from 'lucide-react';
+import { type SharedData } from '@/types';
+import { usePage } from '@inertiajs/react';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
+import {
+    MoreHorizontal,
+    PencilIcon,
+    PlusIcon,
+    PowerIcon,
+    ShieldIcon,
+    Trash2Icon,
+} from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
@@ -99,9 +110,14 @@ function UserFormDialog({
         new Set((user?.roles ?? []).map((r) => r.name)),
     );
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [saveStatus, setSaveStatus] = useState<'saving' | 'success' | 'error'>('saving');
+    const [saveStatus, setSaveStatus] = useState<
+        'saving' | 'success' | 'error'
+    >('saving');
     const [saveSteps, setSaveSteps] = useState<SaveStep[]>([]);
-    const [saveError, setSaveError] = useState<{ message: string; details: string } | null>(null);
+    const [saveError, setSaveError] = useState<{
+        message: string;
+        details: string;
+    } | null>(null);
 
     const wasOpenRef = useRef(false);
     useEffect(() => {
@@ -136,18 +152,34 @@ function UserFormDialog({
     const handleSubmit = async () => {
         setSaveError(null);
         setSaveStatus('saving');
-        setSaveSteps([{ key: 'save', label: mode === 'create' ? 'Creating user' : 'Saving user changes', status: 'active' }]);
+        setSaveSteps([
+            {
+                key: 'save',
+                label:
+                    mode === 'create' ? 'Creating user' : 'Saving user changes',
+                status: 'active',
+            },
+        ]);
         setSaveDialogOpen(true);
 
         const payload: Record<string, unknown> =
             mode === 'create'
-                ? { name, username, email, password, roles: Array.from(selectedRoles) }
+                ? {
+                      name,
+                      username,
+                      email,
+                      password,
+                      roles: Array.from(selectedRoles),
+                  }
                 : { name, username, email, ...(password ? { password } : {}) };
 
         try {
             const csrfToken = await getCsrfToken();
             const baseUrl = window.location.origin;
-            const url = mode === 'create' ? `${baseUrl}/api/users` : `${baseUrl}/api/users/${user!.id}`;
+            const url =
+                mode === 'create'
+                    ? `${baseUrl}/api/users`
+                    : `${baseUrl}/api/users/${user!.id}`;
             const res = await fetch(url, {
                 method: mode === 'create' ? 'POST' : 'PATCH',
                 headers: {
@@ -168,7 +200,9 @@ function UserFormDialog({
             }
 
             if (!res.ok) {
-                setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'error' })));
+                setSaveSteps((prev) =>
+                    prev.map((s) => ({ ...s, status: 'error' })),
+                );
                 setSaveStatus('error');
                 setSaveError({
                     message: result.message || `HTTP ${res.status}`,
@@ -180,9 +214,14 @@ function UserFormDialog({
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })));
             setSaveStatus('success');
         } catch (e: any) {
-            setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'error' })));
+            setSaveSteps((prev) =>
+                prev.map((s) => ({ ...s, status: 'error' })),
+            );
             setSaveStatus('error');
-            setSaveError({ message: e.message ?? 'Error saving user', details: String(e) });
+            setSaveError({
+                message: e.message ?? 'Error saving user',
+                details: String(e),
+            });
         }
     };
 
@@ -199,40 +238,68 @@ function UserFormDialog({
             <Dialog
                 open={open}
                 onOpenChange={(next) => {
-                    if (!next && saveDialogOpen && saveStatus === 'saving') return;
+                    if (!next && saveDialogOpen && saveStatus === 'saving')
+                        return;
                     setOpen(next);
                 }}
             >
                 <DialogTrigger asChild>{trigger}</DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
-                        <DialogTitle>{mode === 'create' ? 'Create User' : `Edit User: ${user?.name}`}</DialogTitle>
+                        <DialogTitle>
+                            {mode === 'create'
+                                ? 'Create User'
+                                : `Edit User: ${user?.name}`}
+                        </DialogTitle>
                         <DialogDescription>
-                            {mode === 'create' ? 'Add a new user account.' : 'Update this user\'s account details.'}
+                            {mode === 'create'
+                                ? 'Add a new user account.'
+                                : "Update this user's account details."}
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4">
                         <div className="space-y-1">
                             <Label htmlFor="user-name">Name</Label>
-                            <Input id="user-name" value={name} onChange={(e) => setName(e.target.value)} />
+                            <Input
+                                id="user-name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                            />
                         </div>
                         <div className="space-y-1">
                             <Label htmlFor="user-username">Username</Label>
-                            <Input id="user-username" value={username} onChange={(e) => setUsername(e.target.value)} />
+                            <Input
+                                id="user-username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                            />
                         </div>
                         <div className="space-y-1">
                             <Label htmlFor="user-email">Email</Label>
-                            <Input id="user-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            <Input
+                                id="user-email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
                         </div>
                         <div className="space-y-1">
-                            <Label htmlFor="user-password">{mode === 'create' ? 'Password' : 'New Password (optional)'}</Label>
+                            <Label htmlFor="user-password">
+                                {mode === 'create'
+                                    ? 'Password'
+                                    : 'New Password (optional)'}
+                            </Label>
                             <Input
                                 id="user-password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder={mode === 'edit' ? 'Leave blank to keep current password' : ''}
+                                placeholder={
+                                    mode === 'edit'
+                                        ? 'Leave blank to keep current password'
+                                        : ''
+                                }
                             />
                         </div>
                         {mode === 'create' && (
@@ -240,13 +307,23 @@ function UserFormDialog({
                                 <Label>Roles</Label>
                                 <div className="flex flex-wrap gap-3 rounded-md border p-3">
                                     {allRoles.map((role) => (
-                                        <div key={role.id} className="flex items-center gap-2">
+                                        <div
+                                            key={role.id}
+                                            className="flex items-center gap-2"
+                                        >
                                             <Checkbox
                                                 id={`create-role-${role.id}`}
-                                                checked={selectedRoles.has(role.name)}
-                                                onCheckedChange={() => toggleRole(role.name)}
+                                                checked={selectedRoles.has(
+                                                    role.name,
+                                                )}
+                                                onCheckedChange={() =>
+                                                    toggleRole(role.name)
+                                                }
                                             />
-                                            <Label htmlFor={`create-role-${role.id}`} className="text-sm font-normal">
+                                            <Label
+                                                htmlFor={`create-role-${role.id}`}
+                                                className="text-sm font-normal"
+                                            >
                                                 {roleLabel(role.name)}
                                             </Label>
                                         </div>
@@ -257,7 +334,10 @@ function UserFormDialog({
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setOpen(false)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setOpen(false)}
+                        >
                             Cancel
                         </Button>
                         <Button
@@ -270,7 +350,9 @@ function UserFormDialog({
                                 (saveDialogOpen && saveStatus === 'saving')
                             }
                         >
-                            {saveDialogOpen && saveStatus === 'saving' ? 'Saving...' : 'Save'}
+                            {saveDialogOpen && saveStatus === 'saving'
+                                ? 'Saving...'
+                                : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -300,11 +382,18 @@ function ManageRolesDialog({
     onCloseMenu?: () => void;
 }) {
     const [open, setOpen] = useState(false);
-    const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set(user.roles.map((r) => r.name)));
+    const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
+        new Set(user.roles.map((r) => r.name)),
+    );
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [saveStatus, setSaveStatus] = useState<'saving' | 'success' | 'error'>('saving');
+    const [saveStatus, setSaveStatus] = useState<
+        'saving' | 'success' | 'error'
+    >('saving');
     const [saveSteps, setSaveSteps] = useState<SaveStep[]>([]);
-    const [saveError, setSaveError] = useState<{ message: string; details: string } | null>(null);
+    const [saveError, setSaveError] = useState<{
+        message: string;
+        details: string;
+    } | null>(null);
 
     const wasOpenRef = useRef(false);
     useEffect(() => {
@@ -335,7 +424,9 @@ function ManageRolesDialog({
     const handleSubmit = async () => {
         setSaveError(null);
         setSaveStatus('saving');
-        setSaveSteps([{ key: 'save', label: 'Updating roles', status: 'active' }]);
+        setSaveSteps([
+            { key: 'save', label: 'Updating roles', status: 'active' },
+        ]);
         setSaveDialogOpen(true);
 
         try {
@@ -361,7 +452,9 @@ function ManageRolesDialog({
             }
 
             if (!res.ok) {
-                setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'error' })));
+                setSaveSteps((prev) =>
+                    prev.map((s) => ({ ...s, status: 'error' })),
+                );
                 setSaveStatus('error');
                 setSaveError({
                     message: result.message || `HTTP ${res.status}`,
@@ -373,9 +466,14 @@ function ManageRolesDialog({
             setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })));
             setSaveStatus('success');
         } catch (e: any) {
-            setSaveSteps((prev) => prev.map((s) => ({ ...s, status: 'error' })));
+            setSaveSteps((prev) =>
+                prev.map((s) => ({ ...s, status: 'error' })),
+            );
             setSaveStatus('error');
-            setSaveError({ message: e.message ?? 'Error updating roles', details: String(e) });
+            setSaveError({
+                message: e.message ?? 'Error updating roles',
+                details: String(e),
+            });
         }
     };
 
@@ -392,7 +490,8 @@ function ManageRolesDialog({
             <Dialog
                 open={open}
                 onOpenChange={(next) => {
-                    if (!next && saveDialogOpen && saveStatus === 'saving') return;
+                    if (!next && saveDialogOpen && saveStatus === 'saving')
+                        return;
                     setOpen(next);
                 }}
             >
@@ -405,18 +504,28 @@ function ManageRolesDialog({
                 <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
                         <DialogTitle>Manage Roles: {user.name}</DialogTitle>
-                        <DialogDescription>Assign one or more roles to this user.</DialogDescription>
+                        <DialogDescription>
+                            Assign one or more roles to this user.
+                        </DialogDescription>
                     </DialogHeader>
 
                     <div className="flex flex-col gap-3 rounded-md border p-3">
                         {allRoles.map((role) => (
-                            <div key={role.id} className="flex items-center gap-2">
+                            <div
+                                key={role.id}
+                                className="flex items-center gap-2"
+                            >
                                 <Checkbox
                                     id={`manage-role-${user.id}-${role.id}`}
                                     checked={selectedRoles.has(role.name)}
-                                    onCheckedChange={() => toggleRole(role.name)}
+                                    onCheckedChange={() =>
+                                        toggleRole(role.name)
+                                    }
                                 />
-                                <Label htmlFor={`manage-role-${user.id}-${role.id}`} className="text-sm font-normal">
+                                <Label
+                                    htmlFor={`manage-role-${user.id}-${role.id}`}
+                                    className="text-sm font-normal"
+                                >
                                     {roleLabel(role.name)}
                                 </Label>
                             </div>
@@ -424,11 +533,19 @@ function ManageRolesDialog({
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setOpen(false)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setOpen(false)}
+                        >
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saveDialogOpen && saveStatus === 'saving'}>
-                            {saveDialogOpen && saveStatus === 'saving' ? 'Saving...' : 'Save'}
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={saveDialogOpen && saveStatus === 'saving'}
+                        >
+                            {saveDialogOpen && saveStatus === 'saving'
+                                ? 'Saving...'
+                                : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -446,7 +563,15 @@ function ManageRolesDialog({
     );
 }
 
-function ToggleStatusAlert({ user, onChanged, onCloseMenu }: { user: UserData; onChanged: () => void; onCloseMenu?: () => void }) {
+function ToggleStatusAlert({
+    user,
+    onChanged,
+    onCloseMenu,
+}: {
+    user: UserData;
+    onChanged: () => void;
+    onCloseMenu?: () => void;
+}) {
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const nextStatus = user.status === 'active' ? 'inactive' : 'active';
@@ -492,17 +617,23 @@ function ToggleStatusAlert({ user, onChanged, onCloseMenu }: { user: UserData; o
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>
-                        {user.status === 'active' ? 'Deactivate' : 'Activate'} user "{user.name}"?
+                        {user.status === 'active' ? 'Deactivate' : 'Activate'}{' '}
+                        user "{user.name}"?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                         {user.status === 'active'
                             ? 'This will immediately log the user out and block them from logging in again until reactivated.'
-                            : 'This will restore the user\'s ability to log in.'}
+                            : "This will restore the user's ability to log in."}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleConfirm} disabled={saving}>
+                    <AlertDialogCancel disabled={saving}>
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleConfirm}
+                        disabled={saving}
+                    >
                         {saving ? 'Saving...' : 'Confirm'}
                     </AlertDialogAction>
                 </AlertDialogFooter>
@@ -511,7 +642,15 @@ function ToggleStatusAlert({ user, onChanged, onCloseMenu }: { user: UserData; o
     );
 }
 
-function DeleteUserAlert({ user, onDeleted, onCloseMenu }: { user: UserData; onDeleted: () => void; onCloseMenu?: () => void }) {
+function DeleteUserAlert({
+    user,
+    onDeleted,
+    onCloseMenu,
+}: {
+    user: UserData;
+    onDeleted: () => void;
+    onCloseMenu?: () => void;
+}) {
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -530,7 +669,10 @@ function DeleteUserAlert({ user, onDeleted, onCloseMenu }: { user: UserData; onD
             const baseUrl = window.location.origin;
             await fetch(`${baseUrl}/api/users/${user.id}`, {
                 method: 'DELETE',
-                headers: { Accept: 'application/json', 'X-XSRF-TOKEN': csrfToken },
+                headers: {
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': csrfToken,
+                },
                 credentials: 'include',
             });
             setOpen(false);
@@ -543,19 +685,32 @@ function DeleteUserAlert({ user, onDeleted, onCloseMenu }: { user: UserData; onD
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger asChild>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                <DropdownMenuItem
+                    onSelect={(e) => e.preventDefault()}
+                    className="text-destructive"
+                >
                     <Trash2Icon className="text-destructive" />
                     Delete
                 </DropdownMenuItem>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Delete user "{user.name}"?</AlertDialogTitle>
-                    <AlertDialogDescription>This will permanently remove this user account. This action cannot be undone.</AlertDialogDescription>
+                    <AlertDialogTitle>
+                        Delete user "{user.name}"?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will permanently remove this user account. This
+                        action cannot be undone.
+                    </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+                    <AlertDialogCancel disabled={deleting}>
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleDelete}
+                        disabled={deleting}
+                    >
                         {deleting ? 'Deleting...' : 'Delete'}
                     </AlertDialogAction>
                 </AlertDialogFooter>
@@ -564,18 +719,31 @@ function DeleteUserAlert({ user, onDeleted, onCloseMenu }: { user: UserData; onD
     );
 }
 
-function UserActionsCell({ user, meta }: { user: UserData; meta: UserTableMeta }) {
+function UserActionsCell({
+    user,
+    meta,
+}: {
+    user: UserData;
+    meta: UserTableMeta;
+}) {
     const [menuOpen, setMenuOpen] = useState(false);
     const isSelf = user.id === meta.currentUserId;
 
     return (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${user.name}`}>
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Actions for ${user.name}`}
+                >
                     <MoreHorizontal />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+            >
                 <UserFormDialog
                     mode="edit"
                     user={user}
@@ -598,8 +766,16 @@ function UserActionsCell({ user, meta }: { user: UserData; meta: UserTableMeta }
                 {!isSelf && (
                     <>
                         <DropdownMenuSeparator />
-                        <ToggleStatusAlert user={user} onChanged={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
-                        <DeleteUserAlert user={user} onDeleted={meta.refetch} onCloseMenu={() => setMenuOpen(false)} />
+                        <ToggleStatusAlert
+                            user={user}
+                            onChanged={meta.refetch}
+                            onCloseMenu={() => setMenuOpen(false)}
+                        />
+                        <DeleteUserAlert
+                            user={user}
+                            onDeleted={meta.refetch}
+                            onCloseMenu={() => setMenuOpen(false)}
+                        />
                     </>
                 )}
             </DropdownMenuContent>
@@ -611,8 +787,16 @@ function UserStatusCell({ status }: { status: UserData['status'] }) {
     const active = status === 'active';
     return (
         <span className="inline-flex items-center gap-1.5 text-xs">
-            <span aria-hidden="true" className={cn('size-1.5 rounded-full', active ? 'bg-emerald-600' : 'bg-muted-foreground/40')} />
-            <span className={active ? undefined : 'text-muted-foreground'}>{active ? 'Active' : 'Inactive'}</span>
+            <span
+                aria-hidden="true"
+                className={cn(
+                    'size-1.5 rounded-full',
+                    active ? 'bg-emerald-600' : 'bg-muted-foreground/40',
+                )}
+            />
+            <span className={active ? undefined : 'text-muted-foreground'}>
+                {active ? 'Active' : 'Inactive'}
+            </span>
         </span>
     );
 }
@@ -623,7 +807,9 @@ export const columns: ColumnDef<UserData>[] = [
         id: 'name',
         accessorFn: (row) => row.name,
         header: 'Name',
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => (
+            <span className="font-medium">{row.original.name}</span>
+        ),
         enableHiding: false,
         meta: { label: 'Name' },
     },
@@ -638,11 +824,16 @@ export const columns: ColumnDef<UserData>[] = [
         id: 'email',
         accessorFn: (row) => row.email,
         header: 'Email',
-        cell: ({ getValue }) => <span className="text-xs text-muted-foreground lowercase">{String(getValue() ?? '')}</span>,
+        cell: ({ getValue }) => (
+            <span className="text-xs text-muted-foreground lowercase">
+                {String(getValue() ?? '')}
+            </span>
+        ),
         meta: { label: 'Email' },
     },
     {
         id: 'roles',
+        enableSorting: false,
         header: 'Roles',
         cell: ({ row }) =>
             row.original.roles.length ? (
@@ -657,21 +848,30 @@ export const columns: ColumnDef<UserData>[] = [
                     ))}
                 </span>
             ) : (
-                <span className="text-xs font-medium text-orange-700 dark:text-orange-400">No role</span>
+                <span className="text-xs font-medium text-orange-700 dark:text-orange-400">
+                    No role
+                </span>
             ),
         meta: { label: 'Roles' },
     },
     {
         id: 'status',
+        accessorKey: 'status',
         header: 'Status',
         cell: ({ row }) => <UserStatusCell status={row.original.status} />,
         meta: { label: 'Status' },
     },
     {
         id: 'actions',
+        enableSorting: false,
         header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
-        cell: ({ row, table }) => <UserActionsCell user={row.original} meta={table.options.meta as UserTableMeta} />,
+        cell: ({ row, table }) => (
+            <UserActionsCell
+                user={row.original}
+                meta={table.options.meta as UserTableMeta}
+            />
+        ),
         meta: { className: 'w-10 px-1' },
     },
 ];
@@ -692,7 +892,8 @@ export function UserDataTable() {
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualFiltering: true,
-        enableSorting: false,
+        manualSorting: true,
+        enableSortingRemoval: true,
         enableRowSelection: false,
         pageCount: grid.pageCount,
         state: grid.state,
@@ -708,9 +909,14 @@ export function UserDataTable() {
         const baseUrl = window.location.origin;
         const controller = new AbortController();
 
-        fetch(`${baseUrl}/api/roles`, { credentials: 'include', signal: controller.signal })
+        fetch(`${baseUrl}/api/roles`, {
+            credentials: 'include',
+            signal: controller.signal,
+        })
             .then((r) => r.json())
-            .then((roles: { id: number; name: string }[]) => setAllRoles(roles.map((r) => ({ id: r.id, name: r.name }))))
+            .then((roles: { id: number; name: string }[]) =>
+                setAllRoles(roles.map((r) => ({ id: r.id, name: r.name }))),
+            )
             .catch((e) => {
                 if (e.name !== 'AbortError') console.error(e);
             });

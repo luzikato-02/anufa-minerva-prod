@@ -49,7 +49,18 @@ class StockTakeRecordController extends Controller
             $query->byLeader($request->session_leader);
         }
 
-        // Order by latest first
+        // Whitelisted sort ids only, so sort_by never reaches SQL as-is; newest first otherwise.
+        $sortable = [
+            'recorded_at' => 'created_at',
+            'session'     => 'session_id',
+            'leader'      => $this->jsonExtract('metadata', '$.session_leader'),
+            'status'      => $this->jsonExtract('metadata', '$.session_status'),
+        ];
+        $sortBy = $request->input('sort_by');
+        if (is_string($sortBy) && isset($sortable[$sortBy])) {
+            $dir = strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc';
+            $query->orderByRaw("{$sortable[$sortBy]} {$dir}");
+        }
         $query->orderBy('created_at', 'desc');
 
         // Paginate results

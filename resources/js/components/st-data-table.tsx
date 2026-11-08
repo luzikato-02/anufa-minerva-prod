@@ -1,4 +1,11 @@
 'use client';
+import { DataGrid } from '@/components/data-grid';
+import {
+    CodeCell,
+    DateTimeCell,
+    NumberCell,
+    TextCell,
+} from '@/components/data-grid-cells';
 import {
     initialNoticeState,
     NoticeDialog,
@@ -32,7 +39,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { useServerTable } from '@/hooks/use-server-table';
+import { cn } from '@/lib/utils';
+import {
+    type ColumnDef,
+    getCoreRowModel,
+    useReactTable,
+} from '@tanstack/react-table';
 import {
     CircleAlertIcon,
     DownloadIcon,
@@ -42,13 +55,8 @@ import {
     UploadIcon,
     VerifiedIcon,
 } from 'lucide-react';
-import { CodeCell, DateTimeCell, NumberCell, TextCell } from '@/components/data-grid-cells';
-import { DataGrid } from '@/components/data-grid';
-import { useServerTable } from '@/hooks/use-server-table';
-import { cn } from '@/lib/utils';
 import * as React from 'react';
 import { useState } from 'react';
-
 
 interface StockTakeRecord {
     id: string;
@@ -87,10 +95,16 @@ function SessionStatusCell({ status }: { status?: string }) {
                 aria-hidden="true"
                 className={cn(
                     'size-1.5 rounded-full',
-                    inProgress ? 'bg-blue-600' : completed ? 'bg-emerald-600' : 'bg-muted-foreground/40',
+                    inProgress
+                        ? 'bg-blue-600'
+                        : completed
+                          ? 'bg-emerald-600'
+                          : 'bg-muted-foreground/40',
                 )}
             />
-            <span className={completed ? 'text-muted-foreground' : undefined}>{status}</span>
+            <span className={completed ? 'text-muted-foreground' : undefined}>
+                {status}
+            </span>
         </span>
     );
 }
@@ -100,13 +114,25 @@ function BatchProgressCell({ found, total }: { found: number; total: number }) {
     const ratio = calculateSimilitudeRatio(found, total);
     return (
         <span className="inline-flex items-center gap-1.5">
-            <span className="h-1 w-12 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                <span className="block h-full rounded-full bg-foreground/70" style={{ width: `${ratio}%` }} />
+            <span
+                className="h-1 w-12 overflow-hidden rounded-full bg-muted"
+                aria-hidden="true"
+            >
+                <span
+                    className="block h-full rounded-full bg-foreground/70"
+                    style={{ width: `${ratio}%` }}
+                />
             </span>
             <span className="text-xs tabular-nums">
-                {found.toLocaleString('en-US')} / {total.toLocaleString('en-US')}
+                {found.toLocaleString('en-US')} /{' '}
+                {total.toLocaleString('en-US')}
             </span>
-            <span className={cn('text-xs tabular-nums', ratio >= 100 ? 'text-muted-foreground' : 'font-medium')}>
+            <span
+                className={cn(
+                    'text-xs tabular-nums',
+                    ratio >= 100 ? 'text-muted-foreground' : 'font-medium',
+                )}
+            >
                 {ratio}%
             </span>
         </span>
@@ -117,10 +143,16 @@ function BatchProgressCell({ found, total }: { found: number; total: number }) {
 export const columns: ColumnDef<StockTakeRecord>[] = [
     {
         id: 'select',
+        enableSorting: false,
         header: ({ table }) => (
             <Checkbox
-                checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
-                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                checked={
+                    table.getIsAllPageRowsSelected() ||
+                    (table.getIsSomePageRowsSelected() && 'indeterminate')
+                }
+                onCheckedChange={(value) =>
+                    table.toggleAllPageRowsSelected(!!value)
+                }
                 aria-label="Select all rows on this page"
             />
         ),
@@ -159,11 +191,14 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
         id: 'status',
         accessorFn: (row) => row.metadata?.session_status,
         header: 'Status',
-        cell: ({ getValue }) => <SessionStatusCell status={getValue() as string | undefined} />,
+        cell: ({ getValue }) => (
+            <SessionStatusCell status={getValue() as string | undefined} />
+        ),
         meta: { label: 'Session status' },
     },
     {
         id: 'materials',
+        enableSorting: false,
         accessorFn: (row) => row.metadata?.total_materials,
         header: 'Materials',
         cell: ({ getValue }) => <NumberCell value={getValue()} />,
@@ -171,6 +206,7 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
     },
     {
         id: 'progress',
+        enableSorting: false,
         accessorFn: (row) => row.metadata?.total_checked_batches,
         header: 'Batches checked',
         cell: ({ row }) => (
@@ -183,17 +219,25 @@ export const columns: ColumnDef<StockTakeRecord>[] = [
     },
     {
         id: 'actions',
+        enableSorting: false,
         header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
         cell: ({ row, table }) => (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-xs" aria-label={`Actions for session ${row.original.session_id ?? ''}`}>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Actions for session ${row.original.session_id ?? ''}`}
+                    >
                         <MoreHorizontal />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    <ViewSessionDialog record={row.original} onStatusChange={table.options.meta?.onStatusChange} />
+                    <ViewSessionDialog
+                        record={row.original}
+                        onStatusChange={table.options.meta?.onStatusChange}
+                    />
                 </DropdownMenuContent>
             </DropdownMenu>
         ),
@@ -670,8 +714,11 @@ function countUniqueMaterialCodes(data: Record<string, string>[]): number {
 export function StockTakeDataTable() {
     const [notice, setNotice] = useState<NoticeState>(initialNoticeState);
 
-    const showNotice = (variant: NoticeVariant, title: string, description: string) =>
-        setNotice({ open: true, variant, title, description });
+    const showNotice = (
+        variant: NoticeVariant,
+        title: string,
+        description: string,
+    ) => setNotice({ open: true, variant, title, description });
 
     const grid = useServerTable<StockTakeRecord>({
         endpoint: '/stock-take-records',
@@ -685,7 +732,8 @@ export function StockTakeDataTable() {
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualFiltering: true,
-        enableSorting: false,
+        manualSorting: true,
+        enableSortingRemoval: true,
         pageCount: grid.pageCount,
         state: grid.state,
         ...grid.handlers,
@@ -730,7 +778,11 @@ export function StockTakeDataTable() {
     // Action when submitting new session
     const handleSubmit = async () => {
         if (!sessionLeader || jsonData.length === 0) {
-            showNotice('error', 'Missing Information', 'Please provide a session leader and upload a CSV file.');
+            showNotice(
+                'error',
+                'Missing Information',
+                'Please provide a session leader and upload a CSV file.',
+            );
             return;
         }
 
@@ -770,7 +822,11 @@ export function StockTakeDataTable() {
             setSessionLeader('');
             setJsonData([]);
             grid.refetch();
-            showNotice('success', 'Session Created', 'Session created successfully!');
+            showNotice(
+                'success',
+                'Session Created',
+                'Session created successfully!',
+            );
         } catch (error) {
             console.error(error);
             showNotice('error', 'Creation Failed', 'Error creating session.');
@@ -794,12 +850,18 @@ export function StockTakeDataTable() {
             <DialogContent className="w-full max-w-[90vw] sm:max-w-4xl">
                 <DialogHeader>
                     <DialogTitle>Create New Session</DialogTitle>
-                    <DialogDescription>Fill out the details below to start a new stock take session.</DialogDescription>
+                    <DialogDescription>
+                        Fill out the details below to start a new stock take
+                        session.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
                     <div>
-                        <label className="text-sm font-medium" htmlFor="stock-session-leader">
+                        <label
+                            className="text-sm font-medium"
+                            htmlFor="stock-session-leader"
+                        >
                             Session Leader
                         </label>
                         <Input
@@ -811,12 +873,26 @@ export function StockTakeDataTable() {
                     </div>
 
                     <div>
-                        <label className="mb-2 block text-sm font-medium">Upload Stock Data</label>
-                        <Button variant="outline" type="button" onClick={() => document.getElementById('stock-file')?.click()}>
+                        <label className="mb-2 block text-sm font-medium">
+                            Upload Stock Data
+                        </label>
+                        <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() =>
+                                document.getElementById('stock-file')?.click()
+                            }
+                        >
                             <UploadIcon />
                             Upload File
                         </Button>
-                        <input id="stock-file" type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                        <input
+                            id="stock-file"
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                        />
                     </div>
                     {jsonData.length > 0 && (
                         <div className="max-h-[60vh] overflow-auto rounded-md border p-3 text-sm">
@@ -824,16 +900,22 @@ export function StockTakeDataTable() {
                                 <TableHeader>
                                     <TableRow>
                                         {Object.keys(jsonData[0]).map((key) => (
-                                            <TableHead key={key}>{key}</TableHead>
+                                            <TableHead key={key}>
+                                                {key}
+                                            </TableHead>
                                         ))}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {jsonData.map((row, i) => (
                                         <TableRow key={i}>
-                                            {Object.values(row).map((val, j) => (
-                                                <TableCell key={j}>{val}</TableCell>
-                                            ))}
+                                            {Object.values(row).map(
+                                                (val, j) => (
+                                                    <TableCell key={j}>
+                                                        {val}
+                                                    </TableCell>
+                                                ),
+                                            )}
                                         </TableRow>
                                     ))}
                                 </TableBody>

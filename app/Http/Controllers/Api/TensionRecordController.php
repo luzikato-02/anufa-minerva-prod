@@ -665,7 +665,21 @@ class TensionRecordController extends Controller
             })->values();
         }
 
-        $flattened = $flattened->sortByDesc('record_created_at')->values();
+        // Whitelisted sort ids on the flattened list; newest record first otherwise.
+        $sortable = [
+            'recorded_at' => fn ($p) => $p['record_created_at'] ?? '',
+            'type'        => fn ($p) => $p['record_type'] ?? '',
+            'machine'     => fn ($p) => (string) ($p['machine_number'] ?? ''),
+            'position'    => fn ($p) => $p['spindle_number'] !== null ? sprintf('%06d', (int) $p['spindle_number']) : (string) ($p['position'] ?? ''),
+            'item_number' => fn ($p) => (string) ($p['item_number'] ?? ''),
+            'operator'    => fn ($p) => strtolower((string) ($p['operator'] ?? '')),
+            'status'      => fn ($p) => $p['status'] ?? 'open',
+        ];
+        $sortBy = $request->input('sort_by');
+        $valid = is_string($sortBy) && isset($sortable[$sortBy]);
+        $key = $valid ? $sortable[$sortBy] : $sortable['recorded_at'];
+        $descending = ! $valid || strtolower((string) $request->input('sort_dir')) !== 'asc';
+        $flattened = $flattened->sortBy($key, SORT_NATURAL, $descending)->values();
 
         // Manual pagination
         $perPage = min((int) $request->input('per_page', 10), 200);

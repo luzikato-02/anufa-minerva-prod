@@ -285,7 +285,6 @@ function StatusCell({ status }: { status: TensionProblem['status'] }) {
     );
 }
 
-/** The server doesn't sort this flattened list, so sorting stays off here. */
 export const columns: ColumnDef<TensionProblem>[] = [
     {
         id: 'recorded_at',
@@ -338,6 +337,7 @@ export const columns: ColumnDef<TensionProblem>[] = [
     },
     {
         id: 'description',
+        enableSorting: false,
         accessorFn: (row) => row.description,
         header: 'Description',
         cell: ({ getValue }) => {
@@ -361,6 +361,7 @@ export const columns: ColumnDef<TensionProblem>[] = [
     },
     {
         id: 'actions',
+        enableSorting: false,
         header: () => <span className="sr-only">Actions</span>,
         enableHiding: false,
         cell: ({ row, table }) =>
@@ -401,7 +402,8 @@ export function TensionProblemsDataTable() {
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualFiltering: true,
-        enableSorting: false,
+        manualSorting: true,
+        enableSortingRemoval: true,
         enableRowSelection: false,
         pageCount: grid.pageCount,
         state: grid.state,

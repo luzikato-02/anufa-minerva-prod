@@ -3,14 +3,17 @@
 namespace Tests\Feature\Api;
 
 use App\Models\CreelType;
+use App\Models\FinishEarlierRecord;
 use App\Models\StockSheet;
+use App\Models\StockTakingRecord;
+use App\Models\TensionRecord;
 use App\Models\TorqueCheckSheet;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
-/** Server sorting for the torque check, stock sheet and activity log lists. */
+/** Server sorting for the record lists that page on the server. */
 class ListSortingTest extends TestCase
 {
     use RefreshDatabase;
@@ -70,5 +73,61 @@ class ListSortingTest extends TestCase
         $mine = ['Recorded tension', 'Removed sheet', 'Changed spec'];
         $sorted = array_values(array_intersect($descriptions('sort_by=event&sort_dir=asc'), $mine));
         $this->assertSame($mine, $sorted);
+    }
+
+    public function test_finish_earlier_sorts_numbers_as_numbers(): void
+    {
+        $this->actingAs($this->user(['finish-earlier.view']));
+        foreach ([['PO-1', 9], ['PO-2', 100], ['PO-3', 10]] as [$po, $n]) {
+            FinishEarlierRecord::create(['metadata' => ['production_order' => $po, 'total_finish_earlier' => $n], 'entries' => []]);
+        }
+
+        $orders = fn (string $q) => array_column(array_column($this->getJson("/finish-earlier?{$q}")->assertOk()->json('data'), 'metadata'), 'production_order');
+
+        $this->assertSame(['PO-1', 'PO-3', 'PO-2'], $orders('sort_by=fe_bobbins&sort_dir=asc'));
+        $this->assertSame(['PO-2', 'PO-3', 'PO-1'], $orders('sort_by=fe_bobbins&sort_dir=desc'));
+    }
+
+    public function test_stock_take_sorts_by_leader(): void
+    {
+        $this->actingAs($this->user(['stock-take.view']));
+        foreach ([['ST-1', 'Rina'], ['ST-2', 'Agus'], ['ST-3', 'Siti']] as [$id, $leader]) {
+            StockTakingRecord::create(['session_id' => $id, 'indv_batch_data' => [], 'metadata' => ['session_leader' => $leader]]);
+        }
+
+        $ids = array_column($this->getJson('/stock-take-records?sort_by=leader&sort_dir=asc')->assertOk()->json('data'), 'session_id');
+        $this->assertSame(['ST-2', 'ST-1', 'ST-3'], $ids);
+    }
+
+    public function test_users_sort_by_email_and_default_to_name(): void
+    {
+        $viewer = $this->user(['users.view']);
+        $viewer->update(['name' => 'Mira', 'email' => 'm@example.com']);
+        User::factory()->withoutTwoFactor()->create(['name' => 'Zed', 'email' => 'a@example.com']);
+        User::factory()->withoutTwoFactor()->create(['name' => 'Ana', 'email' => 'z@example.com']);
+        $this->actingAs($viewer);
+
+        $names = fn (string $q) => array_column($this->getJson("/api/users?{$q}")->assertOk()->json('data'), 'name');
+
+        $this->assertSame(['Ana', 'Mira', 'Zed'], $names(''));
+        $this->assertSame(['Ana', 'Mira', 'Zed'], $names('sort_by=email&sort_dir=desc'));
+        $this->assertSame(['Zed', 'Mira', 'Ana'], $names('sort_by=email&sort_dir=asc'));
+    }
+
+    public function test_tension_problems_sort_by_machine_naturally(): void
+    {
+        $this->actingAs($this->user(['tension-records.view']));
+        foreach (['TW-10', 'TW-2', 'TW-1'] as $i => $machine) {
+            TensionRecord::create([
+                'record_type' => 'twisting', 'csv_data' => '', 'form_data' => [], 'measurement_data' => [],
+                'metadata' => ['machine_number' => $machine],
+                'problems' => [['id' => "p{$i}", 'spindleNumber' => 1, 'status' => 'open', 'timestamp' => '2026-11-07 08:00:00']],
+            ]);
+        }
+
+        $machines = fn (string $q) => array_column($this->getJson("/tension-problems?{$q}")->assertOk()->json('data'), 'machine_number');
+
+        $this->assertSame(['TW-1', 'TW-2', 'TW-10'], $machines('sort_by=machine&sort_dir=asc'));
+        $this->assertSame(['TW-10', 'TW-2', 'TW-1'], $machines('sort_by=machine&sort_dir=desc'));
     }
 }
