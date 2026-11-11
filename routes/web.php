@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CreelTypeController;
 use App\Http\Controllers\Api\StockSheetController;
 use App\Http\Controllers\Api\TorqueCheckController;
 use App\Http\Controllers\Api\StockTakeRecordController;
+use App\Http\Controllers\Api\TensionComparisonController;
 use App\Http\Controllers\Api\TensionRecordController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\ControlPlans\ControlPlanController;
@@ -166,6 +167,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tension-records/type/{type}', [TensionRecordController::class, 'byType'])
             ->whereIn('type', ['twisting', 'weaving'])
             ->name('tension-records.by-type');
+
+        // Saved comparisons: each user's own, opened from the tension records page.
+        Route::get('tension-comparisons', [TensionComparisonController::class, 'index'])->name('tension-comparisons.index');
+        Route::post('tension-comparisons', [TensionComparisonController::class, 'store'])->name('tension-comparisons.store');
+        Route::get('tension-comparisons/{id}', [TensionComparisonController::class, 'show'])->whereNumber('id')->name('tension-comparisons.show');
+        Route::patch('tension-comparisons/{id}', [TensionComparisonController::class, 'update'])->whereNumber('id')->name('tension-comparisons.update');
+        Route::delete('tension-comparisons/{id}', [TensionComparisonController::class, 'destroy'])->whereNumber('id')->name('tension-comparisons.destroy');
     });
 
     Route::middleware('permission:tension-records.create')->group(function () {

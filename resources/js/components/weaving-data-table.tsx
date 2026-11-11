@@ -44,7 +44,6 @@ import {
     useReactTable,
 } from '@tanstack/react-table';
 import {
-    ChartLineIcon,
     DownloadIcon,
     EyeIcon,
     MoreHorizontal,
@@ -78,11 +77,7 @@ import {
     type DetailRecord,
     RecordDetailPanel,
 } from '@/components/record-detail-panel';
-import {
-    MAX_COMPARE,
-    TensionCompareDialog,
-    useCompareSelection,
-} from '@/components/tension-compare';
+import { useTensionCompare } from '@/components/tension-compare';
 import { useServerTable } from '@/hooks/use-server-table';
 import { problemCounts, progressOf } from '@/lib/tension-record-summary';
 
@@ -1678,7 +1673,6 @@ const WEAVING_PARAMS = { type: 'weaving' };
 
 export function WeavingDataTable() {
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [compareOpen, setCompareOpen] = useState(false);
     const grid = useServerTable<TensionRecord>({
         endpoint: '/tension-records',
         params: WEAVING_PARAMS,
@@ -1702,18 +1696,18 @@ export function WeavingDataTable() {
         meta: { refetch: grid.refetch, openDetails: setActiveId },
     });
 
-    // Ticked rows, kept across pages, become the records to compare.
-    const compare = useCompareSelection(
-        grid.data as unknown as DetailRecord[],
-        grid.state.rowSelection as Record<string, boolean>,
-    );
-    const tooMany = compare.count > MAX_COMPARE;
-    const removeFromCompare = (id: string) =>
-        table.setRowSelection((prev) => {
-            const next = { ...(prev as Record<string, boolean>) };
-            delete next[id];
-            return next;
-        });
+    // Ticked rows (kept across pages) and saved comparisons, on one chart.
+    const compare = useTensionCompare({
+        type: 'weaving',
+        rows: grid.data as unknown as DetailRecord[],
+        rowSelection: grid.state.rowSelection as Record<string, boolean>,
+        onDeselect: (id) =>
+            table.setRowSelection((prev) => {
+                const next = { ...(prev as Record<string, boolean>) };
+                delete next[id];
+                return next;
+            }),
+    });
 
     const activeIndex = activeId
         ? grid.data.findIndex((r) => String(r.id) === activeId)
@@ -1728,29 +1722,8 @@ export function WeavingDataTable() {
         <>
             <DataGrid
                 selectedTotal={compare.count}
-                selectionActions={
-                    <>
-                        <Button
-                            variant="outline"
-                            size="xs"
-                            disabled={compare.count < 2 || tooMany}
-                            onClick={() => setCompareOpen(true)}
-                        >
-                            <ChartLineIcon />
-                            Compare
-                        </Button>
-                        {compare.count === 1 && (
-                            <span className="text-xs text-muted-foreground">
-                                Tick one more to compare
-                            </span>
-                        )}
-                        {tooMany && (
-                            <span className="text-xs text-orange-700 dark:text-orange-400">
-                                Compare up to {MAX_COMPARE} at a time
-                            </span>
-                        )}
-                    </>
-                }
+                selectionActions={compare.selectionActions}
+                actions={compare.savedMenu}
                 onRowClick={setActiveId}
                 activeRowId={activeRecord ? activeId : null}
                 table={table}
@@ -1764,12 +1737,7 @@ export function WeavingDataTable() {
                 searchPlaceholder="Search loom, item, operator…"
                 emptyMessage="No weaving tension records yet."
             />
-            <TensionCompareDialog
-                items={compare.compareItems}
-                open={compareOpen}
-                onOpenChange={setCompareOpen}
-                onRemove={removeFromCompare}
-            />
+            {compare.dialog}
             <RecordDetailPanel
                 record={activeRecord as DetailRecord | null}
                 open={activeRecord !== null}

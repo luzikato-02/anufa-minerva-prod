@@ -8,6 +8,15 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
     Table,
     TableBody,
     TableCell,
@@ -15,6 +24,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    type CompareMetric,
+    comparisonsApi,
+    type SavedComparison,
+    type SavedComparisonListItem,
+} from '@/lib/tension-comparisons';
 import {
     classify,
     creelSides,
@@ -25,8 +40,25 @@ import {
     twistingCells,
 } from '@/lib/tension-heatmap';
 import { cn } from '@/lib/utils';
-import { DownloadIcon, EyeOffIcon, XIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import {
+    BookmarkIcon,
+    ChartLineIcon,
+    CheckIcon,
+    DownloadIcon,
+    EyeOffIcon,
+    Loader2Icon,
+    PencilIcon,
+    SaveIcon,
+    Trash2Icon,
+    XIcon,
+} from 'lucide-react';
+import {
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
 import {
     CartesianGrid,
     Line,
@@ -63,7 +95,7 @@ export interface CompareItem {
     slot: number;
 }
 
-type Metric = 'max' | 'min' | 'avg' | 'spread';
+type Metric = CompareMetric;
 
 const METRICS: { id: Metric; label: string; help: string }[] = [
     { id: 'max', label: 'Max', help: 'Highest reading at each position' },
@@ -289,15 +321,30 @@ export function TensionCompareDialog({
     open,
     onOpenChange,
     onRemove,
+    metric,
+    onMetricChange: setMetric,
+    hidden,
+    onToggleHidden: toggle,
+    title,
+    saveControls,
+    notice,
 }: {
     items: CompareItem[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onRemove: (id: string) => void;
+    metric: Metric;
+    onMetricChange: (metric: Metric) => void;
+    /** Ids of records kept in the comparison but not drawn. */
+    hidden: Set<string>;
+    onToggleHidden: (id: string) => void;
+    /** A saved comparison's name, shown above the default title. */
+    title?: string;
+    /** Save, rename and delete controls, shown at the end of the toolbar. */
+    saveControls?: ReactNode;
+    /** A line under the title, e.g. records deleted since saving. */
+    notice?: ReactNode;
 }) {
-    const [metric, setMetric] = useState<Metric>('avg');
-    const [hidden, setHidden] = useState<Set<string>>(new Set());
-
     // Close once fewer than two records are left to compare.
     useEffect(() => {
         if (open && items.length < 2) onOpenChange(false);
@@ -305,7 +352,7 @@ export function TensionCompareDialog({
 
     const series = useMemo(() => items.map(buildSeries), [items]);
     const weaving = items[0]?.record.record_type === 'weaving';
-    const visible = series.filter((s) => !hidden.has(s.item.record.id));
+    const visible = series.filter((s) => !hidden.has(String(s.item.record.id)));
 
     const rows = useMemo<Row[]>(() => {
         const keys = new Set<string>();
@@ -396,14 +443,6 @@ export function TensionCompareDialog({
         );
     }, [rows, visible, lastIndex]);
 
-    const toggle = (id: string) =>
-        setHidden((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-
     const downloadCsv = () => {
         const header = [
             'Position',
@@ -441,6 +480,15 @@ export function TensionCompareDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                // Escape inside the name box cancels the rename, not the whole window.
+                onEscapeKeyDown={(e) => {
+                    if (
+                        (e.target as HTMLElement | null)?.closest?.(
+                            '[data-escape-local]',
+                        )
+                    )
+                        e.preventDefault();
+                }}
                 className={cn(
                     SLOT_VARS,
                     'flex max-h-[92vh] flex-col gap-3 overflow-y-auto p-4 sm:max-w-6xl',
@@ -448,12 +496,14 @@ export function TensionCompareDialog({
             >
                 <DialogHeader className="gap-0.5 pr-8">
                     <DialogTitle className="text-base">
-                        Compare {items.length} {kind} records
+                        {title ?? `Compare ${items.length} ${kind} records`}
                     </DialogTitle>
                     <DialogDescription className="text-xs">
+                        {title && `${items.length} ${kind} records. `}
                         {metricInfo.help}, per {axisName}. Click a record in the
                         legend to hide or show it.
                     </DialogDescription>
+                    {notice}
                 </DialogHeader>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -491,15 +541,17 @@ export function TensionCompareDialog({
                             table below.
                         </span>
                     )}
-                    <Button
-                        variant="outline"
-                        size="xs"
-                        className="ml-auto"
-                        onClick={downloadCsv}
-                    >
-                        <DownloadIcon />
-                        CSV
-                    </Button>
+                    <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                        {saveControls}
+                        <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={downloadCsv}
+                        >
+                            <DownloadIcon />
+                            CSV
+                        </Button>
+                    </div>
                 </div>
 
                 <ul
@@ -507,7 +559,7 @@ export function TensionCompareDialog({
                     className="flex flex-wrap gap-1.5"
                 >
                     {series.map((s) => {
-                        const id = s.item.record.id;
+                        const id = String(s.item.record.id);
                         const off = hidden.has(id);
                         return (
                             <li
@@ -809,8 +861,9 @@ export function TensionCompareDialog({
                                     <TableRow
                                         key={s.item.record.id}
                                         className={cn(
-                                            hidden.has(s.item.record.id) &&
-                                                'text-muted-foreground',
+                                            hidden.has(
+                                                String(s.item.record.id),
+                                            ) && 'text-muted-foreground',
                                         )}
                                     >
                                         <TableCell>
@@ -949,4 +1002,502 @@ export function useCompareSelection(
     );
 
     return { count: items.length, compareItems };
+}
+
+type CompareMode =
+    | { kind: 'selection' }
+    | {
+          kind: 'saved';
+          saved: SavedComparison;
+          items: CompareItem[];
+          missing: number;
+      };
+
+const sameIds = (
+    a: readonly (string | number)[],
+    b: readonly (string | number)[],
+) => a.length === b.length && a.every((x, i) => String(x) === String(b[i]));
+
+const shortDate = (iso: string | null) =>
+    iso
+        ? new Intl.DateTimeFormat('en-GB', {
+              day: 'numeric',
+              month: 'short',
+          }).format(new Date(iso))
+        : '';
+
+/** "TW-05, TW-19, TW-13" — a starting name the user can change. */
+const suggestName = (items: CompareItem[]) => {
+    const machines = [...new Set(items.map((i) => describe(i.record).machine))];
+    const head = machines.slice(0, 4).join(', ');
+    return machines.length > 4 ? `${head} +${machines.length - 4}` : head;
+};
+
+/**
+ * Everything a tension table needs to compare records: the Compare button for
+ * ticked rows, the Saved menu, and the compare window with save, rename and
+ * delete. A saved comparison opens with its own records, plotted value and
+ * hidden lines, independent of what is ticked in the table.
+ */
+export function useTensionCompare({
+    type,
+    rows,
+    rowSelection,
+    onDeselect,
+}: {
+    type: 'twisting' | 'weaving';
+    rows: DetailRecord[];
+    rowSelection: Record<string, boolean>;
+    onDeselect: (id: string) => void;
+}) {
+    const selection = useCompareSelection(rows, rowSelection);
+    const [open, setOpen] = useState(false);
+    const [mode, setMode] = useState<CompareMode>({ kind: 'selection' });
+    const [metric, setMetric] = useState<CompareMetric>('avg');
+    const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+    const [savedList, setSavedList] = useState<
+        SavedComparisonListItem[] | null
+    >(null);
+    const [listError, setListError] = useState<string | null>(null);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [naming, setNaming] = useState<'save' | 'rename' | null>(null);
+    const [nameDraft, setNameDraft] = useState('');
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [justSaved, setJustSaved] = useState(false);
+
+    const refreshList = useCallback(() => {
+        setListError(null);
+        comparisonsApi
+            .list(type)
+            .then(setSavedList)
+            .catch((e: unknown) =>
+                setListError(
+                    e instanceof Error
+                        ? e.message
+                        : 'Could not load saved comparisons',
+                ),
+            );
+    }, [type]);
+    useEffect(refreshList, [refreshList]);
+
+    const items = mode.kind === 'saved' ? mode.items : selection.compareItems;
+    const tooMany = selection.count > MAX_COMPARE;
+
+    const resetTransient = () => {
+        setNaming(null);
+        setConfirmDelete(false);
+        setActionError(null);
+        setJustSaved(false);
+    };
+
+    // Ids arrive from the API as numbers; hidden ids are kept as text throughout.
+    const toggleHidden = (raw: string) =>
+        setHidden((prev) => {
+            const id = String(raw);
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+
+    const openSelection = () => {
+        resetTransient();
+        setMode({ kind: 'selection' });
+        setMetric('avg');
+        setHidden(new Set());
+        setOpen(true);
+    };
+
+    const openSaved = async (id: number) => {
+        resetTransient();
+        setBusy('open');
+        try {
+            const saved = await comparisonsApi.get(id);
+            setMode({
+                kind: 'saved',
+                saved,
+                items: saved.records.map((record, i) => ({ record, slot: i })),
+                missing: saved.missing_ids.length,
+            });
+            setMetric(saved.metric);
+            setHidden(new Set(saved.hidden_ids.map(String)));
+            setOpen(true);
+        } catch (e) {
+            setListError(
+                e instanceof Error
+                    ? e.message
+                    : 'Could not open that comparison',
+            );
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const remove = (raw: string) => {
+        const id = String(raw);
+        setHidden((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+        if (mode.kind === 'saved') {
+            setMode({
+                ...mode,
+                items: mode.items.filter((i) => String(i.record.id) !== id),
+            });
+        } else {
+            onDeselect(id);
+        }
+    };
+
+    const payload = () => ({
+        record_ids: items.map((i) => Number(i.record.id)),
+        metric,
+        hidden_ids: items
+            .filter((i) => hidden.has(String(i.record.id)))
+            .map((i) => Number(i.record.id)),
+    });
+
+    const run = async (label: string, action: () => Promise<void>) => {
+        setBusy(label);
+        setActionError(null);
+        try {
+            await action();
+        } catch (e) {
+            setActionError(
+                e instanceof Error
+                    ? e.message
+                    : 'That did not work. Try again.',
+            );
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const saveNew = () =>
+        run('save', async () => {
+            const saved = await comparisonsApi.create({
+                name: nameDraft.trim(),
+                record_type: type,
+                ...payload(),
+            });
+            // From here on the window shows the saved comparison, not the live ticks.
+            setMode({ kind: 'saved', saved, items: [...items], missing: 0 });
+            setNaming(null);
+            setJustSaved(true);
+            refreshList();
+        });
+
+    const saveChanges = () =>
+        run('update', async () => {
+            if (mode.kind !== 'saved') return;
+            const saved = await comparisonsApi.update(mode.saved.id, payload());
+            setMode({ ...mode, saved, missing: 0 });
+            setJustSaved(true);
+            refreshList();
+        });
+
+    const rename = () =>
+        run('rename', async () => {
+            if (mode.kind !== 'saved') return;
+            const saved = await comparisonsApi.update(mode.saved.id, {
+                name: nameDraft.trim(),
+            });
+            setMode({ ...mode, saved });
+            setNaming(null);
+            refreshList();
+        });
+
+    const destroy = () =>
+        run('delete', async () => {
+            if (mode.kind !== 'saved') return;
+            await comparisonsApi.remove(mode.saved.id);
+            refreshList();
+            setOpen(false);
+        });
+
+    const dirty =
+        mode.kind === 'saved' &&
+        (metric !== mode.saved.metric ||
+            !sameIds(
+                items.map((i) => i.record.id),
+                mode.saved.record_ids,
+            ) ||
+            !sameIds(
+                items
+                    .filter((i) => hidden.has(String(i.record.id)))
+                    .map((i) => i.record.id),
+                mode.saved.hidden_ids,
+            ));
+
+    const nameForm = (
+        <form
+            className="flex items-center gap-1.5"
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (!nameDraft.trim()) return;
+                if (naming === 'save') saveNew();
+                else rename();
+            }}
+        >
+            <Input
+                autoFocus
+                aria-label="Comparison name"
+                data-escape-local
+                value={nameDraft}
+                maxLength={100}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Escape') setNaming(null);
+                }}
+                className="h-7 w-56 text-xs"
+            />
+            <Button
+                type="submit"
+                size="xs"
+                disabled={!nameDraft.trim() || busy !== null}
+            >
+                {busy === 'save' || busy === 'rename' ? (
+                    <Loader2Icon className="animate-spin" />
+                ) : (
+                    <CheckIcon />
+                )}
+                {naming === 'save' ? 'Save' : 'Rename'}
+            </Button>
+            <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setNaming(null)}
+            >
+                Cancel
+            </Button>
+        </form>
+    );
+
+    let saveControls: ReactNode;
+    if (naming) {
+        saveControls = nameForm;
+    } else if (confirmDelete && mode.kind === 'saved') {
+        saveControls = (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+                Delete “{mode.saved.name}”?
+                <Button
+                    variant="destructive"
+                    size="xs"
+                    onClick={destroy}
+                    disabled={busy !== null}
+                >
+                    {busy === 'delete' && (
+                        <Loader2Icon className="animate-spin" />
+                    )}
+                    Delete
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setConfirmDelete(false)}
+                >
+                    Cancel
+                </Button>
+            </span>
+        );
+    } else if (mode.kind === 'saved') {
+        saveControls = (
+            <>
+                {justSaved && !dirty && (
+                    <span
+                        role="status"
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                    >
+                        <CheckIcon className="size-3" aria-hidden="true" />
+                        Saved
+                    </span>
+                )}
+                {dirty && (
+                    <Button
+                        size="xs"
+                        onClick={saveChanges}
+                        disabled={busy !== null || items.length < 2}
+                    >
+                        {busy === 'update' ? (
+                            <Loader2Icon className="animate-spin" />
+                        ) : (
+                            <SaveIcon />
+                        )}
+                        Save changes
+                    </Button>
+                )}
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Rename this comparison"
+                    onClick={() => {
+                        setNameDraft(mode.saved.name);
+                        setNaming('rename');
+                        setJustSaved(false);
+                    }}
+                >
+                    <PencilIcon />
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Delete this saved comparison"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDelete(true)}
+                >
+                    <Trash2Icon />
+                </Button>
+            </>
+        );
+    } else {
+        saveControls = (
+            <Button
+                variant="outline"
+                size="xs"
+                onClick={() => {
+                    setNameDraft(suggestName(items));
+                    setNaming('save');
+                }}
+            >
+                <SaveIcon />
+                Save
+            </Button>
+        );
+    }
+    if (actionError) {
+        saveControls = (
+            <>
+                <span role="alert" className="text-xs text-destructive">
+                    {actionError}
+                </span>
+                {saveControls}
+            </>
+        );
+    }
+
+    const dialog = (
+        <TensionCompareDialog
+            items={items}
+            open={open}
+            onOpenChange={(next) => {
+                setOpen(next);
+                if (!next) resetTransient();
+            }}
+            onRemove={remove}
+            metric={metric}
+            onMetricChange={setMetric}
+            hidden={hidden}
+            onToggleHidden={toggleHidden}
+            title={mode.kind === 'saved' ? mode.saved.name : undefined}
+            saveControls={saveControls}
+            notice={
+                mode.kind === 'saved' && mode.missing > 0 ? (
+                    <p className="text-xs text-orange-700 dark:text-orange-400">
+                        {mode.missing === 1
+                            ? '1 record in this comparison was deleted since it was saved.'
+                            : `${mode.missing} records in this comparison were deleted since it was saved.`}{' '}
+                        Save changes to drop{' '}
+                        {mode.missing === 1 ? 'it' : 'them'} for good.
+                    </p>
+                ) : undefined
+            }
+        />
+    );
+
+    const selectionActions = (
+        <>
+            <Button
+                variant="outline"
+                size="xs"
+                disabled={selection.count < 2 || tooMany}
+                onClick={openSelection}
+            >
+                <ChartLineIcon />
+                Compare
+            </Button>
+            {selection.count === 1 && (
+                <span className="text-xs text-muted-foreground">
+                    Tick one more to compare
+                </span>
+            )}
+            {tooMany && (
+                <span className="text-xs text-orange-700 dark:text-orange-400">
+                    Compare up to {MAX_COMPARE} at a time
+                </span>
+            )}
+        </>
+    );
+
+    const savedMenu = (
+        <DropdownMenu onOpenChange={(o) => o && refreshList()}>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="xs" disabled={busy === 'open'}>
+                    {busy === 'open' ? (
+                        <Loader2Icon className="animate-spin" />
+                    ) : (
+                        <BookmarkIcon />
+                    )}
+                    Saved
+                    {savedList && savedList.length > 0 && (
+                        <span className="text-muted-foreground tabular-nums">
+                            {savedList.length}
+                        </span>
+                    )}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel className="text-xs">
+                    Saved {type} comparisons
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {listError ? (
+                    <p
+                        role="alert"
+                        className="px-2 py-1.5 text-xs text-destructive"
+                    >
+                        {listError}
+                    </p>
+                ) : savedList === null ? (
+                    <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Loading…
+                    </p>
+                ) : savedList.length === 0 ? (
+                    <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        None yet. Tick records, press Compare, then Save.
+                    </p>
+                ) : (
+                    savedList.map((c) => {
+                        const missing = c.record_ids.length - c.available;
+                        return (
+                            <DropdownMenuItem
+                                key={c.id}
+                                onSelect={() => void openSaved(c.id)}
+                                className="flex-col items-start gap-0"
+                            >
+                                <span className="w-full truncate text-xs font-medium">
+                                    {c.name}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground tabular-nums">
+                                    {missing > 0
+                                        ? `${c.available} of ${c.record_ids.length} records`
+                                        : `${c.record_ids.length} records`}{' '}
+                                    ·{' '}
+                                    {METRICS.find(
+                                        (m) => m.id === c.metric,
+                                    )?.label.toLowerCase()}{' '}
+                                    · {shortDate(c.updated_at)}
+                                </span>
+                            </DropdownMenuItem>
+                        );
+                    })
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+
+    return { count: selection.count, selectionActions, savedMenu, dialog };
 }
