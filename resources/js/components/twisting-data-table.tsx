@@ -106,29 +106,6 @@ interface TensionRecord {
     updated_at?: string;
 }
 
-/** "1400 dtex · 470 TPM · 9.0k RPM" — the parameters people scan together. */
-type ProcessFields = {
-    dtexNumber?: string | number;
-    tpm?: string | number;
-    rpm?: string | number;
-};
-
-function processSummary(form: ProcessFields | null | undefined): string | null {
-    if (!form) return null;
-    const parts: string[] = [];
-    if (form.dtexNumber) parts.push(`${form.dtexNumber} dtex`);
-    if (form.tpm) parts.push(`${form.tpm} TPM`);
-    if (form.rpm) {
-        const rpm = Number(form.rpm);
-        parts.push(
-            Number.isFinite(rpm) && rpm >= 1000
-                ? `${(rpm / 1000).toFixed(1)}k RPM`
-                : `${form.rpm} RPM`,
-        );
-    }
-    return parts.length ? parts.join(' · ') : null;
-}
-
 /**
  * Row menu. Its own component so the open state is a real hook call,
  * not a useState inside a column `cell` renderer.
@@ -259,27 +236,9 @@ export const columns: ColumnDef<TensionRecord>[] = [
         meta: { label: 'Operator' },
     },
     {
-        id: 'process',
-        accessorFn: (row) => processSummary(row.form_data),
-        header: 'Process',
-        enableSorting: false,
-        cell: ({ getValue }) => {
-            const value = getValue() as string | null;
-            return value ? (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                    {value}
-                </span>
-            ) : (
-                <TextCell value={null} />
-            );
-        },
-        meta: { label: 'Process (dtex · TPM · RPM)' },
-    },
-    {
         id: 'dtex',
         accessorFn: (row) => row.form_data?.dtexNumber,
         header: 'Dtex',
-        enableSorting: false,
         cell: ({ getValue }) => <NumberCell value={getValue()} />,
         meta: { label: 'Density (dtex)', align: 'right' },
     },
@@ -287,7 +246,6 @@ export const columns: ColumnDef<TensionRecord>[] = [
         id: 'tpm',
         accessorFn: (row) => row.form_data?.tpm,
         header: 'TPM',
-        enableSorting: false,
         cell: ({ getValue }) => <NumberCell value={getValue()} />,
         meta: { label: 'Table twist (TPM)', align: 'right' },
     },
@@ -295,7 +253,6 @@ export const columns: ColumnDef<TensionRecord>[] = [
         id: 'rpm',
         accessorFn: (row) => row.form_data?.rpm,
         header: 'RPM',
-        enableSorting: false,
         cell: ({ getValue }) => <NumberCell value={getValue()} />,
         meta: { label: 'Cycle speed (RPM)', align: 'right' },
     },
@@ -1645,16 +1602,12 @@ export function TwistingDataTable() {
     const grid = useServerTable<TensionRecord>({
         endpoint: '/tension-records',
         params: TWISTING_PARAMS,
-        storageKey: 'twisting-tension-records',
+        // v2: Dtex, TPM and RPM became their own visible columns, so column
+        // choices saved while they were hidden behind "Process" start fresh.
+        storageKey: 'twisting-tension-records-v2',
         // Ticks survive paging so records on different pages can be compared.
         keepSelection: true,
-        // The combined Process column covers these; they stay one click away.
-        defaultColumnVisibility: {
-            dtex: false,
-            tpm: false,
-            rpm: false,
-            meters: false,
-        },
+        defaultColumnVisibility: { meters: false },
     });
 
     const table = useReactTable({

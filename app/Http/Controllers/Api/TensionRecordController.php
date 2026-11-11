@@ -58,6 +58,10 @@ class TensionRecordController extends Controller
             'item_number' => $this->jsonExtract('metadata', '$.item_number'),
             'yarn_code' => $this->jsonExtract('metadata', '$.yarn_code'),
             'operator' => $this->jsonExtract('metadata', '$.operator'),
+            // Twisting process parameters, compared as numbers (stored as text).
+            'dtex' => 'CAST('.$this->jsonExtract('form_data', '$.dtexNumber').' AS DECIMAL(12,2))',
+            'tpm' => 'CAST('.$this->jsonExtract('form_data', '$.tpm').' AS DECIMAL(12,2))',
+            'rpm' => 'CAST('.$this->jsonExtract('form_data', '$.rpm').' AS DECIMAL(12,2))',
         ];
         $sortBy = $request->input('sort_by');
         $sortDir = strtolower((string) $request->input('sort_dir')) === 'asc' ? 'asc' : 'desc';
