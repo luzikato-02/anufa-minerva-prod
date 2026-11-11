@@ -104,6 +104,11 @@ export interface DataGridProps<T> {
     filters?: ReactNode;
     /** Shown in the toolbar while rows are selected. */
     selectionActions?: ReactNode;
+    /**
+     * Rows selected across every page. The table only holds the current page,
+     * so lists that keep selections while paging pass their own count.
+     */
+    selectedTotal?: number;
     /** Always-visible toolbar actions (export, etc.), before the Columns menu. */
     actions?: ReactNode;
     emptyMessage?: ReactNode;
@@ -138,6 +143,7 @@ export function DataGrid<T>({
     searchPlaceholder = 'Search…',
     filters,
     selectionActions,
+    selectedTotal,
     actions,
     emptyMessage = 'No records match these filters.',
     label,
@@ -148,7 +154,8 @@ export function DataGrid<T>({
     const { pageIndex, pageSize } = table.getState().pagination;
     const rows = table.getRowModel().rows;
     const visibleColumnCount = table.getVisibleLeafColumns().length;
-    const selectedCount = table.getSelectedRowModel().rows.length;
+    const selectedCount =
+        selectedTotal ?? table.getSelectedRowModel().rows.length;
     const pageCount = Math.max(table.getPageCount(), 1);
     const firstRow = total === 0 ? 0 : pageIndex * pageSize + 1;
     const lastRow = Math.min(total, (pageIndex + 1) * pageSize);
@@ -184,7 +191,7 @@ export function DataGrid<T>({
                             <Button
                                 variant="ghost"
                                 size="xs"
-                                onClick={() => table.resetRowSelection()}
+                                onClick={() => table.resetRowSelection(true)}
                             >
                                 Clear
                             </Button>

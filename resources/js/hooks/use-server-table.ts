@@ -50,6 +50,12 @@ export interface UseServerTableOptions {
     defaultColumnVisibility?: VisibilityState;
     /** Delay before a search keystroke triggers a request. */
     searchDebounceMs?: number;
+    /**
+     * Keep ticked rows when another page loads (rows are keyed by id), e.g.
+     * to compare records from different pages. Off by default, so bulk
+     * actions never touch rows the user can no longer see.
+     */
+    keepSelection?: boolean;
 }
 
 /**
@@ -64,6 +70,7 @@ export function useServerTable<T>({
     defaultPageSize = 50,
     defaultColumnVisibility = {},
     searchDebounceMs = 300,
+    keepSelection = false,
 }: UseServerTableOptions) {
     const [prefs] = useState(() => readPrefs(storageKey));
 
@@ -162,7 +169,7 @@ export function useServerTable<T>({
                 setData(page.data);
                 setTotal(page.total);
                 setPageCount(page.last_page);
-                setRowSelection({});
+                if (!keepSelection) setRowSelection({});
                 setLoading(false);
             })
             .catch((err: unknown) => {
@@ -186,6 +193,7 @@ export function useServerTable<T>({
         debouncedSearch,
         sorting,
         refreshKey,
+        keepSelection,
     ]);
 
     const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
