@@ -48,7 +48,7 @@ interface Point {
     problems: number;
 }
 
-/** Weaving keys look like "AO-3-Col12"; the axis shows "AO 3·12". */
+/** Weaving keys look like "AO-D-Col12"; the axis shows "AO D·12". */
 const shortLabel = (cell: HeatCell, weaving: boolean) => {
     if (!weaving) return cell.label;
     const [side, row, col] = cell.key.replace('Col', '').split('-');

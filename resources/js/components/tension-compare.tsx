@@ -163,16 +163,21 @@ function describe(record: DetailRecord) {
 
 const SIDE_ORDER = ['AI', 'AO', 'BI', 'BO'];
 
-/** Weaving keys "AO-3-Col12" → side order, then row, then column. */
+/** Weaving keys "AO-D-Col12" → side order, then row (A–E), then column. */
 function weavingKeyOrder(a: string, b: string) {
     const parse = (k: string) => {
         const [side, row, col] = k.replace('Col', '').split('-');
         const si = SIDE_ORDER.indexOf(side);
-        return [si === -1 ? 99 : si, side, Number(row), Number(col)] as const;
+        return [si === -1 ? 99 : si, side, row, Number(col)] as const;
     };
     const [sa, na, ra, ca] = parse(a);
     const [sb, nb, rb, cb] = parse(b);
-    return sa - sb || na.localeCompare(nb) || ra - rb || ca - cb;
+    return (
+        sa - sb ||
+        na.localeCompare(nb) ||
+        ra.localeCompare(rb, undefined, { numeric: true }) ||
+        ca - cb
+    );
 }
 
 interface Series {

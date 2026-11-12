@@ -3,7 +3,7 @@
  *
  * Shapes in `measurement_data`:
  *   twisting: { "<spindle>": { max, min } }
- *   weaving:  { "<side>": { "<row>": { "<col>": { max, min } } } }
+ *   weaving:  { "<side>": { "<row>": { "<col>": { max, min } } } }, rows lettered A–E
  * Spec and tolerance come from form_data.specTens and form_data.tensPlus.
  * The same rules are mirrored in TensionRecordController::outOfSpec().
  */
@@ -22,11 +22,11 @@ export interface Reading {
 }
 
 export interface HeatCell extends Reading {
-    /** Stable key: spindle number, or "SIDE-row-col" for weaving. */
+    /** Stable key: spindle number, or "SIDE-ROW-ColN" (e.g. "AO-D-Col12") for weaving. */
     key: string;
     /** Short label drawn in the cell (spindle number, or empty for creel). */
     label: string;
-    /** Human position, e.g. "Spindle 37" or "AO · R3 · C12". */
+    /** Human position, e.g. "Spindle 37" or "AO · Row D · Col 12". */
     position: string;
     band: Band;
     /** Problems reported at this position. */
@@ -168,10 +168,7 @@ export function creelSides(
 
     return sides.map((side) => {
         const rowsData = data[side];
-        const rowKeys = Object.keys(rowsData)
-            .map(Number)
-            .filter(Number.isFinite);
-        const rows = Math.max(0, ...rowKeys);
+        const rowLabels = creelRows(Object.keys(rowsData));
         let cols = 0;
         for (const r of Object.keys(rowsData)) {
             const colKeys = Object.keys(rowsData[r] ?? {})
@@ -181,25 +178,45 @@ export function creelSides(
         }
 
         const cells: HeatCell[] = [];
-        for (let r = 1; r <= rows; r++) {
+        for (const r of rowLabels) {
             for (let c = 1; c <= cols; c++) {
                 const raw = (
-                    rowsData[String(r)] as Record<string, unknown> | undefined
+                    rowsData[r] as Record<string, unknown> | undefined
                 )?.[String(c)];
                 const reading = readingOf(raw);
                 const storedPosition = `${side}-${r}-Col${c}`;
                 cells.push({
                     key: storedPosition,
                     label: '',
-                    position: `${side} · R${r} · C${c}`,
+                    position: `${side} · Row ${r} · Col ${c}`,
                     band: classify(reading, spec),
                     problems: byPosition.get(storedPosition) ?? [],
                     ...reading,
                 });
             }
         }
-        return { side, rows, cols, cells };
+        return { side, rows: rowLabels.length, cols, cells };
     });
+}
+
+/**
+ * The rows of one creel side, top to bottom. The weaving numpad stores rows as
+ * letters A–E; the grid runs from A to the last letter seen so skipped rows
+ * show as missing. Numeric rows (1…max) are still read the same way, and any
+ * other key is kept at the end rather than dropped.
+ */
+function creelRows(keys: string[]): string[] {
+    const letters = keys.filter((k) => /^[A-Z]$/.test(k));
+    const numbers = keys.filter((k) => /^\d+$/.test(k)).map(Number);
+    const rows: string[] = [];
+    if (letters.length) {
+        const last = Math.max(...letters.map((l) => l.charCodeAt(0)));
+        for (let code = 65; code <= last; code++)
+            rows.push(String.fromCharCode(code));
+    }
+    for (let n = 1; n <= Math.max(0, ...numbers); n++) rows.push(String(n));
+    const other = keys.filter((k) => !rows.includes(k)).sort();
+    return [...rows, ...other];
 }
 
 export interface BandCounts {
