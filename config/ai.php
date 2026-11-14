@@ -44,7 +44,8 @@ return [
         // Runs the tool loop, so it needs reliable function calling. A provider model id, e.g. one listed
         // by `php artisan ai:models`.
         'model' => env('AI_CHAT_MODEL'),
-        'temperature' => (float) env('AI_CHAT_TEMPERATURE', 0.1),
+        // Left out of requests unless set: OCTA's Claude models reject a temperature field.
+        'temperature' => env('AI_CHAT_TEMPERATURE'),
         // Tool rounds per question before the agent is made to answer with what it has.
         'max_tool_rounds' => (int) env('AI_CHAT_MAX_TOOL_ROUNDS', 6),
         // Earlier messages sent back to the model with each question.

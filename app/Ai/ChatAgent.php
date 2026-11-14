@@ -47,7 +47,7 @@ class ChatAgent
                 $model,
                 $this->messages($conversation, $user, $tools),
                 $offerTools,
-                ['temperature' => (float) config('ai.chat.temperature')],
+                $this->options(),
             );
             $latency = (int) round((microtime(true) - $started) * 1000);
 
@@ -162,6 +162,14 @@ Rules:
 
 The user is {$user->name}.
 PROMPT;
+    }
+
+    /** Optional sampling settings, sent only when configured. */
+    private function options(): array
+    {
+        $temperature = config('ai.chat.temperature');
+
+        return is_numeric($temperature) ? ['temperature' => (float) $temperature] : [];
     }
 
     /** Content may come back as a string or as a list of chunks. */
