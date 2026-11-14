@@ -17,7 +17,10 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
+use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -30,6 +33,9 @@ class AiChatTest extends TestCase
         parent::setUp();
         config(['ai.provider.key' => 'test-key', 'ai.chat.model' => 'test-model', 'ai.chat.timezone' => 'Asia/Jakarta']);
         Carbon::setTestNow(Carbon::parse('2026-11-14 03:00:00', 'UTC')); // 10:00 in Jakarta
+        // The provider's model list, as if already fetched, so tests don't spend fake responses on it.
+        Cache::put('ai-chat:models', ['test-model', 'other-model', 'gemini-2.5-flash-image'], 600);
+        Sleep::fake();
     }
 
     protected function tearDown(): void
@@ -154,6 +160,74 @@ class AiChatTest extends TestCase
         Http::assertSent(fn (Request $r) => $r->url() === 'https://octa.example/v1/chat/completions'
             && $r->hasHeader('Authorization', 'Bearer test-key')
             && $r['model'] === 'test-model');
+    }
+
+    public function test_the_page_offers_the_providers_chat_models_and_the_effort_levels(): void
+    {
+        $this->withoutVite()->actingAs($this->user(['ai-chat.use']))->get('/ai-chat')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('ai-chat')
+                ->where('models', ['test-model', 'other-model']) // the image model is left out
+                ->where('defaultModel', 'test-model')
+                ->where('efforts', ['low', 'medium', 'high'])
+                ->where('defaultEffort', null));
+    }
+
+    public function test_the_chosen_model_and_effort_are_sent_and_recorded(): void
+    {
+        Http::fake(['*' => Http::response(self::completion(['content' => 'ok']))]);
+        $user = $this->user(['ai-chat.use']);
+
+        $id = $this->actingAs($user)->postJson('/ai-chat/messages', ['message' => 'hi', 'model' => 'other-model', 'effort' => 'high'])
+            ->assertOk()
+            ->assertJsonPath('data.conversation.model', 'other-model')
+            ->assertJsonPath('data.conversation.effort', 'high')
+            ->assertJsonPath('data.messages.1.model', 'other-model')
+            ->assertJsonPath('data.messages.1.effort', 'high')
+            ->json('data.conversation.id');
+        Http::assertSent(fn (Request $r) => $r['model'] === 'other-model' && $r['reasoning_effort'] === 'high');
+
+        // Switching to auto partway through stops sending an effort, and is remembered on the conversation.
+        $this->actingAs($user)->postJson('/ai-chat/messages', ['conversation_id' => $id, 'message' => 'again', 'effort' => 'auto'])
+            ->assertOk()
+            ->assertJsonPath('data.conversation.model', 'other-model')
+            ->assertJsonPath('data.conversation.effort', null);
+        $this->assertArrayNotHasKey('reasoning_effort', Http::recorded()[1][0]->data());
+        $this->actingAs($user)->getJson("/ai-chat/conversations/{$id}")
+            ->assertJsonPath('data.effort', null)
+            ->assertJsonPath('data.messages.1.effort', 'high')
+            ->assertJsonPath('data.messages.3.effort', null);
+    }
+
+    public function test_a_model_that_is_not_offered_is_refused(): void
+    {
+        Http::fake();
+        $user = $this->user(['ai-chat.use']);
+
+        $this->actingAs($user)->postJson('/ai-chat/messages', ['message' => 'hi', 'model' => 'gemini-2.5-flash-image'])->assertStatus(422);
+        $this->actingAs($user)->postJson('/ai-chat/messages', ['message' => 'hi', 'effort' => 'extreme'])->assertStatus(422);
+        Http::assertNothingSent();
+    }
+
+    public function test_a_model_the_provider_stopped_allowing_asks_the_user_to_pick_another(): void
+    {
+        Http::fake(['*' => Http::response(['error' => 'MODEL_NOT_ALLOWED', 'message' => 'not allowed'], 403)]);
+
+        $this->actingAs($this->user(['ai-chat.use']))->postJson('/ai-chat/messages', ['message' => 'hi'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'The model "test-model" is no longer available. Pick another one.');
+        $this->assertFalse(Cache::has('ai-chat:models'));
+        $this->assertSame(0, AiConversation::withTrashed()->count());
+    }
+
+    public function test_octa_gateway_errors_are_retried(): void
+    {
+        Http::fakeSequence()
+            ->push(['error' => 'UPSTREAM_ERROR_400', 'message' => 'LLM Gateway request failed'], 400)
+            ->push(self::completion(['content' => 'ok']));
+
+        $this->actingAs($this->user(['ai-chat.use']))->postJson('/ai-chat/messages', ['message' => 'hi'])
+            ->assertOk()->assertJsonPath('data.messages.1.content', 'ok');
     }
 
     public function test_the_chat_says_so_when_the_provider_is_not_configured(): void

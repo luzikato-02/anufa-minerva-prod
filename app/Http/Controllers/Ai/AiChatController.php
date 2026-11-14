@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ai;
 
 use App\Ai\ChatAgent;
 use App\Ai\Llm\LlmException;
+use App\Ai\Llm\ModelCatalog;
 use App\Ai\Tools\ToolRegistry;
 use App\Http\Controllers\Controller;
 use App\Models\AiConversation;
@@ -19,10 +20,14 @@ use Inertia\Response;
 /** The data chat: a user's own conversations with the data assistant. */
 class AiChatController extends Controller
 {
-    public function page(Request $request, ToolRegistry $registry): Response
+    public function page(Request $request, ToolRegistry $registry, ModelCatalog $catalog): Response
     {
         return Inertia::render('ai-chat', [
             'tools' => array_keys($registry->forUser($request->user())),
+            'models' => $catalog->models(),
+            'defaultModel' => $catalog->defaultModel(),
+            'efforts' => $catalog->efforts(),
+            'defaultEffort' => $catalog->defaultEffort(),
         ]);
     }
 
@@ -43,21 +48,32 @@ class AiChatController extends Controller
         return response()->json(['data' => [
             'id' => $conversation->id,
             'title' => $conversation->title,
+            'model' => $conversation->model,
+            'effort' => $conversation->effort,
             'messages' => $this->transcript($conversation),
         ]]);
     }
 
-    public function store(Request $request, ChatAgent $agent): JsonResponse
+    public function store(Request $request, ChatAgent $agent, ModelCatalog $catalog): JsonResponse
     {
         $validated = $request->validate([
             'conversation_id' => 'nullable|integer',
             'message' => 'required|string|max:4000',
+            'model' => 'nullable|string|max:60',
+            // "auto" (or null) leaves the effort to the model.
+            'effort' => ['nullable', 'string', 'in:auto,'.implode(',', $catalog->efforts())],
         ]);
         $user = $request->user();
 
-        if (! config('ai.provider.key') || ! config('ai.chat.model')) {
-            return response()->json(['message' => 'The assistant is not set up yet: AI_API_KEY and AI_CHAT_MODEL are missing.'], 503);
+        if (! config('ai.provider.key')) {
+            return response()->json(['message' => 'The assistant is not set up yet: AI_API_KEY is missing.'], 503);
         }
+
+        $model = $validated['model'] ?? null;
+        if ($model !== null && ! $catalog->allows($model)) {
+            return response()->json(['message' => "The model \"{$model}\" isn't available. Pick another one."], 422);
+        }
+        $effort = ($validated['effort'] ?? 'auto') === 'auto' ? null : $validated['effort'];
 
         $limiterKey = 'ai-chat:'.$user->id;
         if (RateLimiter::tooManyAttempts($limiterKey, (int) config('ai.chat.rate_limit_per_hour'))) {
@@ -69,11 +85,19 @@ class AiChatController extends Controller
 
         $conversation = isset($validated['conversation_id'])
             ? $this->owned($request, $validated['conversation_id'])
-            : AiConversation::create([
+            : new AiConversation([
                 'user_id' => $user->id,
                 'title' => Str::limit(preg_replace('/\s+/', ' ', trim($validated['message'])), 80),
-                'model' => config('ai.chat.model'),
             ]);
+        // The choice can change partway through a conversation; it applies from this question on.
+        $conversation->model = $model ?? $conversation->model ?? $catalog->defaultModel();
+        if ($request->has('effort') || ! $conversation->exists) {
+            $conversation->effort = $effort;
+        }
+        if (! $conversation->model) {
+            return response()->json(['message' => 'The assistant is not set up yet: no model is available.'], 503);
+        }
+        $conversation->save();
 
         // A tool loop can make several model calls; give it room beyond PHP's default 30s.
         set_time_limit(300);
@@ -82,11 +106,17 @@ class AiChatController extends Controller
         try {
             $agent->ask($conversation, $user, trim($validated['message']));
         } catch (LlmException $e) {
-            Log::error('AI chat: provider request failed', ['conversation' => $conversation->id, 'error' => $e->getMessage()]);
+            Log::error('AI chat: provider request failed', ['conversation' => $conversation->id, 'model' => $conversation->model, 'error' => $e->getMessage()]);
             // Drop this half-finished turn so a retry starts clean.
             $conversation->messages()->where('id', '>', $lastId)->delete();
             if ($lastId === 0) {
                 $conversation->forceDelete();
+            }
+
+            if ($e->providerCode === 'MODEL_NOT_ALLOWED') {
+                $catalog->refresh();
+
+                return response()->json(['message' => "The model \"{$conversation->model}\" is no longer available. Pick another one."], 422);
             }
 
             return response()->json(['message' => 'The assistant could not be reached. Try again in a moment.'], 502);
@@ -98,7 +128,13 @@ class AiChatController extends Controller
         ));
 
         return response()->json(['data' => [
-            'conversation' => ['id' => $conversation->id, 'title' => $conversation->title, 'updated_at' => $conversation->fresh()->updated_at],
+            'conversation' => [
+                'id' => $conversation->id,
+                'title' => $conversation->title,
+                'model' => $conversation->model,
+                'effort' => $conversation->effort,
+                'updated_at' => $conversation->fresh()->updated_at,
+            ],
             'messages' => $turn,
         ]]);
     }
@@ -121,7 +157,7 @@ class AiChatController extends Controller
      */
     private function transcript(AiConversation $conversation): array
     {
-        $messages = $conversation->messages()->get(['id', 'role', 'content', 'tool_calls', 'created_at']);
+        $messages = $conversation->messages()->get(['id', 'role', 'content', 'tool_calls', 'model', 'effort', 'created_at']);
         $runs = AiToolRun::whereIn('ai_message_id', $messages->where('role', 'assistant')->pluck('id'))
             ->orderBy('id')
             ->get(['ai_message_id', 'tool', 'arguments', 'row_count', 'duration_ms', 'error'])
@@ -144,7 +180,10 @@ class AiChatController extends Controller
                     ];
                 }
                 if (! $m->tool_calls) {
-                    $out[] = ['id' => $m->id, 'role' => 'assistant', 'content' => $m->content, 'sources' => $sources, 'created_at' => $m->created_at];
+                    $out[] = [
+                        'id' => $m->id, 'role' => 'assistant', 'content' => $m->content, 'sources' => $sources,
+                        'model' => $m->model, 'effort' => $m->effort, 'created_at' => $m->created_at,
+                    ];
                     $sources = [];
                 }
             }

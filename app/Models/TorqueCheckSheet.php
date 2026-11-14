@@ -15,7 +15,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
  * reading also carries its own side (Ai/Ao/Bi/Bo), so one sheet can hold a separate 105x5 grid per side. */
 class TorqueCheckSheet extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = ['client_uuid', 'session_id', 'check_date', 'operator_name', 'machine_number', 'creel_type_id', 'user_id'];
 

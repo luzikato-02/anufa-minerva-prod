@@ -12,7 +12,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 /** A category of creel with its own acceptable torque range, set by an admin/engineer. */
 class CreelType extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = ['name', 'torque_min', 'torque_max'];
 

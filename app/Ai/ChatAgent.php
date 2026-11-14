@@ -29,11 +29,9 @@ class ChatAgent
     /** @return AiMessage the final assistant message */
     public function ask(AiConversation $conversation, User $user, string $question): AiMessage
     {
-        $model = config('ai.chat.model') ?: throw new LlmException('AI_CHAT_MODEL is not set.');
+        $model = $conversation->model ?: throw new LlmException('No model chosen for this conversation.');
+        $effort = $conversation->effort;
         $conversation->messages()->create(['role' => 'user', 'content' => $question]);
-        if ($conversation->model !== $model) {
-            $conversation->update(['model' => $model]);
-        }
 
         $tools = $this->registry->forUser($user);
         $definitions = array_values(array_map(fn (Tool $t) => $t->definition(), $tools));
@@ -47,7 +45,7 @@ class ChatAgent
                 $model,
                 $this->messages($conversation, $user, $tools),
                 $offerTools,
-                $this->options(),
+                $this->options($effort),
             );
             $latency = (int) round((microtime(true) - $started) * 1000);
 
@@ -57,6 +55,8 @@ class ChatAgent
                 'role' => 'assistant',
                 'content' => $this->text($reply['content'] ?? ''),
                 'tool_calls' => $toolCalls ?: null,
+                'model' => $model,
+                'effort' => $effort,
                 'prompt_tokens' => $response['usage']['prompt_tokens'] ?? null,
                 'completion_tokens' => $response['usage']['completion_tokens'] ?? null,
                 'latency_ms' => $latency,
@@ -164,12 +164,19 @@ The user is {$user->name}.
 PROMPT;
     }
 
-    /** Optional sampling settings, sent only when configured. */
-    private function options(): array
+    /** Optional request settings: the chosen effort, and a temperature only when configured. */
+    private function options(?string $effort): array
     {
+        $options = [];
+        if ($effort !== null) {
+            $options['reasoning_effort'] = $effort;
+        }
         $temperature = config('ai.chat.temperature');
+        if (is_numeric($temperature)) {
+            $options['temperature'] = (float) $temperature;
+        }
 
-        return is_numeric($temperature) ? ['temperature' => (float) $temperature] : [];
+        return $options;
     }
 
     /** Content may come back as a string or as a list of chunks. */

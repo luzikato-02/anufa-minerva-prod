@@ -41,10 +41,17 @@ return [
     */
 
     'chat' => [
-        // Runs the tool loop, so it needs reliable function calling. A provider model id, e.g. one listed
-        // by `php artisan ai:models`.
+        // The default model. It runs the tool loop, so it needs reliable function calling. A provider
+        // model id, e.g. one listed by `php artisan ai:models`.
         'model' => env('AI_CHAT_MODEL'),
-        // Left out of requests unless set: OCTA's Claude models reject a temperature field.
+        // Models users may pick, comma separated. Empty: every chat model the provider lists for the key.
+        'models' => array_values(array_filter(array_map('trim', explode(',', (string) env('AI_CHAT_MODELS', ''))))),
+        // Model ids matching this are never offered: they can't hold a tool-using conversation.
+        'exclude_models' => env('AI_CHAT_EXCLUDE_MODELS', '/image|embed|tts|whisper|audio|moderation|rerank/i'),
+        // Effort levels users may pick, sent as reasoning_effort. Null ("auto") leaves it to the model.
+        'efforts' => ['low', 'medium', 'high'],
+        'effort' => env('AI_CHAT_EFFORT'),
+        // Sent only when set; the models' own defaults suit the data chat.
         'temperature' => env('AI_CHAT_TEMPERATURE'),
         // Tool rounds per question before the agent is made to answer with what it has.
         'max_tool_rounds' => (int) env('AI_CHAT_MAX_TOOL_ROUNDS', 6),

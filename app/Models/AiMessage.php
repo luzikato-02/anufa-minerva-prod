@@ -14,7 +14,7 @@ class AiMessage extends Model
 {
     protected $fillable = [
         'ai_conversation_id', 'role', 'content', 'tool_calls', 'tool_call_id', 'tool_name',
-        'prompt_tokens', 'completion_tokens', 'latency_ms',
+        'prompt_tokens', 'completion_tokens', 'latency_ms', 'model', 'effort',
     ];
 
     protected $casts = [

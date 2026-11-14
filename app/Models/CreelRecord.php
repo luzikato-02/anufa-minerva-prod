@@ -10,7 +10,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 
 class CreelRecord extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'order_number',
@@ -25,11 +25,11 @@ class CreelRecord extends Model
     ];
 
     protected $casts = [
-        'batches'     => 'array',
+        'batches' => 'array',
         'raw_batches' => 'array',
-        'metadata'    => 'array',
-        'created_at'  => 'datetime',
-        'updated_at'  => 'datetime',
+        'metadata' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     public function getActivitylogOptions(): LogOptions

@@ -13,7 +13,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 /** One paper stock sheet: a dated list of spool lots recorded by one person. */
 class StockSheet extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = ['client_uuid', 'session_id', 'sheet_date', 'leader', 'note', 'user_id'];
 

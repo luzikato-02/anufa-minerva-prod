@@ -12,7 +12,7 @@ class AiConversation extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['user_id', 'title', 'model'];
+    protected $fillable = ['user_id', 'title', 'model', 'effort'];
 
     public function user(): BelongsTo
     {

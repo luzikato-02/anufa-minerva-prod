@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Http;
  */
 class LlmClient
 {
-    private function http(): PendingRequest
+    private function http(?int $timeout = null): PendingRequest
     {
         $key = config('ai.provider.key');
         if (! $key) {
@@ -25,10 +25,17 @@ class LlmClient
             ->withToken($key)
             ->acceptJson()
             ->asJson()
-            ->timeout((int) config('ai.provider.timeout'))
-            // Retry rate limits and server errors; any other 4xx is our fault and won't improve.
-            ->retry(3, 1000, fn ($e) => $e instanceof RequestException
-                && ($e->response->status() === 429 || $e->response->serverError()), throw: false);
+            ->timeout($timeout ?? (int) config('ai.provider.timeout'))
+            // Retry rate limits, server errors and OCTA's gateway errors (it reports a failed upstream call
+            // as a 400 UPSTREAM_ERROR_*, and they pass on retry). Any other 4xx is our fault and won't improve.
+            ->retry([1000, 2000, 4000], fn ($e) => $e instanceof RequestException && self::retryable($e->response), throw: false);
+    }
+
+    private static function retryable(\Illuminate\Http\Client\Response $response): bool
+    {
+        return $response->status() === 429
+            || $response->serverError()
+            || str_starts_with((string) $response->json('error'), 'UPSTREAM_ERROR');
     }
 
     /**
@@ -54,14 +61,15 @@ class LlmClient
     {
         return array_values(array_filter(array_map(
             fn ($m) => is_array($m) ? ($m['id'] ?? null) : null,
-            $this->send('get', '/models')['data'] ?? [],
+            $this->send('get', '/models', timeout: 10)['data'] ?? [],
         )));
     }
 
-    private function send(string $method, string $path, array $body = []): array
+    private function send(string $method, string $path, array $body = [], ?int $timeout = null): array
     {
         try {
-            $response = $method === 'get' ? $this->http()->get($path) : $this->http()->post($path, $body);
+            $http = $this->http($timeout);
+            $response = $method === 'get' ? $http->get($path) : $http->post($path, $body);
         } catch (ConnectionException $e) {
             throw new LlmException('Could not reach the AI provider: '.$e->getMessage(), previous: $e);
         }
@@ -70,6 +78,7 @@ class LlmClient
             throw new LlmException(
                 "The AI provider returned HTTP {$response->status()}: ".mb_substr($response->body(), 0, 500),
                 $response->status(),
+                providerCode: is_string($response->json('error')) ? $response->json('error') : null,
             );
         }
 

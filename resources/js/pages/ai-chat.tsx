@@ -1,5 +1,12 @@
 import { Button } from '@/components/ui/button';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     Sheet,
     SheetContent,
     SheetHeader,
@@ -13,6 +20,11 @@ import {
     type ChatMessage,
     type ChatSource,
     type ConversationListItem,
+    type Effort,
+    EFFORT_OPTIONS,
+    loadSettings,
+    modelLabel,
+    saveSettings,
     STARTERS,
     TOOL_LABELS,
 } from '@/lib/ai-chat';
@@ -41,7 +53,22 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ask the Data', href: '/ai-chat' },
 ];
 
-export default function AiChat({ tools }: { tools: string[] }) {
+interface Props {
+    tools: string[];
+    /** Models the user may pick, live from the provider. */
+    models: string[];
+    defaultModel: string | null;
+    efforts: Effort[];
+    defaultEffort: Effort | null;
+}
+
+export default function AiChat({
+    tools,
+    models,
+    defaultModel,
+    efforts,
+    defaultEffort,
+}: Props) {
     const [conversations, setConversations] = useState<ConversationListItem[]>(
         [],
     );
@@ -52,6 +79,30 @@ export default function AiChat({ tools }: { tools: string[] }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [historyOpen, setHistoryOpen] = useState(false);
+    // The browser's last choice, if it's still on offer; else the server's default.
+    const [model, setModel] = useState<string | null>(() => {
+        const saved = loadSettings().model;
+        return saved && models.includes(saved) ? saved : defaultModel;
+    });
+    const [effort, setEffort] = useState<Effort | null>(() => {
+        const saved = loadSettings();
+        return 'effort' in saved &&
+            (saved.effort === null || efforts.includes(saved.effort!))
+            ? (saved.effort ?? null)
+            : defaultEffort;
+    });
+    const choose = (next: {
+        model?: string | null;
+        effort?: Effort | null;
+    }) => {
+        const settings = {
+            model: next.model !== undefined ? next.model : model,
+            effort: next.effort !== undefined ? next.effort : effort,
+        };
+        setModel(settings.model);
+        setEffort(settings.effort);
+        saveSettings(settings);
+    };
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -73,7 +124,13 @@ export default function AiChat({ tools }: { tools: string[] }) {
         setError(null);
         setLoading(true);
         try {
-            setMessages((await chatApi.get(id)).messages);
+            const conversation = await chatApi.get(id);
+            setMessages(conversation.messages);
+            // Carry on with the conversation's own settings, when its model is still offered.
+            if (conversation.model && models.includes(conversation.model)) {
+                setModel(conversation.model);
+            }
+            setEffort(conversation.effort);
         } catch (e) {
             setError((e as Error).message);
         } finally {
@@ -115,6 +172,8 @@ export default function AiChat({ tools }: { tools: string[] }) {
             const { conversation, messages: turn } = await chatApi.send(
                 question,
                 activeId,
+                model,
+                effort,
             );
             setActiveId(conversation.id);
             setMessages((ms) => [
@@ -267,10 +326,21 @@ export default function AiChat({ tools }: { tools: string[] }) {
                                 <ArrowUp />
                             </Button>
                         </div>
-                        <p className="mx-auto mt-1.5 max-w-3xl text-xs text-muted-foreground">
-                            Answers come from Minerva's records via Telkomsel
-                            OCTA. Check the sources before acting on a number.
-                        </p>
+                        <div className="mx-auto mt-1.5 flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
+                            <ChatSettings
+                                models={models}
+                                model={model}
+                                efforts={efforts}
+                                effort={effort}
+                                onChange={choose}
+                                disabled={sending}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Answers come from Minerva's records via
+                                Telkomsel OCTA. Check the sources before acting
+                                on a number.
+                            </p>
+                        </div>
                     </form>
                 </section>
             </div>
@@ -390,9 +460,101 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
                     {message.content}
                 </ReactMarkdown>
             </div>
-            {message.sources && message.sources.length > 0 && (
-                <Sources sources={message.sources} />
-            )}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {message.sources && message.sources.length > 0 && (
+                    <Sources sources={message.sources} />
+                )}
+                {message.model && (
+                    <span className="text-xs text-muted-foreground">
+                        {modelLabel(message.model)}
+                        {message.effort &&
+                            ` · ${effortLabel(message.effort)} effort`}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function effortLabel(effort: Effort | 'auto'): string {
+    return EFFORT_OPTIONS.find((o) => o.value === effort)?.label ?? effort;
+}
+
+/** Model and effort pickers, like the ones under a Claude chat box. */
+function ChatSettings({
+    models,
+    model,
+    efforts,
+    effort,
+    onChange,
+    disabled,
+}: {
+    models: string[];
+    model: string | null;
+    efforts: Effort[];
+    effort: Effort | null;
+    onChange: (next: { model?: string | null; effort?: Effort | null }) => void;
+    disabled: boolean;
+}) {
+    const effortOptions = EFFORT_OPTIONS.filter(
+        (o) => o.value === 'auto' || efforts.includes(o.value),
+    );
+
+    return (
+        <div className="flex items-center gap-1">
+            <Select
+                value={model ?? undefined}
+                onValueChange={(value) => onChange({ model: value })}
+                disabled={disabled || models.length === 0}
+            >
+                <SelectTrigger
+                    aria-label="Model"
+                    className="h-7 w-auto gap-1 border-none px-2 text-xs shadow-none hover:bg-muted"
+                >
+                    <SelectValue placeholder="No model available" />
+                </SelectTrigger>
+                <SelectContent>
+                    {models.map((id) => (
+                        <SelectItem key={id} value={id} className="text-xs">
+                            {modelLabel(id)}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Select
+                value={effort ?? 'auto'}
+                onValueChange={(value) =>
+                    onChange({
+                        effort: value === 'auto' ? null : (value as Effort),
+                    })
+                }
+                disabled={disabled}
+            >
+                <SelectTrigger
+                    aria-label="Effort"
+                    className="h-7 w-auto gap-1 border-none px-2 text-xs shadow-none hover:bg-muted"
+                >
+                    <SelectValue>
+                        {effortLabel(effort ?? 'auto')} effort
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {effortOptions.map((o) => (
+                        <SelectItem
+                            key={o.value}
+                            value={o.value}
+                            className="text-xs"
+                        >
+                            <span className="flex flex-col">
+                                <span>{o.label}</span>
+                                <span className="text-muted-foreground">
+                                    {o.hint}
+                                </span>
+                            </span>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
         </div>
     );
 }

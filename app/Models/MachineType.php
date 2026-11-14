@@ -15,9 +15,9 @@ class MachineType extends Model
     ];
 
     protected $casts = [
-        'total_spindles'    => 'integer',
-        'rpm_min'           => 'integer',
-        'rpm_max'           => 'integer',
+        'total_spindles' => 'integer',
+        'rpm_min' => 'integer',
+        'rpm_max' => 'integer',
         'min_runtime_hours' => 'decimal:3',
         'max_runtime_hours' => 'decimal:3',
     ];

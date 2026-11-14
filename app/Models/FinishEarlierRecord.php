@@ -13,12 +13,12 @@ class FinishEarlierRecord extends Model
 
     protected $fillable = [
         'metadata',
-        'entries'
+        'entries',
     ];
 
     protected $casts = [
         'metadata' => 'array',
-        'entries'  => 'array',
+        'entries' => 'array',
     ];
 
     /**

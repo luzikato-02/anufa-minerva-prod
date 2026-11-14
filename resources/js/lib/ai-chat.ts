@@ -7,11 +7,16 @@ export interface ChatSource {
     error: boolean;
 }
 
+export type Effort = 'low' | 'medium' | 'high';
+
 export interface ChatMessage {
     id: number;
     role: 'user' | 'assistant';
     content: string;
     sources?: ChatSource[];
+    /** Assistant answers: what produced them. Null effort means auto. */
+    model?: string | null;
+    effort?: Effort | null;
     created_at: string;
 }
 
@@ -19,6 +24,11 @@ export interface ConversationListItem {
     id: number;
     title: string | null;
     updated_at: string;
+}
+
+export interface ConversationSettings {
+    model: string | null;
+    effort: Effort | null;
 }
 
 async function csrfToken(): Promise<string> {
@@ -66,18 +76,29 @@ export const chatApi = {
 
     get: (id: number) =>
         request<{
-            data: { id: number; title: string | null; messages: ChatMessage[] };
+            data: {
+                id: number;
+                title: string | null;
+                messages: ChatMessage[];
+            } & ConversationSettings;
         }>(`/ai-chat/conversations/${id}`, 'GET').then((r) => r.data),
 
-    send: (message: string, conversationId: number | null) =>
+    send: (
+        message: string,
+        conversationId: number | null,
+        model: string | null,
+        effort: Effort | null,
+    ) =>
         request<{
             data: {
-                conversation: ConversationListItem;
+                conversation: ConversationListItem & ConversationSettings;
                 messages: ChatMessage[];
             };
         }>('/ai-chat/messages', 'POST', {
             message,
             conversation_id: conversationId,
+            model,
+            effort: effort ?? 'auto',
         }).then((r) => r.data),
 
     remove: (id: number) =>
@@ -111,3 +132,69 @@ export const STARTERS: { tool: string; text: string }[] = [
         text: 'Which machines had torque readings out of range this week?',
     },
 ];
+
+const BRANDS: Record<string, string> = {
+    claude: 'Claude',
+    deepseek: 'DeepSeek',
+    gemini: 'Gemini',
+    gpt: 'GPT',
+    kimi: 'Kimi',
+    mistral: 'Mistral',
+};
+
+/**
+ * A readable name for a provider model id: "claude-sonnet-5-5" → "Claude Sonnet 5.5",
+ * "deepseek-v4.1-flash" → "DeepSeek V4.1 Flash". Unknown shapes are title-cased.
+ */
+export function modelLabel(id: string): string {
+    const parts = id.split('-');
+    const words: string[] = [];
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        // Claude-style versions are split across parts: 5-5 → 5.5.
+        if (
+            /^\d+$/.test(part) &&
+            /^\d{1,2}$/.test(parts[i + 1] ?? '') &&
+            part.length <= 2
+        ) {
+            words.push(`${part}.${parts[++i]}`);
+        } else if (BRANDS[part]) {
+            words.push(BRANDS[part]);
+        } else if (/^v\d/.test(part)) {
+            words.push(part.toUpperCase());
+        } else {
+            words.push(part.charAt(0).toUpperCase() + part.slice(1));
+        }
+    }
+    return words.join(' ');
+}
+
+export const EFFORT_OPTIONS: {
+    value: Effort | 'auto';
+    label: string;
+    hint: string;
+}[] = [
+    { value: 'auto', label: 'Auto', hint: "The model's default" },
+    { value: 'low', label: 'Low', hint: 'Fastest, uses the least credit' },
+    { value: 'medium', label: 'Medium', hint: 'More thinking per step' },
+    { value: 'high', label: 'High', hint: 'Most thorough, slowest' },
+];
+
+const SETTINGS_KEY = 'ai-chat:settings';
+
+/** The viewer's last model and effort, if the browser kept them. */
+export function loadSettings(): Partial<ConversationSettings> {
+    try {
+        return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
+    } catch {
+        return {};
+    }
+}
+
+export function saveSettings(settings: ConversationSettings): void {
+    try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+        // Private mode or blocked storage: the choice just isn't remembered.
+    }
+}

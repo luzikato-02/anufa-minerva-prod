@@ -10,7 +10,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 
 class StockTakingRecord extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'session_id',
@@ -83,36 +83,36 @@ class StockTakingRecord extends Model
     }
 
     public function combineBatchData()
-{
-    $indv = collect($this->indv_batch_data ?? []);
-    $recorded = collect($this->recorded_batches ?? []);
+    {
+        $indv = collect($this->indv_batch_data ?? []);
+        $recorded = collect($this->recorded_batches ?? []);
 
-    // Create a lookup map from recorded batches
-    $recordedMap = $recorded->keyBy(fn($item) => $item['batch_number']);
+        // Create a lookup map from recorded batches
+        $recordedMap = $recorded->keyBy(fn ($item) => $item['batch_number']);
 
-    $combined = $indv->map(function ($batch) use ($recordedMap) {
-        // Normalize key from indv_batch_data
-        $batchNumber = $batch['batch_number'] ?? null;
-        $recorded = $recordedMap->get($batchNumber);
+        $combined = $indv->map(function ($batch) use ($recordedMap) {
+            // Normalize key from indv_batch_data
+            $batchNumber = $batch['batch_number'] ?? null;
+            $recorded = $recordedMap->get($batchNumber);
 
-        return [
-            'batch_number' => $batchNumber,
-            'material_code' => $batch['material_code'] ?? null,
-            'material_description' => $batch['material_description'] ?? null,
-            'is_recorded' => $recorded ? true : false,
-            'actual_weight' => $recorded['actual_weight'] ?? null,
-            'total_bobbins' => $recorded['total_bobbins'] ?? null,
-            'line_position' => $recorded['line_position'] ?? null,
-            'row_position' => $recorded['row_position'] ?? null,
-            'timestamp_found' => $recorded['timestamp_found'] ?? null,
-            'recorded_at' => $recorded['recorded_at'] ?? null,
-            'user_found' => $recorded['user_found'] ?? null,
-            'explanation' => $recorded['explanation'] ?? null,
-        ];
-    });
+            return [
+                'batch_number' => $batchNumber,
+                'material_code' => $batch['material_code'] ?? null,
+                'material_description' => $batch['material_description'] ?? null,
+                'is_recorded' => $recorded ? true : false,
+                'actual_weight' => $recorded['actual_weight'] ?? null,
+                'total_bobbins' => $recorded['total_bobbins'] ?? null,
+                'line_position' => $recorded['line_position'] ?? null,
+                'row_position' => $recorded['row_position'] ?? null,
+                'timestamp_found' => $recorded['timestamp_found'] ?? null,
+                'recorded_at' => $recorded['recorded_at'] ?? null,
+                'user_found' => $recorded['user_found'] ?? null,
+                'explanation' => $recorded['explanation'] ?? null,
+            ];
+        });
 
-    return $combined->values();
-}
+        return $combined->values();
+    }
 
     public function getActivitylogOptions(): LogOptions
     {
