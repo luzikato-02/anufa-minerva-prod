@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Ai;
 
 use App\Ai\ChatAgent;
-use App\Ai\Mistral\MistralException;
+use App\Ai\Llm\LlmException;
 use App\Ai\Tools\ToolRegistry;
 use App\Http\Controllers\Controller;
 use App\Models\AiConversation;
@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** The data chat: a user's own conversations with the Mistral-backed data assistant. */
+/** The data chat: a user's own conversations with the data assistant. */
 class AiChatController extends Controller
 {
     public function page(Request $request, ToolRegistry $registry): Response
@@ -55,6 +55,10 @@ class AiChatController extends Controller
         ]);
         $user = $request->user();
 
+        if (! config('ai.provider.key') || ! config('ai.chat.model')) {
+            return response()->json(['message' => 'The assistant is not set up yet: AI_API_KEY and AI_CHAT_MODEL are missing.'], 503);
+        }
+
         $limiterKey = 'ai-chat:'.$user->id;
         if (RateLimiter::tooManyAttempts($limiterKey, (int) config('ai.chat.rate_limit_per_hour'))) {
             $minutes = (int) ceil(RateLimiter::availableIn($limiterKey) / 60);
@@ -77,8 +81,8 @@ class AiChatController extends Controller
 
         try {
             $agent->ask($conversation, $user, trim($validated['message']));
-        } catch (MistralException $e) {
-            Log::error('AI chat: Mistral request failed', ['conversation' => $conversation->id, 'error' => $e->getMessage()]);
+        } catch (LlmException $e) {
+            Log::error('AI chat: provider request failed', ['conversation' => $conversation->id, 'error' => $e->getMessage()]);
             // Drop this half-finished turn so a retry starts clean.
             $conversation->messages()->where('id', '>', $lastId)->delete();
             if ($lastId === 0) {

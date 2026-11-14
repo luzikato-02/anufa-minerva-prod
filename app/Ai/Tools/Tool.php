@@ -25,7 +25,7 @@ abstract class Tool
     /** Runs the tool. Arguments come from the model, so validate them as untrusted input. */
     abstract public function run(array $args, User $user): ToolResult;
 
-    /** The tool in the shape Mistral's chat API takes. */
+    /** The tool in the OpenAI chat-completions shape. */
     public function definition(): array
     {
         return [

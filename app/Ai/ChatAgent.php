@@ -2,7 +2,8 @@
 
 namespace App\Ai;
 
-use App\Ai\Mistral\MistralClient;
+use App\Ai\Llm\LlmClient;
+use App\Ai\Llm\LlmException;
 use App\Ai\Tools\Tool;
 use App\Ai\Tools\ToolRegistry;
 use App\Ai\Tools\ToolResult;
@@ -14,21 +15,25 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Answers one question in a conversation: sends the history and the user's tools to Mistral, runs the tools
+ * Answers one question in a conversation: sends the history and the user's tools to the model, runs the tools
  * it asks for, sends the results back, and repeats until it answers in text or runs out of tool rounds.
  * Every message — including tool calls and results — is stored, so the conversation can be replayed and audited.
  */
 class ChatAgent
 {
     public function __construct(
-        private readonly MistralClient $mistral,
+        private readonly LlmClient $llm,
         private readonly ToolRegistry $registry,
     ) {}
 
     /** @return AiMessage the final assistant message */
     public function ask(AiConversation $conversation, User $user, string $question): AiMessage
     {
+        $model = config('ai.chat.model') ?: throw new LlmException('AI_CHAT_MODEL is not set.');
         $conversation->messages()->create(['role' => 'user', 'content' => $question]);
+        if ($conversation->model !== $model) {
+            $conversation->update(['model' => $model]);
+        }
 
         $tools = $this->registry->forUser($user);
         $definitions = array_values(array_map(fn (Tool $t) => $t->definition(), $tools));
@@ -38,8 +43,8 @@ class ChatAgent
             // On the last round, withhold tools so the model has to answer with what it has.
             $offerTools = $round < $maxRounds ? $definitions : [];
             $started = microtime(true);
-            $response = $this->mistral->chat(
-                $conversation->model,
+            $response = $this->llm->chat(
+                $model,
                 $this->messages($conversation, $user, $tools),
                 $offerTools,
                 ['temperature' => (float) config('ai.chat.temperature')],
@@ -106,7 +111,7 @@ class ChatAgent
         ]);
     }
 
-    /** The system prompt plus the conversation's recent messages, in Mistral's shape. */
+    /** The system prompt plus the conversation's recent messages, in the chat-completions shape. */
     private function messages(AiConversation $conversation, User $user, array $tools): array
     {
         $history = $conversation->messages()
@@ -123,7 +128,7 @@ class ChatAgent
 
         return [
             ['role' => 'system', 'content' => $this->systemPrompt($user, $tools)],
-            ...$history->map(fn (AiMessage $m) => $m->toMistral())->all(),
+            ...$history->map(fn (AiMessage $m) => $m->toChatMessage())->all(),
         ];
     }
 
@@ -159,7 +164,7 @@ The user is {$user->name}.
 PROMPT;
     }
 
-    /** Mistral may return content as a string or as a list of chunks. */
+    /** Content may come back as a string or as a list of chunks. */
     private function text(mixed $content): string
     {
         if (is_string($content)) {

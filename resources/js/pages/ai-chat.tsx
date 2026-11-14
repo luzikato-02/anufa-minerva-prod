@@ -268,8 +268,8 @@ export default function AiChat({ tools }: { tools: string[] }) {
                             </Button>
                         </div>
                         <p className="mx-auto mt-1.5 max-w-3xl text-xs text-muted-foreground">
-                            Answers come from Minerva's records via Mistral.
-                            Check the sources before acting on a number.
+                            Answers come from Minerva's records via Telkomsel
+                            OCTA. Check the sources before acting on a number.
                         </p>
                     </form>
                 </section>

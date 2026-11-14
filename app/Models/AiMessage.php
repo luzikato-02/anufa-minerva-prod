@@ -34,8 +34,8 @@ class AiMessage extends Model
         return $this->hasMany(AiToolRun::class);
     }
 
-    /** The message in the shape Mistral's chat API takes. */
-    public function toMistral(): array
+    /** The message in the OpenAI chat-completions shape. */
+    public function toChatMessage(): array
     {
         return match ($this->role) {
             'assistant' => array_filter([
@@ -45,7 +45,6 @@ class AiMessage extends Model
             ], fn ($v) => $v !== null),
             'tool' => [
                 'role' => 'tool',
-                'name' => $this->tool_name,
                 'tool_call_id' => $this->tool_call_id,
                 'content' => $this->content ?? '',
             ],

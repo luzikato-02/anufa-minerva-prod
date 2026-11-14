@@ -4,12 +4,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Mistral
+    | Data chat provider
     |--------------------------------------------------------------------------
     |
-    | The key stays in services.mistral.key, shared with OCR. The base URL is
-    | here so a self-hosted, OpenAI-compatible server (e.g. vLLM running
-    | Mistral's open weights) can replace the hosted API without code changes.
+    | Any OpenAI-compatible chat-completions API. Defaults to Telkomsel OCTA,
+    | which serves Claude, GPT, Gemini, DeepSeek and Kimi behind one key; the
+    | model ids it accepts are listed by `php artisan ai:models`.
+    |
+    */
+
+    'provider' => [
+        'base_url' => env('AI_BASE_URL', 'https://octa.telkomsel.com/v1'),
+        'key' => env('AI_API_KEY'),
+        'timeout' => (int) env('AI_TIMEOUT', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mistral (OCR only)
+    |--------------------------------------------------------------------------
+    |
+    | Document Intelligence and the finish-earlier scan still use Mistral OCR.
+    | The key stays in services.mistral.key.
     |
     */
 
@@ -25,11 +41,9 @@ return [
     */
 
     'chat' => [
-        // Runs the tool loop; needs reliable function calling. mistral-large-latest is better at it but is
-        // not on every Mistral subscription tier.
-        'model' => env('AI_CHAT_MODEL', 'mistral-medium-latest'),
-        // Cheap jobs such as naming a conversation.
-        'small_model' => env('AI_CHAT_SMALL_MODEL', 'mistral-small-latest'),
+        // Runs the tool loop, so it needs reliable function calling. A provider model id, e.g. one listed
+        // by `php artisan ai:models`.
+        'model' => env('AI_CHAT_MODEL'),
         'temperature' => (float) env('AI_CHAT_TEMPERATURE', 0.1),
         // Tool rounds per question before the agent is made to answer with what it has.
         'max_tool_rounds' => (int) env('AI_CHAT_MAX_TOOL_ROUNDS', 6),

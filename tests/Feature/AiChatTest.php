@@ -28,7 +28,7 @@ class AiChatTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.mistral.key' => 'test-key', 'ai.chat.timezone' => 'Asia/Jakarta']);
+        config(['ai.provider.key' => 'test-key', 'ai.chat.model' => 'test-model', 'ai.chat.timezone' => 'Asia/Jakarta']);
         Carbon::setTestNow(Carbon::parse('2026-11-14 03:00:00', 'UTC')); // 10:00 in Jakarta
     }
 
@@ -144,7 +144,29 @@ class AiChatTest extends TestCase
         $this->assertStringNotContainsString('positions_measured', $tool['content']);
     }
 
-    public function test_a_failed_mistral_call_leaves_no_half_turn_behind(): void
+    public function test_requests_go_to_the_configured_openai_compatible_endpoint(): void
+    {
+        config(['ai.provider.base_url' => 'https://octa.example/v1']);
+        Http::fake(['*' => Http::response(self::completion(['content' => 'ok']))]);
+
+        $this->actingAs($this->user(['ai-chat.use']))->postJson('/ai-chat/messages', ['message' => 'hi'])->assertOk();
+
+        Http::assertSent(fn (Request $r) => $r->url() === 'https://octa.example/v1/chat/completions'
+            && $r->hasHeader('Authorization', 'Bearer test-key')
+            && $r['model'] === 'test-model');
+    }
+
+    public function test_the_chat_says_so_when_the_provider_is_not_configured(): void
+    {
+        config(['ai.provider.key' => null]);
+        Http::fake();
+
+        $this->actingAs($this->user(['ai-chat.use']))->postJson('/ai-chat/messages', ['message' => 'hi'])->assertStatus(503);
+        Http::assertNothingSent();
+        $this->assertSame(0, AiConversation::count());
+    }
+
+    public function test_a_failed_provider_call_leaves_no_half_turn_behind(): void
     {
         Http::fake(['*' => Http::response('boom', 500)]);
         $user = $this->user(['ai-chat.use']);
