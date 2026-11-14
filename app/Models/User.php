@@ -50,13 +50,20 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'ai_allowed_models' => 'array',
         ];
+    }
+
+    /** Whether an admin lets this user use an AI model. No list set means every offered model. */
+    public function canUseAiModel(string $model): bool
+    {
+        return $this->ai_allowed_models === null || in_array($model, $this->ai_allowed_models, true);
     }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'email', 'username'])
+            ->logOnly(['name', 'email', 'username', 'ai_default_model', 'ai_allowed_models'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }

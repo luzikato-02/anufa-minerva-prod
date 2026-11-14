@@ -4,16 +4,18 @@ import { Head, Link } from '@inertiajs/react';
 import axios, { type AxiosError } from 'axios';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, ExternalLink, FileText, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ModelNotPermittedDialog, ModelPicker } from '@/components/ai-model-picker';
 import { Button } from '@/components/ui/button';
+import { MODEL_NOT_PERMITTED, useModelAccess } from '@/lib/ai-models';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const SCAN_LOG = [
-    { at: 200,   text: 'Uploading document to OCR engine…' },
-    { at: 1200,  text: 'Connected · running mistral-ocr-latest on document…' },
+    { at: 200,   text: 'Uploading document to Telkomsel OCTA…' },
+    { at: 1200,  text: 'Connected · the model is reading the form…' },
     { at: 3500,  text: 'Scanning pages for text content…' },
-    { at: 6500,  text: 'OCR complete · extracting markdown from pages…' },
-    { at: 8000,  text: 'Prompting mistral-small-latest for structured extraction…' },
+    { at: 6500,  text: 'Transcription complete · reading the form again for its fields…' },
+    { at: 8000,  text: 'Asking the model for structured entries…' },
     { at: 10000, text: 'Parsing form: CATATAN CABLE FINISH EARLIER' },
     { at: 12000, text: 'Applying carry-forward rules on empty cells…' },
     { at: 14000, text: 'Assembling JSON output…' },
@@ -81,6 +83,11 @@ export default function FinishEarlierScan() {
     const [logLines, setLogLines] = useState<string[]>([]);
     const [typingText, setTypingText] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const access = useModelAccess();
+    const [chosenModel, setChosenModel] = useState<string | null>(null);
+    const model = chosenModel ?? access?.defaultModel ?? null;
+    // A model the server refused for this user, while the "contact your admin" dialog is open.
+    const [refused, setRefused] = useState<string | null | undefined>(undefined);
 
     useEffect(() => {
         if (state !== 'scanning') {
@@ -125,6 +132,7 @@ export default function FinishEarlierScan() {
             const csrfRes = await axios.get('/csrf-token');
             const formData = new FormData();
             formData.append('file', file);
+            if (model) formData.append('model', model);
             const res = await axios.post<Extracted>('/finish-earlier-scan/extract', formData, {
                 headers: {
                     'X-CSRF-TOKEN': csrfRes.data.csrfToken,
@@ -137,7 +145,12 @@ export default function FinishEarlierScan() {
             setEntries(res.data.entries ?? []);
             setState('review');
         } catch (caught) {
-            const e = caught as AxiosError<{ message?: string }>;
+            const e = caught as AxiosError<{ message?: string; code?: string; model?: string | null }>;
+            if (e.response?.data?.code === MODEL_NOT_PERMITTED) {
+                setRefused(e.response.data.model ?? null);
+                setState('idle');
+                return;
+            }
             setError(e.response?.data?.message ?? e.message ?? 'Extraction failed.');
             setState('error');
         }
@@ -257,9 +270,12 @@ export default function FinishEarlierScan() {
                             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
                         />
                         {error && <p className="text-destructive text-sm">{error}</p>}
-                        <Button onClick={scan} disabled={!file} className="self-start">
-                            Extract Data
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button onClick={scan} disabled={!file}>
+                                Extract Data
+                            </Button>
+                            <ModelPicker access={access} value={model} onChange={setChosenModel} className="border" />
+                        </div>
                     </div>
                 )}
 
@@ -505,6 +521,7 @@ export default function FinishEarlierScan() {
                     </div>
                 )}
             </div>
+            <ModelNotPermittedDialog model={refused} onClose={() => setRefused(undefined)} />
         </AppLayout>
     );
 }

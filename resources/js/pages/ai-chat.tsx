@@ -1,3 +1,7 @@
+import {
+    ModelNotPermittedDialog,
+    ModelPicker,
+} from '@/components/ai-model-picker';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -28,6 +32,7 @@ import {
     STARTERS,
     TOOL_LABELS,
 } from '@/lib/ai-chat';
+import { AiRequestError, type ModelAccess } from '@/lib/ai-models';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -53,11 +58,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Ask the Data', href: '/ai-chat' },
 ];
 
-interface Props {
+interface Props extends ModelAccess {
     tools: string[];
-    /** Models the user may pick, live from the provider. */
-    models: string[];
-    defaultModel: string | null;
     efforts: Effort[];
     defaultEffort: Effort | null;
 }
@@ -65,10 +67,12 @@ interface Props {
 export default function AiChat({
     tools,
     models,
+    allowedModels,
     defaultModel,
     efforts,
     defaultEffort,
 }: Props) {
+    const access: ModelAccess = { models, allowedModels, defaultModel };
     const [conversations, setConversations] = useState<ConversationListItem[]>(
         [],
     );
@@ -79,10 +83,19 @@ export default function AiChat({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [historyOpen, setHistoryOpen] = useState(false);
-    // The browser's last choice, if it's still on offer; else the server's default.
+    // The model the user isn't allowed, while the "contact your admin" dialog is open.
+    const [refused, setRefused] = useState<string | null | undefined>(
+        undefined,
+    );
+    // The browser's last choice while the user may still use it and their default (set by an admin) hasn't
+    // changed since; else that default.
     const [model, setModel] = useState<string | null>(() => {
-        const saved = loadSettings().model;
-        return saved && models.includes(saved) ? saved : defaultModel;
+        const saved = loadSettings();
+        return saved.model &&
+            allowedModels.includes(saved.model) &&
+            saved.defaultModel === defaultModel
+            ? saved.model
+            : defaultModel;
     });
     const [effort, setEffort] = useState<Effort | null>(() => {
         const saved = loadSettings();
@@ -101,7 +114,7 @@ export default function AiChat({
         };
         setModel(settings.model);
         setEffort(settings.effort);
-        saveSettings(settings);
+        saveSettings({ ...settings, defaultModel });
     };
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -126,8 +139,11 @@ export default function AiChat({
         try {
             const conversation = await chatApi.get(id);
             setMessages(conversation.messages);
-            // Carry on with the conversation's own settings, when its model is still offered.
-            if (conversation.model && models.includes(conversation.model)) {
+            // Carry on with the conversation's own settings, when the user may still use its model.
+            if (
+                conversation.model &&
+                allowedModels.includes(conversation.model)
+            ) {
                 setModel(conversation.model);
             }
             setEffort(conversation.effort);
@@ -187,7 +203,11 @@ export default function AiChat({
         } catch (e) {
             setMessages((ms) => ms.filter((m) => m.id !== pendingId));
             setDraft(question);
-            setError((e as Error).message);
+            if (e instanceof AiRequestError && e.notPermitted) {
+                setRefused(e.model ?? null);
+            } else {
+                setError((e as Error).message);
+            }
         } finally {
             setSending(false);
             inputRef.current?.focus();
@@ -328,7 +348,7 @@ export default function AiChat({
                         </div>
                         <div className="mx-auto mt-1.5 flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
                             <ChatSettings
-                                models={models}
+                                access={access}
                                 model={model}
                                 efforts={efforts}
                                 effort={effort}
@@ -344,6 +364,10 @@ export default function AiChat({
                     </form>
                 </section>
             </div>
+            <ModelNotPermittedDialog
+                model={refused}
+                onClose={() => setRefused(undefined)}
+            />
         </AppLayout>
     );
 }
@@ -482,14 +506,14 @@ function effortLabel(effort: Effort | 'auto'): string {
 
 /** Model and effort pickers, like the ones under a Claude chat box. */
 function ChatSettings({
-    models,
+    access,
     model,
     efforts,
     effort,
     onChange,
     disabled,
 }: {
-    models: string[];
+    access: ModelAccess;
     model: string | null;
     efforts: Effort[];
     effort: Effort | null;
@@ -502,25 +526,12 @@ function ChatSettings({
 
     return (
         <div className="flex items-center gap-1">
-            <Select
-                value={model ?? undefined}
-                onValueChange={(value) => onChange({ model: value })}
-                disabled={disabled || models.length === 0}
-            >
-                <SelectTrigger
-                    aria-label="Model"
-                    className="h-7 w-auto gap-1 border-none px-2 text-xs shadow-none hover:bg-muted"
-                >
-                    <SelectValue placeholder="No model available" />
-                </SelectTrigger>
-                <SelectContent>
-                    {models.map((id) => (
-                        <SelectItem key={id} value={id} className="text-xs">
-                            {modelLabel(id)}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+            <ModelPicker
+                access={access}
+                value={model}
+                onChange={(value) => onChange({ model: value })}
+                disabled={disabled}
+            />
             <Select
                 value={effort ?? 'auto'}
                 onValueChange={(value) =>

@@ -4,10 +4,11 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Data chat provider
+    | AI provider
     |--------------------------------------------------------------------------
     |
-    | Any OpenAI-compatible chat-completions API. Defaults to Telkomsel OCTA,
+    | Every AI feature (data chat, Document Intelligence, finish-earlier scan) uses
+    | this one OpenAI-compatible chat-completions API. Defaults to Telkomsel OCTA,
     | which serves Claude, GPT, Gemini, DeepSeek and Kimi behind one key; the
     | model ids it accepts are listed by `php artisan ai:models`.
     |
@@ -21,17 +22,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Mistral (OCR only)
+    | Document reading (OCR)
     |--------------------------------------------------------------------------
     |
-    | Document Intelligence and the finish-earlier scan still use Mistral OCR.
-    | The key stays in services.mistral.key.
+    | Document Intelligence and the finish-earlier scan send the file to a vision model on the same
+    | provider. They run on the user's chosen (or default) model, within the models an admin allows them.
     |
     */
 
-    'mistral' => [
-        'base_url' => env('MISTRAL_BASE_URL', 'https://api.mistral.ai/v1'),
-        'timeout' => (int) env('MISTRAL_TIMEOUT', 90),
+    'ocr' => [
+        // Reading a multi-page PDF takes longer than a chat turn.
+        'timeout' => (int) env('AI_OCR_TIMEOUT', 180),
     ],
 
     /*

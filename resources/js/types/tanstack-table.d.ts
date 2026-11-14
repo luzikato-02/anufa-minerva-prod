@@ -6,6 +6,8 @@ declare module '@tanstack/react-table' {
         refetch?: () => void;
         allRoles?: { id: number; name: string }[];
         currentUserId?: number;
+        /** Users table: the AI models on offer, for the AI Models dialog (admins only). */
+        aiCatalog?: { models: string[]; systemDefault: string | null } | null;
         onStatusChange?: (id: string, status: string) => void;
         /** Opens a record in the side panel (row menu, keyboard users). */
         openDetails?: (id: string) => void;

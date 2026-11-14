@@ -33,7 +33,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { useServerTable } from '@/hooks/use-server-table';
+import { modelLabel } from '@/lib/ai-models';
 import { cn } from '@/lib/utils';
 import { type SharedData } from '@/types';
 import { usePage } from '@inertiajs/react';
@@ -43,6 +51,7 @@ import {
     useReactTable,
 } from '@tanstack/react-table';
 import {
+    BotIcon,
     MoreHorizontal,
     PencilIcon,
     PlusIcon,
@@ -66,13 +75,24 @@ export interface UserData {
     email: string;
     status: 'active' | 'inactive';
     roles: RoleRef[];
+    /** The model this user's AI features start with; null: the app's default. */
+    ai_default_model: string | null;
+    /** The AI models this user may use; null: every model, including ones added later. */
+    ai_allowed_models: string[] | null;
     created_at?: string;
+}
+
+/** Every AI model the provider offers, for setting a user's access. */
+export interface AiCatalog {
+    models: string[];
+    systemDefault: string | null;
 }
 
 type UserTableMeta = {
     refetch: () => void;
     allRoles: RoleRef[];
     currentUserId: number;
+    aiCatalog: AiCatalog | null;
 };
 
 async function getCsrfToken(): Promise<string> {
@@ -565,6 +585,246 @@ function ManageRolesDialog({
     );
 }
 
+const APP_DEFAULT = '__app_default__';
+
+/** An admin sets which AI models a user may use, in every AI feature, and the one they start with. */
+function AiModelsDialog({
+    user,
+    catalog,
+    onSaved,
+    onCloseMenu,
+}: {
+    user: UserData;
+    catalog: AiCatalog;
+    onSaved: () => void;
+    onCloseMenu?: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [allowAll, setAllowAll] = useState(true);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [defaultModel, setDefaultModel] = useState<string>(APP_DEFAULT);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Models the user was given but the provider no longer offers stay listed, so they can be removed.
+    const models = Array.from(
+        new Set([...catalog.models, ...(user.ai_allowed_models ?? [])]),
+    );
+    const offered = new Set(catalog.models);
+    const usable = allowAll
+        ? catalog.models
+        : models.filter((m) => selected.has(m));
+
+    const wasOpenRef = useRef(false);
+    useEffect(() => {
+        if (wasOpenRef.current && !open) {
+            onCloseMenu?.();
+        }
+        wasOpenRef.current = open;
+    }, [open, onCloseMenu]);
+
+    useEffect(() => {
+        if (open) {
+            setAllowAll(user.ai_allowed_models === null);
+            setSelected(new Set(user.ai_allowed_models ?? []));
+            setDefaultModel(user.ai_default_model ?? APP_DEFAULT);
+            setError(null);
+        }
+    }, [open, user]);
+
+    // A default the user may no longer use falls back to the app's.
+    useEffect(() => {
+        if (defaultModel !== APP_DEFAULT && !usable.includes(defaultModel)) {
+            setDefaultModel(APP_DEFAULT);
+        }
+    }, [usable, defaultModel]);
+
+    const toggle = (model: string) =>
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(model)) {
+                next.delete(model);
+            } else {
+                next.add(model);
+            }
+            return next;
+        });
+
+    const save = async () => {
+        setSaving(true);
+        setError(null);
+        try {
+            const res = await fetch(`/api/users/${user.id}/ai-models`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': await getCsrfToken(),
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    allowed_models: allowAll
+                        ? null
+                        : models.filter((m) => selected.has(m)),
+                    default_model:
+                        defaultModel === APP_DEFAULT ? null : defaultModel,
+                }),
+            });
+            if (!res.ok) {
+                const json = await res.json().catch(() => ({}));
+                setError(json.message ?? `HTTP ${res.status}`);
+                return;
+            }
+            setOpen(false);
+            onSaved();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
+            <DialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <BotIcon />
+                    AI Models
+                </DropdownMenuItem>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[460px]">
+                <DialogHeader>
+                    <DialogTitle>AI Models: {user.name}</DialogTitle>
+                    <DialogDescription>
+                        The models this user may use in every AI feature (Ask
+                        the Data, Document Intelligence, finish-earlier scan),
+                        and the one they start with.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Allowed models</Label>
+                        <div className="flex flex-col gap-3 rounded-md border p-3">
+                            <div className="flex items-start gap-2">
+                                <Checkbox
+                                    id={`ai-all-${user.id}`}
+                                    checked={allowAll}
+                                    onCheckedChange={(v) => {
+                                        setAllowAll(v === true);
+                                        // Starting a list from "all" keeps every model ticked.
+                                        if (v !== true && selected.size === 0) {
+                                            setSelected(
+                                                new Set(catalog.models),
+                                            );
+                                        }
+                                    }}
+                                />
+                                <Label
+                                    htmlFor={`ai-all-${user.id}`}
+                                    className="flex flex-col items-start gap-0.5 text-sm font-normal"
+                                >
+                                    Every model
+                                    <span className="text-xs text-muted-foreground">
+                                        Including models added to OCTA later
+                                    </span>
+                                </Label>
+                            </div>
+                            {!allowAll && (
+                                <div className="flex flex-col gap-2 border-t pt-3">
+                                    {models.length === 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            OCTA lists no models right now.
+                                        </p>
+                                    )}
+                                    {models.map((m) => (
+                                        <div
+                                            key={m}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <Checkbox
+                                                id={`ai-model-${user.id}-${m}`}
+                                                checked={selected.has(m)}
+                                                onCheckedChange={() =>
+                                                    toggle(m)
+                                                }
+                                            />
+                                            <Label
+                                                htmlFor={`ai-model-${user.id}-${m}`}
+                                                className="text-sm font-normal"
+                                            >
+                                                {modelLabel(m)}
+                                                {!offered.has(m) && (
+                                                    <span className="ml-1.5 text-xs text-muted-foreground">
+                                                        (no longer offered)
+                                                    </span>
+                                                )}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                    {selected.size === 0 && (
+                                        <p className="text-xs font-medium text-orange-700 dark:text-orange-400">
+                                            With no model ticked, this user
+                                            can't use any AI feature.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-1">
+                        <Label htmlFor={`ai-default-${user.id}`}>
+                            Default model
+                        </Label>
+                        <Select
+                            value={defaultModel}
+                            onValueChange={setDefaultModel}
+                        >
+                            <SelectTrigger id={`ai-default-${user.id}`}>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={APP_DEFAULT}>
+                                    App default
+                                    {catalog.systemDefault &&
+                                        ` (${modelLabel(catalog.systemDefault)})`}
+                                </SelectItem>
+                                {usable.map((m) => (
+                                    <SelectItem key={m} value={m}>
+                                        {modelLabel(m)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Where their AI features start. They can still switch
+                            to any other allowed model.
+                        </p>
+                    </div>
+
+                    {error && (
+                        <p className="text-sm text-destructive">{error}</p>
+                    )}
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => setOpen(false)}
+                        disabled={saving}
+                    >
+                        Cancel
+                    </Button>
+                    <Button onClick={save} disabled={saving}>
+                        {saving ? 'Saving...' : 'Save'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function ToggleStatusAlert({
     user,
     onChanged,
@@ -765,6 +1025,14 @@ function UserActionsCell({
                     onSaved={meta.refetch}
                     onCloseMenu={() => setMenuOpen(false)}
                 />
+                {meta.aiCatalog && (
+                    <AiModelsDialog
+                        user={user}
+                        catalog={meta.aiCatalog}
+                        onSaved={meta.refetch}
+                        onCloseMenu={() => setMenuOpen(false)}
+                    />
+                )}
                 {!isSelf && (
                     <>
                         <DropdownMenuSeparator />
@@ -857,6 +1125,38 @@ export const columns: ColumnDef<UserData>[] = [
         meta: { label: 'Roles' },
     },
     {
+        id: 'ai_models',
+        enableSorting: false,
+        header: 'AI Models',
+        cell: ({ row }) => {
+            const allowed = row.original.ai_allowed_models;
+            const fallback = row.original.ai_default_model;
+            return (
+                <span className="flex flex-col text-xs">
+                    {allowed === null ? (
+                        <span>All models</span>
+                    ) : allowed.length === 0 ? (
+                        <span className="font-medium text-orange-700 dark:text-orange-400">
+                            None
+                        </span>
+                    ) : (
+                        <span title={allowed.map(modelLabel).join(', ')}>
+                            {allowed.length === 1
+                                ? modelLabel(allowed[0])
+                                : `${allowed.length} models`}
+                        </span>
+                    )}
+                    {fallback && (
+                        <span className="text-muted-foreground">
+                            Default: {modelLabel(fallback)}
+                        </span>
+                    )}
+                </span>
+            );
+        },
+        meta: { label: 'AI Models' },
+    },
+    {
         id: 'status',
         accessorKey: 'status',
         header: 'Status',
@@ -881,6 +1181,7 @@ export const columns: ColumnDef<UserData>[] = [
 export function UserDataTable() {
     const { auth } = usePage<SharedData>().props;
     const [allRoles, setAllRoles] = useState<RoleRef[]>([]);
+    const [aiCatalog, setAiCatalog] = useState<AiCatalog | null>(null);
 
     const grid = useServerTable<UserData>({
         endpoint: '/api/users',
@@ -904,6 +1205,7 @@ export function UserDataTable() {
             refetch: grid.refetch,
             allRoles,
             currentUserId: auth.user.id,
+            aiCatalog,
         },
     });
 
@@ -922,6 +1224,16 @@ export function UserDataTable() {
             .catch((e) => {
                 if (e.name !== 'AbortError') console.error(e);
             });
+
+        // Only admins who manage users can read it; for others the AI Models action stays hidden.
+        fetch(`${baseUrl}/api/ai-models`, {
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((catalog: AiCatalog | null) => setAiCatalog(catalog))
+            .catch(() => {});
 
         return () => controller.abort();
     }, []);

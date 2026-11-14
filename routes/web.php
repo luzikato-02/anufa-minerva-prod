@@ -1,19 +1,20 @@
 <?php
 
 use App\Http\Controllers\Ai\AiChatController;
+use App\Http\Controllers\Ai\AiModelsController;
 use App\Http\Controllers\Api\ActivityLogController;
-use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
-use App\Http\Controllers\Api\MachineMaintenanceController;
+use App\Http\Controllers\Api\CreelTypeController;
+use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\FinishEarlierRecordController;
 use App\Http\Controllers\Api\FinishEarlierScanController;
+use App\Http\Controllers\Api\MachineMaintenanceController;
 use App\Http\Controllers\Api\RoleController;
-use App\Http\Controllers\Api\CreelTypeController;
 use App\Http\Controllers\Api\StockSheetController;
-use App\Http\Controllers\Api\TorqueCheckController;
 use App\Http\Controllers\Api\StockTakeRecordController;
 use App\Http\Controllers\Api\TensionComparisonController;
 use App\Http\Controllers\Api\TensionRecordController;
+use App\Http\Controllers\Api\TorqueCheckController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\ControlPlans\ControlPlanController;
 use App\Http\Controllers\ControlPlans\ControlPlanExportController;
@@ -253,6 +254,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('api/users/{user}', [UserController::class, 'destroy']);
         Route::put('api/users/{user}/roles', [UserController::class, 'syncRoles']);
         Route::patch('api/users/{user}/status', [UserController::class, 'updateStatus']);
+        Route::get('api/ai-models', [AiModelsController::class, 'catalog']);
+        Route::put('api/users/{user}/ai-models', [AiModelsController::class, 'update']);
     });
 
     Route::redirect('role-management', '/user-maintenance');
@@ -279,16 +282,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             $finishedPositions = $feRecords->flatMap(function ($fe) {
                 return collect($fe->entries ?? [])->map(fn ($e) => [
-                    'side'   => $e['creel_side']    ?? '',
+                    'side' => $e['creel_side'] ?? '',
                     'column' => (int) ($e['column_number'] ?? 0),
-                    'row'    => $e['row_number']    ?? '',
+                    'row' => $e['row_number'] ?? '',
                     'meters' => (float) ($e['meters_finish'] ?? 0),
                 ]);
             })->filter(fn ($p) => $p['side'] && $p['column'] && $p['row'])
-              ->values()->all();
+                ->values()->all();
 
             return Inertia::render('creel-viewer', [
-                'record'            => $record,
+                'record' => $record,
                 'finishedPositions' => $finishedPositions,
             ]);
         })->name('creel-viewer');
@@ -297,9 +300,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('creel-records/by-order/{orderNumber}', function ($orderNumber) {
             $record = \App\Models\CreelRecord::where('order_number', $orderNumber)
                 ->orderBy('created_at', 'desc')->first();
-            if (!$record) {
+            if (! $record) {
                 return response()->json(['id' => null], 404);
             }
+
             return response()->json(['id' => $record->id]);
         });
 
@@ -342,8 +346,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('api/activity-log', [ActivityLogController::class, 'index']);
     });
 
-    // ---- DOCUMENT INTELLIGENCE ----
-    // Data chat (Mistral). Each tool it can use checks its own module permission as well.
+    // ---- AI ----
+    // The models the signed-in user may pick in any AI feature (an admin sets this per user).
+    Route::get('ai/models', [AiModelsController::class, 'mine']);
+
+    // Data chat (Telkomsel OCTA). Each tool it can use checks its own module permission as well.
     Route::middleware('permission:ai-chat.use')->group(function () {
         Route::get('ai-chat', [AiChatController::class, 'page'])->name('ai-chat');
         Route::get('ai-chat/conversations', [AiChatController::class, 'index']);
@@ -352,6 +359,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('ai-chat/messages', [AiChatController::class, 'store']);
     });
 
+    // ---- DOCUMENT INTELLIGENCE ----
     Route::get('document-intelligence', fn () => Inertia::render('document-intelligence'))
         ->name('document-intelligence');
     Route::post('document-intelligence/process', [DocumentIntelligenceController::class, 'process']);

@@ -24,8 +24,8 @@ class AiChatController extends Controller
     {
         return Inertia::render('ai-chat', [
             'tools' => array_keys($registry->forUser($request->user())),
-            'models' => $catalog->models(),
-            'defaultModel' => $catalog->defaultModel(),
+            // Every offered model is listed; the ones the user isn't allowed show locked.
+            ...$catalog->accessFor($request->user()),
             'efforts' => $catalog->efforts(),
             'defaultEffort' => $catalog->defaultEffort(),
         ]);
@@ -69,10 +69,20 @@ class AiChatController extends Controller
             return response()->json(['message' => 'The assistant is not set up yet: AI_API_KEY is missing.'], 503);
         }
 
-        $model = $validated['model'] ?? null;
-        if ($model !== null && ! $catalog->allows($model)) {
-            return response()->json(['message' => "The model \"{$model}\" isn't available. Pick another one."], 422);
+        $conversation = isset($validated['conversation_id'])
+            ? $this->owned($request, $validated['conversation_id'])
+            : new AiConversation([
+                'user_id' => $user->id,
+                'title' => Str::limit(preg_replace('/\s+/', ' ', trim($validated['message'])), 80),
+            ]);
+
+        // The model asked for, else the conversation's own while the user may still use it, else the
+        // user's default. A model the user isn't allowed is refused with a 403 (ModelNotPermitted).
+        $requested = $validated['model'] ?? null;
+        if ($requested === null && $conversation->model && $user->canUseAiModel($conversation->model) && $catalog->allows($conversation->model)) {
+            $requested = $conversation->model;
         }
+        $model = $catalog->resolve($user, $requested);
         $effort = ($validated['effort'] ?? 'auto') === 'auto' ? null : $validated['effort'];
 
         $limiterKey = 'ai-chat:'.$user->id;
@@ -83,19 +93,10 @@ class AiChatController extends Controller
         }
         RateLimiter::hit($limiterKey, 3600);
 
-        $conversation = isset($validated['conversation_id'])
-            ? $this->owned($request, $validated['conversation_id'])
-            : new AiConversation([
-                'user_id' => $user->id,
-                'title' => Str::limit(preg_replace('/\s+/', ' ', trim($validated['message'])), 80),
-            ]);
         // The choice can change partway through a conversation; it applies from this question on.
-        $conversation->model = $model ?? $conversation->model ?? $catalog->defaultModel();
+        $conversation->model = $model;
         if ($request->has('effort') || ! $conversation->exists) {
             $conversation->effort = $effort;
-        }
-        if (! $conversation->model) {
-            return response()->json(['message' => 'The assistant is not set up yet: no model is available.'], 503);
         }
         $conversation->save();
 

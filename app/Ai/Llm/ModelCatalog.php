@@ -2,6 +2,7 @@
 
 namespace App\Ai\Llm;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -60,6 +61,56 @@ class ModelCatalog
     public function allows(?string $model): bool
     {
         return $model !== null && in_array($model, $this->models(), true);
+    }
+
+    /** @return array<int, string> the offered models this user may use */
+    public function allowedFor(User $user): array
+    {
+        return array_values(array_filter($this->models(), fn (string $id) => $user->canUseAiModel($id)));
+    }
+
+    /** The model a user's AI features start with: their own default, else the app's, else their first allowed. */
+    public function defaultFor(User $user): ?string
+    {
+        $allowed = $this->allowedFor($user);
+        foreach ([$user->ai_default_model, config('ai.chat.model')] as $candidate) {
+            if ($candidate && in_array($candidate, $allowed, true)) {
+                return $candidate;
+            }
+        }
+
+        return $allowed[0] ?? null;
+    }
+
+    /**
+     * The model to run a request on: the one asked for, or the user's default.
+     *
+     * @throws ModelNotPermitted when the user may not use it, or may use no model at all
+     * @throws ModelUnavailable when the provider no longer offers it
+     */
+    public function resolve(User $user, ?string $requested): string
+    {
+        if ($requested === null) {
+            return $this->defaultFor($user) ?? throw new ModelNotPermitted(null);
+        }
+        if (! $this->allows($requested)) {
+            throw new ModelUnavailable($requested);
+        }
+        if (! $user->canUseAiModel($requested)) {
+            throw new ModelNotPermitted($requested);
+        }
+
+        return $requested;
+    }
+
+    /** What the frontend's model pickers need: every offered model, which this user may use, and their default. */
+    public function accessFor(User $user): array
+    {
+        return [
+            'models' => $this->models(),
+            'allowedModels' => $this->allowedFor($user),
+            'defaultModel' => $this->defaultFor($user),
+        ];
     }
 
     /** @return array<int, string> */

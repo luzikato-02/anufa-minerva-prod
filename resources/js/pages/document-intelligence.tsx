@@ -1,7 +1,16 @@
+import {
+    ModelNotPermittedDialog,
+    ModelPicker,
+} from '@/components/ai-model-picker';
 import { PageHeader } from '@/components/page-header';
 import { Panel } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
+import {
+    MODEL_NOT_PERMITTED,
+    modelLabel,
+    useModelAccess,
+} from '@/lib/ai-models';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -36,8 +45,8 @@ interface OcrResult {
 type State = 'idle' | 'processing' | 'done' | 'error';
 
 const PROCESS_LOG = [
-    { at: 200, text: 'Uploading document to OCR engine…' },
-    { at: 1200, text: 'Connected · running mistral-ocr-latest…' },
+    { at: 200, text: 'Uploading document to Telkomsel OCTA…' },
+    { at: 1200, text: 'Connected · the model is reading the document…' },
     { at: 3500, text: 'Scanning pages for text content…' },
     { at: 7000, text: 'Extracting markdown from page content…' },
     { at: 10000, text: 'Processing visual elements and tables…' },
@@ -109,6 +118,13 @@ export default function DocumentIntelligence() {
     const [logLines, setLogLines] = useState<string[]>([]);
     const [typingText, setTypingText] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const access = useModelAccess();
+    const [chosenModel, setChosenModel] = useState<string | null>(null);
+    const model = chosenModel ?? access?.defaultModel ?? null;
+    // A model the server refused for this user, while the "contact your admin" dialog is open.
+    const [refused, setRefused] = useState<string | null | undefined>(
+        undefined,
+    );
 
     useEffect(() => {
         if (state !== 'processing') {
@@ -161,6 +177,7 @@ export default function DocumentIntelligence() {
             const csrfRes = await axios.get('/csrf-token');
             const formData = new FormData();
             formData.append('file', file);
+            if (model) formData.append('model', model);
             const res = await axios.post(
                 '/document-intelligence/process',
                 formData,
@@ -176,9 +193,19 @@ export default function DocumentIntelligence() {
         } catch (e: unknown) {
             const data = axios.isAxiosError(e)
                 ? (e.response?.data as
-                      | { error?: string; message?: string }
+                      | {
+                            error?: string;
+                            message?: string;
+                            code?: string;
+                            model?: string | null;
+                        }
                       | undefined)
                 : undefined;
+            if (data?.code === MODEL_NOT_PERMITTED) {
+                setRefused(data.model ?? null);
+                setState(result ? 'done' : 'idle');
+                return;
+            }
             const msg =
                 data?.error ??
                 data?.message ??
@@ -267,8 +294,8 @@ export default function DocumentIntelligence() {
                     title="Document Intelligence"
                     meta={
                         state === 'done' && result
-                            ? `${file?.name ?? 'Document'} · ${pageCount} ${pageCount === 1 ? 'page' : 'pages'} · ${result.model}`
-                            : 'Extract text and tables from a PDF or image with Mistral OCR'
+                            ? `${file?.name ?? 'Document'} · ${pageCount} ${pageCount === 1 ? 'page' : 'pages'} · ${modelLabel(result.model)}`
+                            : 'Extract text and tables from a PDF or image with an AI model on Telkomsel OCTA'
                     }
                     actions={
                         state === 'done' &&
@@ -363,13 +390,21 @@ export default function DocumentIntelligence() {
                             >
                                 {file ? 'Choose another' : 'Choose file'}
                             </Button>
-                            <Button
-                                size="xs"
-                                onClick={process}
-                                disabled={!file}
-                            >
-                                Process document
-                            </Button>
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                                <ModelPicker
+                                    access={access}
+                                    value={model}
+                                    onChange={setChosenModel}
+                                    className="border"
+                                />
+                                <Button
+                                    size="xs"
+                                    onClick={process}
+                                    disabled={!file}
+                                >
+                                    Process document
+                                </Button>
+                            </div>
                             <input
                                 ref={inputRef}
                                 type="file"
@@ -456,6 +491,10 @@ export default function DocumentIntelligence() {
                     </div>
                 )}
             </div>
+            <ModelNotPermittedDialog
+                model={refused}
+                onClose={() => setRefused(undefined)}
+            />
         </AppLayout>
     );
 }

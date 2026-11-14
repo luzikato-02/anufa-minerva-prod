@@ -1,3 +1,7 @@
+import { aiErrorFrom } from '@/lib/ai-models';
+
+export { modelLabel } from '@/lib/ai-models';
+
 /** A tool the assistant ran while answering, shown under the answer as a source. */
 export interface ChatSource {
     tool: string;
@@ -31,6 +35,11 @@ export interface ConversationSettings {
     effort: Effort | null;
 }
 
+/** The remembered choice, with the default it was made against (a new default from an admin wins). */
+export interface SavedSettings extends ConversationSettings {
+    defaultModel?: string | null;
+}
+
 async function csrfToken(): Promise<string> {
     const { csrfToken } = await (
         await fetch('/csrf-token', { credentials: 'include' })
@@ -56,14 +65,7 @@ async function request<T>(
     });
     if (res.status === 204) return undefined as T;
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        const first = json.errors
-            ? (Object.values(json.errors)[0] as string[])[0]
-            : undefined;
-        throw new Error(
-            first ?? json.message ?? 'The request failed. Try again.',
-        );
-    }
+    if (!res.ok) throw aiErrorFrom(res.status, json);
     return json as T;
 }
 
@@ -133,42 +135,6 @@ export const STARTERS: { tool: string; text: string }[] = [
     },
 ];
 
-const BRANDS: Record<string, string> = {
-    claude: 'Claude',
-    deepseek: 'DeepSeek',
-    gemini: 'Gemini',
-    gpt: 'GPT',
-    kimi: 'Kimi',
-    mistral: 'Mistral',
-};
-
-/**
- * A readable name for a provider model id: "claude-sonnet-5-5" → "Claude Sonnet 5.5",
- * "deepseek-v4.1-flash" → "DeepSeek V4.1 Flash". Unknown shapes are title-cased.
- */
-export function modelLabel(id: string): string {
-    const parts = id.split('-');
-    const words: string[] = [];
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        // Claude-style versions are split across parts: 5-5 → 5.5.
-        if (
-            /^\d+$/.test(part) &&
-            /^\d{1,2}$/.test(parts[i + 1] ?? '') &&
-            part.length <= 2
-        ) {
-            words.push(`${part}.${parts[++i]}`);
-        } else if (BRANDS[part]) {
-            words.push(BRANDS[part]);
-        } else if (/^v\d/.test(part)) {
-            words.push(part.toUpperCase());
-        } else {
-            words.push(part.charAt(0).toUpperCase() + part.slice(1));
-        }
-    }
-    return words.join(' ');
-}
-
 export const EFFORT_OPTIONS: {
     value: Effort | 'auto';
     label: string;
@@ -183,7 +149,7 @@ export const EFFORT_OPTIONS: {
 const SETTINGS_KEY = 'ai-chat:settings';
 
 /** The viewer's last model and effort, if the browser kept them. */
-export function loadSettings(): Partial<ConversationSettings> {
+export function loadSettings(): Partial<SavedSettings> {
     try {
         return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
     } catch {
@@ -191,7 +157,7 @@ export function loadSettings(): Partial<ConversationSettings> {
     }
 }
 
-export function saveSettings(settings: ConversationSettings): void {
+export function saveSettings(settings: SavedSettings): void {
     try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch {

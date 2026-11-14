@@ -44,8 +44,9 @@ class LlmClient
      * @param  array<int, array<string, mixed>>  $messages
      * @param  array<int, array<string, mixed>>  $tools  in the {type: function, function: {...}} shape
      * @param  array<string, mixed>  $options  extra body fields, e.g. temperature
+     * @param  int|null  $timeout  seconds; defaults to AI_TIMEOUT
      */
-    public function chat(string $model, array $messages, array $tools = [], array $options = []): array
+    public function chat(string $model, array $messages, array $tools = [], array $options = [], ?int $timeout = null): array
     {
         $body = ['model' => $model, 'messages' => $messages] + $options;
         if ($tools) {
@@ -53,7 +54,7 @@ class LlmClient
             $body['tool_choice'] = $body['tool_choice'] ?? 'auto';
         }
 
-        return $this->send('post', '/chat/completions', $body);
+        return $this->send('post', '/chat/completions', $body, $timeout);
     }
 
     /** GET /models: the model ids the key can use. */
