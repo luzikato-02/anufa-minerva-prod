@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Ai\AiChatController;
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\DocumentIntelligenceController;
 use App\Http\Controllers\Api\CreelRecordController;
@@ -342,6 +343,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // ---- DOCUMENT INTELLIGENCE ----
+    // Data chat (Mistral). Each tool it can use checks its own module permission as well.
+    Route::middleware('permission:ai-chat.use')->group(function () {
+        Route::get('ai-chat', [AiChatController::class, 'page'])->name('ai-chat');
+        Route::get('ai-chat/conversations', [AiChatController::class, 'index']);
+        Route::get('ai-chat/conversations/{id}', [AiChatController::class, 'show'])->whereNumber('id');
+        Route::delete('ai-chat/conversations/{id}', [AiChatController::class, 'destroy'])->whereNumber('id');
+        Route::post('ai-chat/messages', [AiChatController::class, 'store']);
+    });
+
     Route::get('document-intelligence', fn () => Inertia::render('document-intelligence'))
         ->name('document-intelligence');
     Route::post('document-intelligence/process', [DocumentIntelligenceController::class, 'process']);

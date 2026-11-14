@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Ai\Mistral\MistralClient;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 class FinishEarlierScanController extends Controller
 {
-    public function extract(Request $request)
+    public function extract(Request $request, MistralClient $mistral)
     {
         $request->validate([
             'file' => 'required|file|mimes:pdf,png,jpg,jpeg,webp|max:20480',
@@ -17,24 +18,9 @@ class FinishEarlierScanController extends Controller
         $mime    = $file->getMimeType();
         $base64  = base64_encode(file_get_contents($file->getPathname()));
         $dataUrl = "data:{$mime};base64,{$base64}";
-        $type    = str_contains($mime, 'pdf') ? 'document_url' : 'image_url';
-
-        $client = new \GuzzleHttp\Client(['timeout' => 120]);
-        $apiKey = config('services.mistral.key');
 
         // Step 1: OCR
-        $ocrResponse = $client->post('https://api.mistral.ai/v1/ocr', [
-            'headers' => [
-                'Authorization' => "Bearer {$apiKey}",
-                'Content-Type'  => 'application/json',
-            ],
-            'json' => [
-                'model'    => 'mistral-ocr-4-0',
-                'document' => ['type' => $type, $type => $dataUrl],
-            ],
-        ]);
-
-        $ocrData = json_decode($ocrResponse->getBody(), true);
+        $ocrData = $mistral->ocr($dataUrl, $mime);
         $ocrText = collect($ocrData['pages'] ?? [])->pluck('markdown')->implode("\n\n");
 
         // Step 2: structured extraction
@@ -71,21 +57,10 @@ OCR text from the form:
 {$ocrText}
 PROMPT;
 
-        $chatResponse = $client->post('https://api.mistral.ai/v1/chat/completions', [
-            'headers' => [
-                'Authorization' => "Bearer {$apiKey}",
-                'Content-Type'  => 'application/json',
-            ],
-            'json' => [
-                'model'           => 'mistral-small-latest',
-                'response_format' => ['type' => 'json_object'],
-                'messages'        => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ],
-        ]);
+        $chatData = $mistral->chat('mistral-small-latest', [
+            ['role' => 'user', 'content' => $prompt],
+        ], options: ['response_format' => ['type' => 'json_object']]);
 
-        $chatData  = json_decode($chatResponse->getBody(), true);
         $extracted = json_decode($chatData['choices'][0]['message']['content'], true);
 
         $extracted['_ocr_text'] = $ocrText;

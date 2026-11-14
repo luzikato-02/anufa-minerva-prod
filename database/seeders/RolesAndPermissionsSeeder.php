@@ -54,6 +54,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'users.manage',
             'roles.manage',
             'activity-log.view',
+            'ai-chat.use',
         ];
 
         foreach ($permissions as $permission) {
@@ -90,6 +91,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'control-plans.view',
                 'control-plans.author',
                 'activity-log.view',
+                'ai-chat.use',
             ],
             'analyst' => [
                 'tension-records.view',
@@ -101,6 +103,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'creel-types.view',
                 'control-plans.view',
                 'activity-log.view',
+                'ai-chat.use',
             ],
             'operator' => [
                 'tension-records.view',

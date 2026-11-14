@@ -25,7 +25,7 @@ import { usePermissions } from '@/lib/permissions';
 import { activityLog, batchStockTakingMain, creelTypeSettings, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockSheetMain, stockSheetsMain, stockTakeRecordsMain, tensionRecordsDisplay, torqueCheckMain, torqueChecksMain, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, FileCheck2, Library } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, FileCheck2, Library, MessagesSquare } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
@@ -44,6 +44,12 @@ const mainNavItems: NavItem[] = [
         title: 'Document Intelligence',
         href: documentIntelligence(),
         icon: FileSearch,
+    },
+    {
+        title: 'Ask the Data',
+        href: '/ai-chat',
+        icon: MessagesSquare,
+        permission: 'ai-chat.use',
     },
 ];
 
