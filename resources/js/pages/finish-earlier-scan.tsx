@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const SCAN_LOG = [
-    { at: 200,   text: 'Uploading document to Telkomsel OCTA…' },
+    { at: 200,   text: 'Uploading document…' },
     { at: 1200,  text: 'Connected · the model is reading the form…' },
     { at: 3500,  text: 'Scanning pages for text content…' },
     { at: 6500,  text: 'Transcription complete · reading the form again for its fields…' },

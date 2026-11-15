@@ -45,7 +45,7 @@ interface OcrResult {
 type State = 'idle' | 'processing' | 'done' | 'error';
 
 const PROCESS_LOG = [
-    { at: 200, text: 'Uploading document to Telkomsel OCTA…' },
+    { at: 200, text: 'Uploading document…' },
     { at: 1200, text: 'Connected · the model is reading the document…' },
     { at: 3500, text: 'Scanning pages for text content…' },
     { at: 7000, text: 'Extracting markdown from page content…' },
@@ -295,7 +295,7 @@ export default function DocumentIntelligence() {
                     meta={
                         state === 'done' && result
                             ? `${file?.name ?? 'Document'} · ${pageCount} ${pageCount === 1 ? 'page' : 'pages'} · ${modelLabel(result.model)}`
-                            : 'Extract text and tables from a PDF or image with an AI model on Telkomsel OCTA'
+                            : 'Extract text and tables from a PDF or image with an AI model'
                     }
                     actions={
                         state === 'done' &&

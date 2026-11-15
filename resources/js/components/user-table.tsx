@@ -726,7 +726,7 @@ function AiModelsDialog({
                                 >
                                     Every model
                                     <span className="text-xs text-muted-foreground">
-                                        Including models added to OCTA later
+                                        Including models added later
                                     </span>
                                 </Label>
                             </div>
@@ -734,7 +734,7 @@ function AiModelsDialog({
                                 <div className="flex flex-col gap-2 border-t pt-3">
                                     {models.length === 0 && (
                                         <p className="text-xs text-muted-foreground">
-                                            OCTA lists no models right now.
+                                            No models are available right now.
                                         </p>
                                     )}
                                     {models.map((m) => (

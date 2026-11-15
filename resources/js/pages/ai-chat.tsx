@@ -356,9 +356,8 @@ export default function AiChat({
                                 disabled={sending}
                             />
                             <p className="text-xs text-muted-foreground">
-                                Answers come from Minerva's records via
-                                Telkomsel OCTA. Check the sources before acting
-                                on a number.
+                                Answers come from Minerva's records. Check the
+                                sources before acting on a number.
                             </p>
                         </div>
                     </form>
