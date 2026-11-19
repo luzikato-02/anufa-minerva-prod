@@ -73,13 +73,11 @@ export default function WeavingParams({
       specTens: "",
       tensPlus: "",
     })
-    console.log("Data cleared")
   }
 
   const clearAllData = () => {
     clearAllAppData()
     clearData()
-    console.log("All app data cleared from localStorage")
   }
 
   return (

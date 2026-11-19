@@ -48,6 +48,21 @@ interface NumpadState {
   creelRowIndex: number
 }
 
+const emptyCreelData = (): CreelData => ({ AI: {}, BI: {}, AO: {}, BO: {} })
+
+const emptyFormData = (): TensionData => ({
+  machineNumber: "",
+  metersCheck: "",
+  itemNumber: "",
+  itemDescription: "",
+  operator: "",
+  productionOrder: "",
+  baleNumber: "",
+  colorCode: "",
+  specTens: "",
+  tensPlus: "",
+})
+
 export default function WeavingTensionPage() {
   const [currentView, setCurrentView] = useState<"numpad" | "problems" | "recorder" | "session-select">("session-select")
   const [currentPosition, setCurrentPosition] = useState("AI-A-Col1")
@@ -60,29 +75,13 @@ export default function WeavingTensionPage() {
   const [creelRowIndex, setCreelRowIndex] = useState(0) // Index for creel row options
 
   // Lifted creelData state to preserve stored values during navigation
-  const [creelData, setCreelData] = useState<CreelData>({
-    AI: {},
-    BI: {},
-    AO: {},
-    BO: {},
-  })
+  const [creelData, setCreelData] = useState<CreelData>(emptyCreelData)
 
   // Lifted problems state to preserve problems list during navigation
   const [submittedProblems, setSubmittedProblems] = useState<ProblemReport[]>([])
 
   // Lifted form data state to preserve parameter form data during navigation
-  const [formData, setFormData] = useState<TensionData>({
-    machineNumber: "",
-    metersCheck: "",
-    itemNumber: "",
-    itemDescription: "",
-    operator: "",
-    productionOrder: "",
-    baleNumber: "",
-    colorCode: "",
-    specTens: "",
-    tensPlus: "",
-  })
+  const [formData, setFormData] = useState<TensionData>(emptyFormData)
 
   // Server-side session for the current production order, so measurement
   // entry can be resumed later (from this device or another one).
@@ -95,8 +94,8 @@ export default function WeavingTensionPage() {
 
   // Load data from localStorage on mount
   useEffect(() => {
-    const savedFormData = loadFromLocalStorage("weaving-form-data", formData)
-    const savedCreelData = loadFromLocalStorage("weaving-creel-data", creelData)
+    const savedFormData = loadFromLocalStorage("weaving-form-data", emptyFormData())
+    const savedCreelData = loadFromLocalStorage("weaving-creel-data", emptyCreelData())
     const savedProblems = loadFromLocalStorage("weaving-problems", [])
     const savedNumpadState = loadFromLocalStorage("weaving-numpad-state", {
       display: "0",
@@ -270,7 +269,7 @@ export default function WeavingTensionPage() {
         // cached grid belongs to a different production order, drop it so
         // it doesn't leak into the new session.
         if (sessionProductionOrder && sessionProductionOrder !== productionOrder) {
-          setCreelData({ AI: {}, BI: {}, AO: {}, BO: {} })
+          setCreelData(emptyCreelData())
           setSubmittedProblems([])
         }
 
@@ -291,24 +290,8 @@ export default function WeavingTensionPage() {
   // Handle data clearing after finish
   const handleDataCleared = () => {
     // Reset all state to initial values
-    setFormData({
-      machineNumber: "",
-      metersCheck: "",
-      itemNumber: "",
-      itemDescription: "",
-      operator: "",
-      productionOrder: "",
-      baleNumber: "",
-      colorCode: "",
-      specTens: "",
-      tensPlus: "",
-    })
-    setCreelData({
-      AI: {},
-      BI: {},
-      AO: {},
-      BO: {},
-    })
+    setFormData(emptyFormData())
+    setCreelData(emptyCreelData())
     setSubmittedProblems([])
     setDisplay("0")
     setCounter(1)
@@ -321,7 +304,6 @@ export default function WeavingTensionPage() {
     removeFromLocalStorage("weaving-session-po")
 
     setCurrentView("session-select")
-    console.log("All weaving data cleared and reset to initial state - returned to session select")
   }
 
   const conflictBanner = mergeSummary && (

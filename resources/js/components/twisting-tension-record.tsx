@@ -37,6 +37,19 @@ interface NumpadState {
   valueType: string
 }
 
+const emptyFormData = (): TensionData => ({
+  machineNumber: "",
+  itemNumber: "",
+  metersCheck: "",
+  operator: "",
+  dtexNumber: "",
+  tpm: "",
+  specTens: "",
+  tensPlus: "",
+  rpm: "",
+  yarnCode: "",
+})
+
 export default function TwistingTensionPage() {
   // Lifted all numpad state to preserve during navigation
   const [display, setDisplay] = useState("0")
@@ -47,18 +60,7 @@ export default function TwistingTensionPage() {
   const [spindleData, setSpindleData] = useState<Record<number, SpindleData>>({})
 
   // Lifted form data state to preserve parameter form data during navigation
-  const [formData, setFormData] = useState<TensionData>({
-    machineNumber: "",
-    itemNumber: "",
-    metersCheck: "",
-    operator: "",
-    dtexNumber: "",
-    tpm: "",
-    specTens: "",
-    tensPlus: "",
-    rpm: "",
-    yarnCode: "",
-  })
+  const [formData, setFormData] = useState<TensionData>(emptyFormData)
 
   // Lifted problems state to preserve problems list during navigation
   const [submittedProblems, setSubmittedProblems] = useState<SubmittedProblem[]>([])
@@ -68,8 +70,8 @@ export default function TwistingTensionPage() {
 
   // Load data from localStorage on mount
   useEffect(() => {
-    const savedFormData = loadFromLocalStorage("twisting-form-data", formData)
-    const savedSpindleData = loadFromLocalStorage("twisting-spindle-data", spindleData)
+    const savedFormData = loadFromLocalStorage("twisting-form-data", emptyFormData())
+    const savedSpindleData = loadFromLocalStorage<Record<number, SpindleData>>("twisting-spindle-data", {})
     const savedProblems = loadFromLocalStorage("twisting-problems", [])
     const savedNumpadState = loadFromLocalStorage("twisting-numpad-state", {
       display: "0",
@@ -109,18 +111,7 @@ export default function TwistingTensionPage() {
   // Handle data clearing after finish
   const handleDataCleared = () => {
     // Reset all state to initial values
-    setFormData({
-      machineNumber: "",
-      itemNumber: "",
-      metersCheck: "",
-      operator: "",
-      dtexNumber: "",
-      tpm: "",
-      specTens: "",
-      tensPlus: "",
-      rpm: "",
-      yarnCode: "",
-    })
+    setFormData(emptyFormData())
     setSpindleData({})
     setSubmittedProblems([])
     setDisplay("0")
@@ -130,7 +121,6 @@ export default function TwistingTensionPage() {
     // Force navigate back to params form for fresh start
     setCurrentView("recorder")
 
-    console.log("All twisting data cleared and reset to initial state - returned to params form")
   }
 
   if (currentView === "problems") {

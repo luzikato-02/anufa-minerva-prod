@@ -85,12 +85,14 @@ export default function BatchStockTakingForm() {
     };
 
     // Handle batch fetch
-    const handleBatchFetch = async () => {
+    // Takes the batch number explicitly so a scan can pass the value it just
+    // read instead of relying on state that hasn't re-rendered yet.
+    const handleBatchFetch = async (batchToFetch: string = batchNumber) => {
         setError(null);
         setSuccess(false);
 
         // Validate input
-        if (!batchNumber.trim()) {
+        if (!batchToFetch.trim()) {
             setError('Please enter a batch number');
             return;
         }
@@ -98,7 +100,7 @@ export default function BatchStockTakingForm() {
         setLoading(true);
 
         try {
-            const data = await checkStockBatch(sessionId, batchNumber);
+            const data = await checkStockBatch(sessionId, batchToFetch);
 
             if (!data.exists) {
                 setError(data.message || 'Batch not found in this session');
@@ -250,10 +252,7 @@ export default function BatchStockTakingForm() {
     const handleBarcodeScan = (scannedBarcode: string) => {
         setBatchNumber(scannedBarcode);
         setShowBarcodeScanner(false);
-        // Automatically fetch the batch after a short delay to ensure state is updated
-        setTimeout(() => {
-            handleBatchFetch();
-        }, 100);
+        handleBatchFetch(scannedBarcode);
     };
 
     // Session Selection UI
@@ -417,7 +416,7 @@ export default function BatchStockTakingForm() {
 
                     {/* Fetch Button */}
                     <Button
-                        onClick={handleBatchFetch}
+                        onClick={() => handleBatchFetch()}
                         disabled={loading || !batchNumber.trim()}
                         className="h-10 w-full text-sm font-medium"
                     >

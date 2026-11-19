@@ -38,7 +38,6 @@ export default function TwistingProblemReport({
       setSubmittedProblems([...submittedProblems, newProblem])
       setCurrentProblem("")
       setSelectedProblemIndex(null)
-      console.log("Problem submitted for Spindle", spindleNumber, ":", currentProblem)
     }
   }
 
@@ -46,7 +45,6 @@ export default function TwistingProblemReport({
     const newProblems = submittedProblems.filter((_, i) => i !== index)
     setSubmittedProblems(newProblems)
     setSelectedProblemIndex(null)
-    console.log("Problem deleted at index:", index)
   }
 
   const deleteSelectedProblem = () => {
@@ -57,11 +55,9 @@ export default function TwistingProblemReport({
 
   const clearCurrentText = () => {
     setCurrentProblem("")
-    console.log("Current problem text cleared")
   }
 
   const goBack = () => {
-    console.log("Back button clicked")
     onBack?.()
   }
 

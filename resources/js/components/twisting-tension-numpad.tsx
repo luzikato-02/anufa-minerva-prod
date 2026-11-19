@@ -186,14 +186,8 @@ export default function TwistingNumpad({
 
             setDisplay('0');
             toggleValueType();
-            console.log(
-                `Submitted ${valueType} value ${numValue} for Spindle ${counter}`,
-            );
             // If both values are now filled, move to next spindle
             if (bothWillBeFilled && counter < 84) {
-                console.log(
-                    `Both values complete for Spindle ${counter}. Moving to Spindle ${counter + 1}`,
-                );
                 setCounter(counter + 1);
                 setValueType('Max'); // Reset to Max for next spindle
             }
@@ -307,13 +301,11 @@ export default function TwistingNumpad({
         setSaveDialogOpen(false);
         if (saveStatus === 'success' && !pendingKeepLocal) {
             clearAllAppData();
-            console.log('Cleared all app data from localStorage');
             setDisplay('0');
             setCounter(1);
             setValueType('Max');
             setSpindleData({});
             onDataCleared?.();
-            console.log('All data cleared - ready for new session');
         }
     };
 
@@ -351,7 +343,6 @@ export default function TwistingNumpad({
             restoredProblems,
             'twisting-tension-data',
         );
-        console.log('Exported all twisting data from localStorage to CSV');
 
         await runSaveFlow(keepTrigger);
     };
@@ -391,7 +382,6 @@ export default function TwistingNumpad({
             };
         });
 
-        console.log(`Deleted ${valueType} value for Spindle ${counter}`);
     };
 
     const maxInSpec = isInSpec(currentSpindleData.max);
@@ -405,7 +395,6 @@ export default function TwistingNumpad({
         setCounter(num);
         setIsSpindleModalOpen(false);
         setSpindleError('');
-        console.log(`Jumped to spindle ${num}`);
     };
 
     return (
@@ -753,7 +742,6 @@ export default function TwistingNumpad({
                             size="sm"
                             className="h-10 bg-transparent text-sm font-medium hover:bg-accent hover:text-accent-foreground"
                             onClick={() => {
-                                console.log('Data Recorder button clicked');
                                 onOpenRecorder?.();
                             }}
                         >
@@ -775,10 +763,6 @@ export default function TwistingNumpad({
                         size="sm"
                         className="h-10 w-full bg-transparent text-sm font-medium transition-colors hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
                         onClick={() => {
-                            console.log(
-                                'Report Problem clicked for Spindle',
-                                counter,
-                            );
                             onReportProblem?.(counter);
                         }}
                     >

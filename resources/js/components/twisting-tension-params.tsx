@@ -48,7 +48,6 @@ export default function TwistingParams({
     };
 
     const startRecording = () => {
-        console.log('Started recording with data:', formData);
         onStartRecording?.();
     };
 
@@ -65,13 +64,11 @@ export default function TwistingParams({
             rpm: '',
             yarnCode: '',
         });
-        console.log('Data cleared');
     };
 
     const clearAllData = () => {
         clearAllAppData();
         clearData();
-        console.log('All app data cleared from localStorage');
     };
 
     return (

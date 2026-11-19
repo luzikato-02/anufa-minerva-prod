@@ -936,11 +936,17 @@ const SceneWrapper = memo(function SceneWrapper({ batches, finishedPositions, on
     );
 });
 
+// Stable defaults: inline literals would be new objects on every render and
+// defeat the memoisation downstream.
+const NO_FINISHED_POSITIONS: FinishedPosition[] = [];
+const ALL_VISIBLE_SIDES: SideName[] = ['AI', 'AO', 'BI', 'BO'];
+const NO_SELECTED_POSITIONS: Set<string> = new Set();
+
 export function Creel3DViewer({
     batches,
-    finishedPositions = [],
-    visibleSides = ['AI', 'AO', 'BI', 'BO'],
-    selectedPositions = new Set(),
+    finishedPositions = NO_FINISHED_POSITIONS,
+    visibleSides = ALL_VISIBLE_SIDES,
+    selectedPositions = NO_SELECTED_POSITIONS,
     onPositionToggle,
 }: {
     batches: BatchItem[];

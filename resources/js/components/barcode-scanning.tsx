@@ -230,9 +230,23 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
         preloadBarcodeReader().catch((err) => console.warn('Barcode reader preload failed:', err));
     }, []);
 
+    // The scanning effect below should restart only when `open` changes, but
+    // it must always call the latest callbacks (a parent may pass a new
+    // `onScan` while the scanner is open). Keep them in a ref.
+    const latestRef = useRef<{
+        onScan: (barcode: string) => void;
+        handleClose: () => void;
+        startStream: (deviceId?: string) => Promise<MediaStream>;
+        stopCamera: () => void;
+    } | null>(null);
+    useEffect(() => {
+        latestRef.current = { onScan, handleClose, startStream, stopCamera };
+    });
+
     useEffect(() => {
         if (!open) return;
 
+        const { startStream, stopCamera } = latestRef.current!;
         isMountedRef.current = true;
 
         const startScanning = async () => {
@@ -281,8 +295,8 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                     try {
                         const barcode = await reader.detect(videoRef.current);
                         if (barcode && !manualModeRef.current) {
-                            onScan(barcode.rawValue);
-                            handleClose();
+                            latestRef.current?.onScan(barcode.rawValue);
+                            latestRef.current?.handleClose();
                         }
                     } catch (err) {
                         console.error('Barcode detection error:', err);

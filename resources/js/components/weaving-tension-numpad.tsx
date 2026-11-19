@@ -233,12 +233,8 @@ export default function WeavingNumpad({
       const bothWillBeFilled = otherValue !== null
             storeValue(numValue);
             setDisplay('0');
-            console.log(
-                `Submitted ${valueType} value ${numValue} for ${currentSide}-${currentRow}-Col${counter}`,
-            );
             // If both values are now filled, move to next column
       if (bothWillBeFilled && counter < 120) {
-        console.log(`Both values complete for ${currentSide}-${currentRow}-Col${counter}. Moving to Col${counter + 1}`)
         setCounter(counter + 1)
         setValueType("Max")
       }
@@ -358,7 +354,6 @@ export default function WeavingNumpad({
         setSaveDialogOpen(false);
         if (saveStatus === 'success' && !pendingKeepLocal) {
             clearAllAppData();
-            console.log('Cleared all app data from localStorage');
             setDisplay('0');
             setCounter(1);
             setValueType('Max');
@@ -371,7 +366,6 @@ export default function WeavingNumpad({
                 BO: {},
             });
             onDataCleared?.();
-            console.log('All data cleared - ready for new session');
         }
     };
 
@@ -411,7 +405,6 @@ export default function WeavingNumpad({
             restoredProblems,
             'weaving-tension-data',
         );
-        console.log('Exported all weaving data from localStorage to CSV');
 
         await runSaveFlow(keepTrigger);
     };
@@ -450,9 +443,6 @@ export default function WeavingNumpad({
             return newData;
         });
 
-        console.log(
-            `Deleted ${valueType} value for ${currentSide}-${currentRow}-Col${counter}`,
-        );
     };
 
     const maxInSpec = isInSpec(currentSpindleData.max)
@@ -467,7 +457,6 @@ export default function WeavingNumpad({
     setCounter(num)
     setIsColModalOpen(false)
     setColError("")
-    console.log(`Jumped to column ${num}`)
   }
 
     return (
@@ -845,7 +834,6 @@ export default function WeavingNumpad({
                             size="sm"
                             className="h-10 bg-transparent text-sm font-medium hover:bg-accent hover:text-accent-foreground"
                             onClick={() => {
-                                console.log('Data Recorder button clicked');
                                 onOpenRecorder?.();
                             }}
                         >
@@ -868,10 +856,6 @@ export default function WeavingNumpad({
                         className="h-10 w-full bg-transparent text-sm font-medium transition-colors hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
                         onClick={() => {
                             const fullPosition = `${currentSide}-${currentRow}-Col${counter}`;
-                            console.log(
-                                'Report Problem clicked for',
-                                fullPosition,
-                            );
                             onReportProblem?.(fullPosition);
                         }}
                     >

@@ -180,62 +180,6 @@ export class LaravelDatabaseService {
     }
   }
 
-  async getTensionRecords(
-    recordType?: "twisting" | "weaving",
-    page = 1,
-  ): Promise<{
-    records: TensionRecord[]
-    pagination?: {
-      current_page: number
-      last_page: number
-      per_page: number
-      total: number
-    }
-  }> {
-    try {
-      const params = new URLSearchParams()
-      if (recordType) params.append("type", recordType)
-      params.append("page", page.toString())
-
-      const url = `${this.baseUrl}/tension-records?${params.toString()}`
-      const response = await fetch(url, {
-        headers: this.getHeaders(),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (result.data && Array.isArray(result.data)) {
-        return {
-          records: result.data.map((record: TensionRecord & { created_at?: string }) => ({
-            ...record,
-            timestamp: record.timestamp || record.created_at,
-          })),
-          pagination: {
-            current_page: result.current_page,
-            last_page: result.last_page,
-            per_page: result.per_page,
-            total: result.total,
-          },
-        }
-      }
-
-      const records = Array.isArray(result) ? result : result.data || []
-      return {
-        records: records.map((record: TensionRecord & { created_at?: string }) => ({
-          ...record,
-          timestamp: record.timestamp || record.created_at,
-        })),
-      }
-    } catch (error) {
-      console.error("Failed to fetch tension records:", error)
-      return { records: [] }
-    }
-  }
-
   async getTensionRecord(id: string): Promise<TensionRecord | null> {
     try {
       const response = await fetch(`${this.baseUrl}/tension-records/${id}`, {
@@ -256,28 +200,6 @@ export class LaravelDatabaseService {
     } catch (error) {
       console.error("Failed to fetch tension record:", error)
       return null
-    }
-  }
-
-  async deleteTensionRecord(id: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/tension-records/${id}`, {
-        method: "DELETE",
-        headers: this.getHeaders(),
-      })
-
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.message || `HTTP error! status: ${response.status}`)
-      }
-
-      return { success: true }
-    } catch (error) {
-      console.error("Failed to delete tension record:", error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }
     }
   }
 }
