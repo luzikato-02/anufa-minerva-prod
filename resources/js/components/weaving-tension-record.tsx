@@ -4,7 +4,8 @@ import WeavingProblems from "./weaving-tension-problems"
 import WeavingParams from "./weaving-tension-params"
 import WeavingSessionSelect from "./weaving-session-select"
 import { saveToLocalStorage, loadFromLocalStorage, removeFromLocalStorage, restoreProblemsWithDates, mergeCreelData, type MergeConflictSummary } from "@/lib/localStorage"
-import { getWeavingSession, prepareWeavingDataForDatabase, startWeavingSession, updateWeavingSession } from "@/lib/databaseConnector"
+import { getWeavingSession, startWeavingSession, updateWeavingSession } from "@/api/tension-records"
+import { prepareWeavingDataForDatabase } from "@/lib/tension/payload"
 
 interface SpindleData {
   max: number | null

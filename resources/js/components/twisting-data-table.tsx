@@ -44,10 +44,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useServerTable } from '@/hooks/use-server-table';
-import {
-    databaseService,
-    verifyPersistedRecord,
-} from '@/lib/databaseConnector';
+import { getTensionRecord } from '@/api/tension-records';
+import { verifyPersistedRecord } from '@/lib/tension/verify';
 import {
     type FormValue,
     type ProblemLike,
@@ -1015,7 +1013,7 @@ function EditTwistingRecordDialog({
                 ),
             );
 
-            const fetched = await databaseService.getTensionRecord(
+            const fetched = await getTensionRecord(
                 String(record.id),
             );
             const verification = verifyPersistedRecord(

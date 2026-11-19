@@ -18,8 +18,8 @@ import {
     checkStockBatch,
     getStockTakeSession,
     recordStockBatch,
-    type StockTakeBatch,
-} from '@/lib/databaseConnector';
+} from '@/api/stock-take';
+import type { StockTakeBatch } from '@/types/stock-take';
 import {
     AlertCircle,
     ArrowLeft,

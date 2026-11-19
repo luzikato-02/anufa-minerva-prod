@@ -14,11 +14,12 @@ import { useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
 import { exportWeavingDataToCSV } from '@/lib/csv-export';
 import {
-    databaseService,
-    prepareWeavingDataForDatabase,
+    getTensionRecord,
+    saveTensionRecord,
     updateWeavingSession,
-    verifyPersistedRecord,
-} from '@/lib/databaseConnector';
+} from '@/api/tension-records';
+import { prepareWeavingDataForDatabase } from '@/lib/tension/payload';
+import { verifyPersistedRecord } from '@/lib/tension/verify';
 import {
     clearAllAppData,
     loadFromLocalStorage,
@@ -262,7 +263,7 @@ export default function WeavingNumpad({
         // entry where the session couldn't be started).
         const result = sessionId
             ? await updateWeavingSession(sessionId, record, 'completed')
-            : await databaseService.saveTensionRecord(record);
+            : await saveTensionRecord(record);
 
         if (!result.success) {
             setSaveSteps((prev) =>
@@ -308,7 +309,7 @@ export default function WeavingNumpad({
         const savedId = result.data?.id ?? result.id;
         const fetched =
             savedId != null
-                ? await databaseService.getTensionRecord(String(savedId))
+                ? await getTensionRecord(String(savedId))
                 : null;
         const verification = verifyPersistedRecord(record, fetched);
 

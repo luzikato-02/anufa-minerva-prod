@@ -28,11 +28,9 @@ import * as React from 'react';
 import { useState } from 'react';
 import { SaveStatusDialog, type SaveStep } from './save-status-dialog';
 import { exportTwistingDataToCSV } from '@/lib/csv-export';
-import {
-    databaseService,
-    prepareTwistingDataForDatabase,
-    verifyPersistedRecord,
-} from '@/lib/databaseConnector';
+import { getTensionRecord, saveTensionRecord } from '@/api/tension-records';
+import { prepareTwistingDataForDatabase } from '@/lib/tension/payload';
+import { verifyPersistedRecord } from '@/lib/tension/verify';
 import {
     clearAllAppData,
     loadFromLocalStorage,
@@ -209,7 +207,7 @@ export default function TwistingNumpad({
         setSaveDialogOpen(true);
 
         const record = prepareTwistingDataForDatabase();
-        const result = await databaseService.saveTensionRecord(record);
+        const result = await saveTensionRecord(record);
 
         if (!result.success) {
             setSaveSteps((prev) =>
@@ -255,7 +253,7 @@ export default function TwistingNumpad({
         const savedId = result.data?.id ?? result.id;
         const fetched =
             savedId != null
-                ? await databaseService.getTensionRecord(String(savedId))
+                ? await getTensionRecord(String(savedId))
                 : null;
         const verification = verifyPersistedRecord(record, fetched);
 
