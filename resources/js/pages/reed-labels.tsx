@@ -1,12 +1,16 @@
 import { Button } from '@/components/ui/button';
-import { fmt } from '@/lib/reeds';
+import { specLabel } from '@/lib/reeds';
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeftIcon, PrinterIcon } from 'lucide-react';
 
 interface LabelReed {
     id: number;
     serial_no: string;
-    spec: { code: string; dents_per_10cm: number; width_mm: number } | null;
+    spec: {
+        code: string;
+        dents_per_10cm: string | null;
+        width_mm: string | null;
+    } | null;
     received_on: string | null;
     /** Server-rendered QR code (holds the serial only). */
     qr_svg: string;
@@ -69,9 +73,10 @@ export default function ReedLabels({ reeds }: { reeds: LabelReed[] }) {
                                         <div className="text-[8pt] leading-snug">
                                             {r.spec.code}
                                             <br />
-                                            {fmt(r.spec.dents_per_10cm, 1)}{' '}
-                                            dents/10 cm · {fmt(r.spec.width_mm)}{' '}
-                                            mm
+                                            {specLabel({
+                                                ...r.spec,
+                                                code: '',
+                                            })}
                                         </div>
                                     )}
                                     {r.received_on && (

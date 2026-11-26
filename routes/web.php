@@ -258,6 +258,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('match', [ReedController::class, 'match']);
             Route::get('movements', [ReedController::class, 'recentMovements']);
             Route::get('specs', [ReedSettingsController::class, 'specs']);
+            Route::get('specs/template', [ReedSettingsController::class, 'specTemplate']);
             Route::get('styles', [ReedSettingsController::class, 'styles']);
             Route::get('locations', [ReedSettingsController::class, 'locations']);
         });
@@ -276,6 +277,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('reeds/{id}/scrap', [ReedActionController::class, 'scrap'])->whereNumber('id');
 
         Route::post('specs', [ReedSettingsController::class, 'storeSpec']);
+        Route::post('specs/import', [ReedSettingsController::class, 'importSpecs']);
         Route::patch('specs/{id}', [ReedSettingsController::class, 'updateSpec'])->whereNumber('id');
         Route::delete('specs/{id}', [ReedSettingsController::class, 'destroySpec'])->whereNumber('id');
         Route::post('styles', [ReedSettingsController::class, 'storeStyle']);

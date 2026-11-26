@@ -34,14 +34,25 @@ import AppLayout from '@/layouts/app-layout';
 import { usePermissions } from '@/lib/permissions';
 import {
     fmt,
+    importSpecs,
     reedApi,
+    SPEC_TEMPLATE_URL,
+    SpecImportError,
+    specLabel,
     type FabricStyle,
     type ReedLocation,
     type ReedSpec,
+    type SpecImportResult,
 } from '@/lib/reeds';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import {
+    DownloadIcon,
+    PencilIcon,
+    PlusIcon,
+    Trash2Icon,
+    UploadIcon,
+} from 'lucide-react';
 import {
     useCallback,
     useEffect,
@@ -81,6 +92,8 @@ export default function ReedSettings() {
     const [deleting, setDeleting] = useState<{ kind: Kind; row: Row } | null>(
         null,
     );
+    const [importing, setImporting] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
 
     const reload = useCallback(() => {
         setLoading(true);
@@ -173,22 +186,39 @@ export default function ReedSettings() {
                         }
                         actions={
                             canManage && (
-                                <Button
-                                    size="xs"
-                                    onClick={() =>
-                                        setEditing({ kind: tab, row: null })
-                                    }
-                                >
-                                    <PlusIcon />
-                                    {NOUN[tab][0].toUpperCase() +
-                                        NOUN[tab].slice(1)}
-                                </Button>
+                                <>
+                                    {tab === 'specs' && (
+                                        <Button
+                                            size="xs"
+                                            variant="outline"
+                                            onClick={() => setImporting(true)}
+                                        >
+                                            <UploadIcon />
+                                            Import
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="xs"
+                                        onClick={() =>
+                                            setEditing({ kind: tab, row: null })
+                                        }
+                                    >
+                                        <PlusIcon />
+                                        {NOUN[tab][0].toUpperCase() +
+                                            NOUN[tab].slice(1)}
+                                    </Button>
+                                </>
                             )
                         }
                     />
                     {error && (
                         <Alert variant="destructive" role="alert">
                             <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+                    {notice && (
+                        <Alert role="status">
+                            <AlertDescription>{notice}</AlertDescription>
                         </Alert>
                     )}
 
@@ -200,15 +230,9 @@ export default function ReedSettings() {
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent">
                                     <TableHead>Code</TableHead>
-                                    <TableHead className="text-right">
-                                        Dents / 10 cm
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        Width mm
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        Height mm
-                                    </TableHead>
+                                    <TableHead>Dents / 10 cm</TableHead>
+                                    <TableHead>Width</TableHead>
+                                    <TableHead>Height</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Wire</TableHead>
                                     <TableHead className="text-right">
@@ -224,40 +248,36 @@ export default function ReedSettings() {
                                 {specs.length === 0
                                     ? empty(
                                           8,
-                                          'No reed specs yet. Add one for each dent density and width you stock.',
+                                          'No reed specs yet. Add one for each dent density and width you stock, or import them from the template.',
                                       )
                                     : specs.map((s) => (
                                           <TableRow key={s.id}>
                                               <TableCell className="font-medium">
                                                   {s.code}
                                               </TableCell>
-                                              <TableCell className="text-right tabular-nums">
-                                                  {fmt(s.dents_per_10cm, 2)}
+                                              <TableCell>
+                                                  {s.dents_per_10cm ?? '—'}
                                               </TableCell>
-                                              <TableCell className="text-right tabular-nums">
-                                                  {fmt(s.width_mm)}
+                                              <TableCell>
+                                                  {s.width_mm ?? '—'}
                                                   {s.working_width_mm && (
                                                       <span className="text-muted-foreground">
                                                           {' '}
-                                                          (
-                                                          {fmt(
-                                                              s.working_width_mm,
-                                                          )}
-                                                          )
+                                                          (working{' '}
+                                                          {s.working_width_mm})
                                                       </span>
                                                   )}
                                               </TableCell>
-                                              <TableCell className="text-right tabular-nums">
-                                                  {fmt(s.height_mm)}
+                                              <TableCell>
+                                                  {s.height_mm ?? '—'}
                                               </TableCell>
-                                              <TableCell className="capitalize">
-                                                  {s.reed_type}
+                                              <TableCell>
+                                                  {s.reed_type ?? '—'}
                                               </TableCell>
                                               <TableCell className="text-muted-foreground">
                                                   {[
                                                       s.wire_profile,
-                                                      s.wire_thickness_mm &&
-                                                          `${s.wire_thickness_mm} mm`,
+                                                      s.wire_thickness_mm,
                                                       s.wire_material,
                                                   ]
                                                       .filter(Boolean)
@@ -372,6 +392,20 @@ export default function ReedSettings() {
                 </Tabs>
             </div>
 
+            {importing && (
+                <ImportDialog
+                    onClose={() => setImporting(false)}
+                    onImported={(r) => {
+                        setImporting(false);
+                        setError(null);
+                        setNotice(
+                            `Imported reed specs: ${r.created} new, ${r.updated} updated.`,
+                        );
+                        reload();
+                    }}
+                />
+            )}
+
             {editing && (
                 <EditDialog
                     kind={editing.kind}
@@ -424,7 +458,7 @@ function initialValues(kind: Kind, row: Row | null): Values {
             width_mm: str(r.width_mm),
             working_width_mm: str(r.working_width_mm),
             height_mm: str(r.height_mm),
-            reed_type: str(r.reed_type) || 'flat',
+            reed_type: str(r.reed_type),
             wire_profile: str(r.wire_profile),
             wire_thickness_mm: str(r.wire_thickness_mm),
             wire_material: str(r.wire_material),
@@ -442,16 +476,8 @@ function initialValues(kind: Kind, row: Row | null): Values {
     return { code: str(r.code), zone: str(r.zone), notes: str(r.notes) };
 }
 
-const NUMERIC = [
-    'dents_per_10cm',
-    'width_mm',
-    'working_width_mm',
-    'height_mm',
-    'wire_thickness_mm',
-    'min_stock',
-    'reed_spec_id',
-    'ends_per_10cm',
-];
+// Spec attributes are free text; only these go to the server as numbers.
+const NUMERIC = ['min_stock', 'reed_spec_id', 'ends_per_10cm'];
 
 function EditDialog({
     kind,
@@ -537,32 +563,25 @@ function EditDialog({
                                 placeholder: 'e.g. RD-90-1600',
                             })}
                             {input('dents_per_10cm', 'Dents per 10 cm', {
-                                numeric: true,
+                                placeholder: 'e.g. 90',
                             })}
-                            {input('width_mm', 'Overall width (mm)', {
-                                numeric: true,
+                            {input('width_mm', 'Overall width', {
+                                placeholder: 'e.g. 1600 mm',
                             })}
-                            {input('working_width_mm', 'Working width (mm)', {
-                                numeric: true,
+                            {input('working_width_mm', 'Working width', {
+                                placeholder: 'e.g. 1580 mm',
                             })}
-                            {input('height_mm', 'Height (mm)', {
-                                numeric: true,
+                            {input('height_mm', 'Height', {
+                                placeholder: 'e.g. 120 mm',
                             })}
-                            <Field label="Type" htmlFor="rs-type">
-                                <NativeSelect
-                                    id="rs-type"
-                                    value={String(values.reed_type)}
-                                    onChange={set('reed_type')}
-                                >
-                                    <option value="flat">Flat</option>
-                                    <option value="profile">
-                                        Profile (air-jet)
-                                    </option>
-                                </NativeSelect>
-                            </Field>
-                            {input('wire_profile', 'Wire profile')}
-                            {input('wire_thickness_mm', 'Wire thickness (mm)', {
-                                numeric: true,
+                            {input('reed_type', 'Type', {
+                                placeholder: 'e.g. Profile (air-jet)',
+                            })}
+                            {input('wire_profile', 'Wire profile', {
+                                placeholder: 'e.g. Flat',
+                            })}
+                            {input('wire_thickness_mm', 'Wire thickness', {
+                                placeholder: 'e.g. 0.30 mm',
                             })}
                             {input('wire_material', 'Wire material', {
                                 placeholder: 'e.g. stainless',
@@ -601,9 +620,7 @@ function EditDialog({
                                     <option value="">— not set —</option>
                                     {specs.map((s) => (
                                         <option key={s.id} value={s.id}>
-                                            {s.code} ·{' '}
-                                            {fmt(s.dents_per_10cm, 2)} dents/10
-                                            cm · {fmt(s.width_mm)} mm
+                                            {specLabel(s)}
                                         </option>
                                     ))}
                                 </NativeSelect>
@@ -645,6 +662,110 @@ function EditDialog({
                         </Button>
                         <Button type="submit" disabled={busy}>
                             {busy ? 'Saving…' : 'Save'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+/** Upload a filled-in spec template (.xlsx, or a .csv with the same columns). All rows or none are saved. */
+function ImportDialog({
+    onClose,
+    onImported,
+}: {
+    onClose: () => void;
+    onImported: (result: SpecImportResult) => void;
+}) {
+    const [file, setFile] = useState<File | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<{
+        message: string;
+        rows: string[];
+    } | null>(null);
+
+    const submit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!file) return setError({ message: 'Choose a file.', rows: [] });
+        setBusy(true);
+        setError(null);
+        try {
+            onImported(await importSpecs(file));
+        } catch (err) {
+            setError({
+                message: (err as Error).message,
+                rows: err instanceof SpecImportError ? err.rows : [],
+            });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+            <DialogContent className="sm:max-w-lg">
+                <form onSubmit={submit} className="grid gap-4">
+                    <DialogHeader>
+                        <DialogTitle>Import reed specs</DialogTitle>
+                    </DialogHeader>
+                    <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                        <li>
+                            Download the template and fill in one row per spec.
+                            Only Code is required; every other column is free
+                            text.
+                        </li>
+                        <li>
+                            A code that already exists updates that spec. Blank
+                            cells leave its current values as they are.
+                        </li>
+                        <li>
+                            Upload the file. If any row has a problem, nothing
+                            is saved and the rows to fix are listed.
+                        </li>
+                    </ol>
+                    <Button variant="outline" size="sm" asChild>
+                        <a href={SPEC_TEMPLATE_URL} download>
+                            <DownloadIcon />
+                            Download template (.xlsx)
+                        </a>
+                    </Button>
+                    <Field label="Filled-in file" htmlFor="rs-import-file">
+                        <Input
+                            id="rs-import-file"
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            onChange={(e) => {
+                                setFile(e.target.files?.[0] ?? null);
+                                setError(null);
+                            }}
+                        />
+                    </Field>
+                    {error && (
+                        <Alert variant="destructive" role="alert">
+                            <AlertDescription>
+                                <p>{error.message}</p>
+                                {error.rows.length > 0 && (
+                                    <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5">
+                                        {error.rows.map((r, i) => (
+                                            <li key={i}>{r}</li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                            disabled={busy}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={busy || !file}>
+                            {busy ? 'Importing…' : 'Import'}
                         </Button>
                     </DialogFooter>
                 </form>

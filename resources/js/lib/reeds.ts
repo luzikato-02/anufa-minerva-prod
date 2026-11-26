@@ -12,16 +12,17 @@ export type ReedStatus =
     | 'scrapped';
 export type ReedGrade = 'A' | 'B' | 'C' | 'X';
 
+/** Everything but code and min_stock is free text, shown as typed. */
 export interface ReedSpec {
     id: number;
     code: string;
-    dents_per_10cm: number;
-    width_mm: number;
-    working_width_mm: number | null;
-    height_mm: number | null;
-    reed_type: 'flat' | 'profile';
+    dents_per_10cm: string | null;
+    width_mm: string | null;
+    working_width_mm: string | null;
+    height_mm: string | null;
+    reed_type: string | null;
     wire_profile: string | null;
-    wire_thickness_mm: number | null;
+    wire_thickness_mm: string | null;
     wire_material: string | null;
     min_stock: number;
     notes: string | null;
@@ -447,11 +448,63 @@ export const fmtDate = (iso: string | null | undefined, withTime = false) => {
     );
 };
 
+/** "RD-90 · 90 dents/10 cm · 1600 mm", leaving out whatever the spec does not have. */
 export const specLabel = (s: {
     code: string;
-    dents_per_10cm?: number;
-    width_mm?: number;
+    dents_per_10cm?: string | null;
+    width_mm?: string | null;
+    reed_type?: string | null;
 }) =>
-    s.dents_per_10cm
-        ? `${s.code} · ${fmt(s.dents_per_10cm, 1)} dents/10 cm · ${fmt(s.width_mm)} mm`
-        : s.code;
+    [
+        s.code,
+        s.dents_per_10cm && `${s.dents_per_10cm} dents/10 cm`,
+        s.width_mm,
+        s.reed_type,
+    ]
+        .filter(Boolean)
+        .join(' · ');
+
+export interface SpecImportResult {
+    created: number;
+    updated: number;
+}
+
+/** Thrown by importSpecs when the file is refused; `rows` lists every problem to fix. */
+export class SpecImportError extends Error {
+    constructor(
+        message: string,
+        public rows: string[],
+    ) {
+        super(message);
+    }
+}
+
+export const SPEC_TEMPLATE_URL = '/reed-inventory/specs/template';
+
+export async function importSpecs(file: File): Promise<SpecImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/reed-inventory/specs/import', {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': await fetchXsrfToken(),
+        },
+        credentials: 'include',
+        body: form,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const errors = json.errors;
+        const rows: string[] = Array.isArray(errors)
+            ? errors
+            : errors
+              ? (Object.values(errors).flat() as string[])
+              : [];
+        throw new SpecImportError(
+            json.message ?? 'The import failed. Try again.',
+            rows,
+        );
+    }
+    return json.data as SpecImportResult;
+}

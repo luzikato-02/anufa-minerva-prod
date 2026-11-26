@@ -26,6 +26,7 @@ import {
     MANAGE_ACTIONS,
     MOVEMENT_LABEL,
     reedApi,
+    specLabel,
     STATUS_META,
     type ReedAction,
     type ReedDetail,
@@ -109,9 +110,7 @@ export function ReedDetailSheet({
                         )}
                     </SheetTitle>
                     <SheetDescription>
-                        {reed?.spec
-                            ? `${reed.spec.code} · ${fmt(reed.spec.dents_per_10cm, 1)} dents/10 cm · ${fmt(reed.spec.width_mm)} mm ${reed.spec.reed_type ?? ''}`
-                            : 'Loading…'}
+                        {reed?.spec ? specLabel(reed.spec) : 'Loading…'}
                     </SheetDescription>
                 </SheetHeader>
 

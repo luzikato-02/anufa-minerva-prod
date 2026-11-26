@@ -8,6 +8,7 @@ use App\Models\ReedLocation;
 use App\Models\ReedSpec;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -215,5 +216,85 @@ class ReedInventoryTest extends TestCase
 
         $this->actingAs($user)->deleteJson("/reed-inventory/specs/{$spec['id']}")->assertUnprocessable();
         $this->actingAs($user)->deleteJson("/reed-inventory/locations/{$location['id']}")->assertUnprocessable();
+    }
+
+    public function test_spec_fields_are_free_text_and_only_code_is_required(): void
+    {
+        $user = $this->manager();
+        $this->actingAs($user)->postJson('/reed-inventory/specs', [
+            'code' => 'RD-X', 'dents_per_10cm' => '90/10cm', 'width_mm' => '1600 mm', 'reed_type' => 'Profile 2',
+            'wire_thickness_mm' => '0.3 mm', 'height_mm' => 'standard',
+        ])->assertCreated()
+            ->assertJsonPath('data.dents_per_10cm', '90/10cm')
+            ->assertJsonPath('data.width_mm', '1600 mm')
+            ->assertJsonPath('data.reed_type', 'Profile 2');
+
+        $this->actingAs($user)->postJson('/reed-inventory/specs', ['code' => 'RD-MIN'])
+            ->assertCreated()->assertJsonPath('data.min_stock', 0)->assertJsonPath('data.dents_per_10cm', null);
+        $this->actingAs($user)->postJson('/reed-inventory/specs', ['dents_per_10cm' => '90'])->assertUnprocessable();
+    }
+
+    private function specCsv(array $rows): UploadedFile
+    {
+        $lines = array_map(fn ($r) => implode(',', array_map(fn ($c) => '"'.str_replace('"', '""', $c).'"', $r)), $rows);
+
+        return UploadedFile::fake()->createWithContent('specs.csv', implode("\n", $lines)."\n");
+    }
+
+    public function test_spec_template_downloads_and_round_trips_through_import(): void
+    {
+        $user = $this->manager();
+        $res = $this->actingAs($user)->get('/reed-inventory/specs/template')->assertOk();
+        $path = tempnam(sys_get_temp_dir(), 'tpl').'.xlsx';
+        file_put_contents($path, $res->streamedContent());
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getSheetByName('Specs');
+        $sheet->fromArray(['RD-NEW', '100', '1800 mm', null, null, 'Flat', null, null, 'Steel', '2', null], null, 'A3');
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($sheet->getParent()))->save($path);
+
+        $file = new UploadedFile($path, 'specs.xlsx', null, null, true);
+        $this->actingAs($user)->post('/reed-inventory/specs/import', ['file' => $file], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.updated', 0);
+
+        // The template's example row is ignored; only the filled-in row lands.
+        $this->assertSame(['RD-NEW'], ReedSpec::pluck('code')->all());
+        $spec = ReedSpec::firstWhere('code', 'RD-NEW');
+        $this->assertSame('100', $spec->dents_per_10cm);
+        $this->assertSame('1800 mm', $spec->width_mm);
+        $this->assertSame(2, $spec->min_stock);
+        @unlink($path);
+    }
+
+    public function test_spec_import_upserts_by_code_and_rejects_bad_files_whole(): void
+    {
+        $user = $this->manager();
+        ReedSpec::create(['code' => 'RD-90', 'dents_per_10cm' => '90', 'width_mm' => '1600 mm', 'min_stock' => 3]);
+
+        $ok = $this->specCsv([
+            ['Code', 'Dents per 10 cm', 'Overall width', 'Min spare stock'],
+            ['rd-90', '', '1650 mm', ''],
+            ['RD-120', '120', '', '1'],
+        ]);
+        $this->actingAs($user)->post('/reed-inventory/specs/import', ['file' => $ok], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.updated', 1);
+        $updated = ReedSpec::firstWhere('code', 'RD-90');
+        $this->assertSame('90', $updated->dents_per_10cm); // blank cell left it alone
+        $this->assertSame('1650 mm', $updated->width_mm);
+        $this->assertSame(3, $updated->min_stock);
+
+        $bad = $this->specCsv([
+            ['Code', 'Min spare stock'],
+            ['RD-200', 'lots'],
+            ['', '1'],
+            ['RD-300', '1'],
+            ['rd-300', '2'],
+        ]);
+        $errors = $this->actingAs($user)->post('/reed-inventory/specs/import', ['file' => $bad], ['Accept' => 'application/json'])
+            ->assertUnprocessable()->json('errors');
+        $this->assertCount(3, $errors);
+        $this->assertStringContainsString('Row 2', $errors[0]);
+        $this->assertSame(2, ReedSpec::count()); // nothing saved
+
+        $this->actingAs($this->operator())->post('/reed-inventory/specs/import', ['file' => $ok], ['Accept' => 'application/json'])
+            ->assertForbidden();
     }
 }

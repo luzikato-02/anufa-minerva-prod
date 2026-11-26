@@ -7,11 +7,14 @@ use App\Models\Reed;
 use App\Models\ReedFabricStyle;
 use App\Models\ReedLocation;
 use App\Models\ReedSpec;
+use App\Services\Reeds\ReedSpecSpreadsheet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** Master data for the reed inventory: specs, fabric styles and storage locations. */
 class ReedSettingsController extends Controller
@@ -58,21 +61,62 @@ class ReedSettingsController extends Controller
         return response()->json(['status' => 'success']);
     }
 
+    public function specTemplate(ReedSpecSpreadsheet $sheet): StreamedResponse
+    {
+        $book = $sheet->template();
+
+        return response()->streamDownload(
+            fn () => (new Xlsx($book))->save('php://output'),
+            'reed-spec-import-template.xlsx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        );
+    }
+
+    public function importSpecs(Request $request, ReedSpecSpreadsheet $sheet): JsonResponse
+    {
+        $request->validate(['file' => 'required|file|max:5120|mimes:xlsx,xls,csv,txt']);
+        $result = $sheet->import($request->file('file'));
+
+        if ($result['errors']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nothing was imported. Fix these rows and upload again.',
+                'errors' => $result['errors'],
+            ], 422);
+        }
+
+        return response()->json(['status' => 'success', 'data' => $result]);
+    }
+
+    /** Everything but the code and min_stock is free text, kept as typed. */
     private function specFields(Request $request, ?int $ignore = null): array
     {
-        return $request->validate([
+        // A number sent for a text field ("dents_per_10cm": 90) is taken as its text.
+        foreach (['dents_per_10cm', 'width_mm', 'working_width_mm', 'height_mm', 'reed_type', 'wire_profile', 'wire_thickness_mm', 'wire_material', 'notes'] as $field) {
+            $v = $request->input($field);
+            if (is_int($v) || is_float($v)) {
+                $request->merge([$field => (string) $v]);
+            } elseif (is_string($v)) {
+                $request->merge([$field => trim($v) === '' ? null : trim($v)]);
+            }
+        }
+
+        $fields = $request->validate([
             'code' => ['required', 'string', 'max:50', Rule::unique('reed_specs', 'code')->ignore($ignore)],
-            'dents_per_10cm' => 'required|numeric|gt:0|max:10000',
-            'width_mm' => 'required|integer|min:1|max:20000',
-            'working_width_mm' => 'nullable|integer|min:1|lte:width_mm',
-            'height_mm' => 'nullable|integer|min:1|max:1000',
-            'reed_type' => ['required', Rule::in(ReedSpec::TYPES)],
-            'wire_profile' => 'nullable|string|max:100',
-            'wire_thickness_mm' => 'nullable|numeric|gt:0|max:10',
-            'wire_material' => 'nullable|string|max:100',
-            'min_stock' => 'required|integer|min:0|max:10000',
+            'dents_per_10cm' => 'nullable|string|max:255',
+            'width_mm' => 'nullable|string|max:255',
+            'working_width_mm' => 'nullable|string|max:255',
+            'height_mm' => 'nullable|string|max:255',
+            'reed_type' => 'nullable|string|max:255',
+            'wire_profile' => 'nullable|string|max:255',
+            'wire_thickness_mm' => 'nullable|string|max:255',
+            'wire_material' => 'nullable|string|max:255',
+            'min_stock' => 'nullable|integer|min:0|max:10000',
             'notes' => 'nullable|string|max:255',
         ]);
+        $fields['min_stock'] ??= 0;
+
+        return $fields;
     }
 
     // ---- Fabric styles ----
