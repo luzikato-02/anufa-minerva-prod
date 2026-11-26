@@ -270,15 +270,16 @@ class ReedInventoryTest extends TestCase
         ReedSpec::create(['code' => 'RD-90', 'dents_per_10cm' => '90', 'width_mm' => '1600 mm', 'min_stock' => 3]);
 
         $ok = $this->specCsv([
-            ['Code', 'Dents per 10 cm', 'Overall width', 'Min spare stock'],
-            ['rd-90', '', '1650 mm', ''],
-            ['RD-120', '120', '', '1'],
+            ['Code', 'Dents per 10 cm', 'Overall width', 'Total hole', 'Min spare stock'],
+            ['rd-90', '', '1650 mm', '14850', ''],
+            ['RD-120', '120', '', '', '1'],
         ]);
         $this->actingAs($user)->post('/reed-inventory/specs/import', ['file' => $ok], ['Accept' => 'application/json'])
             ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.updated', 1);
         $updated = ReedSpec::firstWhere('code', 'RD-90');
         $this->assertSame('90', $updated->dents_per_10cm); // blank cell left it alone
         $this->assertSame('1650 mm', $updated->width_mm);
+        $this->assertSame('14850', $updated->total_hole);
         $this->assertSame(3, $updated->min_stock);
 
         $bad = $this->specCsv([

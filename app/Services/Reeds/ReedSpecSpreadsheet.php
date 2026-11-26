@@ -23,7 +23,7 @@ class ReedSpecSpreadsheet
         'Code *' => 'code',
         'Dents per 10 cm' => 'dents_per_10cm',
         'Overall width' => 'width_mm',
-        'Working width' => 'working_width_mm',
+        'Total hole' => 'total_hole',
         'Height' => 'height_mm',
         'Type' => 'reed_type',
         'Wire profile' => 'wire_profile',
@@ -33,7 +33,7 @@ class ReedSpecSpreadsheet
         'Notes' => 'notes',
     ];
 
-    private const EXAMPLE = ['RD-90-1600', '90', '1600 mm', '1580 mm', '120 mm', 'Profile (air-jet)', 'Flat', '0.30 mm', 'Stainless', '3', 'Example row: delete before importing'];
+    private const EXAMPLE = ['RD-90-1600', '90', '1600 mm', '14400', '120 mm', 'Profile (air-jet)', 'Flat', '0.30 mm', 'Stainless', '3', 'Example row: delete before importing'];
 
     public const MAX_ROWS = 2000;
 
@@ -179,6 +179,7 @@ class ReedSpecSpreadsheet
             $byKey[$this->key($heading)] = $field;
             $byKey[$this->key($field)] = $field;
         }
+        $byKey[$this->key('Working width')] = 'total_hole'; // heading on templates downloaded before the rename
         $map = [];
         foreach ($header as $col => $cell) {
             $field = $byKey[$this->key((string) $cell)] ?? null;

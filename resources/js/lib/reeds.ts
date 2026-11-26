@@ -18,7 +18,7 @@ export interface ReedSpec {
     code: string;
     dents_per_10cm: string | null;
     width_mm: string | null;
-    working_width_mm: string | null;
+    total_hole: string | null;
     height_mm: string | null;
     reed_type: string | null;
     wire_profile: string | null;

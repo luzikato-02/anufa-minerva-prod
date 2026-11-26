@@ -16,7 +16,7 @@ class ReedSpec extends Model
     use LogsActivity;
 
     protected $fillable = [
-        'code', 'dents_per_10cm', 'width_mm', 'working_width_mm', 'height_mm', 'reed_type',
+        'code', 'dents_per_10cm', 'width_mm', 'total_hole', 'height_mm', 'reed_type',
         'wire_profile', 'wire_thickness_mm', 'wire_material', 'min_stock', 'notes',
     ];
 

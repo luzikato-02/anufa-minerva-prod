@@ -232,6 +232,7 @@ export default function ReedSettings() {
                                     <TableHead>Code</TableHead>
                                     <TableHead>Dents / 10 cm</TableHead>
                                     <TableHead>Width</TableHead>
+                                    <TableHead>Total hole</TableHead>
                                     <TableHead>Height</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Wire</TableHead>
@@ -247,7 +248,7 @@ export default function ReedSettings() {
                             <TableBody>
                                 {specs.length === 0
                                     ? empty(
-                                          8,
+                                          9,
                                           'No reed specs yet. Add one for each dent density and width you stock, or import them from the template.',
                                       )
                                     : specs.map((s) => (
@@ -260,13 +261,9 @@ export default function ReedSettings() {
                                               </TableCell>
                                               <TableCell>
                                                   {s.width_mm ?? '—'}
-                                                  {s.working_width_mm && (
-                                                      <span className="text-muted-foreground">
-                                                          {' '}
-                                                          (working{' '}
-                                                          {s.working_width_mm})
-                                                      </span>
-                                                  )}
+                                              </TableCell>
+                                              <TableCell>
+                                                  {s.total_hole ?? '—'}
                                               </TableCell>
                                               <TableCell>
                                                   {s.height_mm ?? '—'}
@@ -456,7 +453,7 @@ function initialValues(kind: Kind, row: Row | null): Values {
             code: str(r.code),
             dents_per_10cm: str(r.dents_per_10cm),
             width_mm: str(r.width_mm),
-            working_width_mm: str(r.working_width_mm),
+            total_hole: str(r.total_hole),
             height_mm: str(r.height_mm),
             reed_type: str(r.reed_type),
             wire_profile: str(r.wire_profile),
@@ -568,8 +565,8 @@ function EditDialog({
                             {input('width_mm', 'Overall width', {
                                 placeholder: 'e.g. 1600 mm',
                             })}
-                            {input('working_width_mm', 'Working width', {
-                                placeholder: 'e.g. 1580 mm',
+                            {input('total_hole', 'Total hole', {
+                                placeholder: 'e.g. 14400',
                             })}
                             {input('height_mm', 'Height', {
                                 placeholder: 'e.g. 120 mm',

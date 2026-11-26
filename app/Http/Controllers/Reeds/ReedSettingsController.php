@@ -92,7 +92,7 @@ class ReedSettingsController extends Controller
     private function specFields(Request $request, ?int $ignore = null): array
     {
         // A number sent for a text field ("dents_per_10cm": 90) is taken as its text.
-        foreach (['dents_per_10cm', 'width_mm', 'working_width_mm', 'height_mm', 'reed_type', 'wire_profile', 'wire_thickness_mm', 'wire_material', 'notes'] as $field) {
+        foreach (['dents_per_10cm', 'width_mm', 'total_hole', 'height_mm', 'reed_type', 'wire_profile', 'wire_thickness_mm', 'wire_material', 'notes'] as $field) {
             $v = $request->input($field);
             if (is_int($v) || is_float($v)) {
                 $request->merge([$field => (string) $v]);
@@ -105,7 +105,7 @@ class ReedSettingsController extends Controller
             'code' => ['required', 'string', 'max:50', Rule::unique('reed_specs', 'code')->ignore($ignore)],
             'dents_per_10cm' => 'nullable|string|max:255',
             'width_mm' => 'nullable|string|max:255',
-            'working_width_mm' => 'nullable|string|max:255',
+            'total_hole' => 'nullable|string|max:255',
             'height_mm' => 'nullable|string|max:255',
             'reed_type' => 'nullable|string|max:255',
             'wire_profile' => 'nullable|string|max:255',
