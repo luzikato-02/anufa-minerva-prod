@@ -10,6 +10,7 @@ Minerva is an internal web application built by **Anufa Technologies** to manage
 | **Weaving Tension** | Record creel-based tension measurements on weaving machines with session resume support |
 | **Stock Taking** | Barcode-driven batch stock verification with CSV upload and session management |
 | **Finish Earlier** | Track early-finish events per creel position; import records via scanned forms (OCR) |
+| **Reed Inventory** | Every reed with its spec, location, loom and wear; QR-label scanning, style matching, inspection, repair and scrap with a full movement history |
 | **Creel Visualization** | Interactive 3D creel viewer overlaid with finish-earlier data per production order |
 | **Document Intelligence** | Upload scanned PDFs or images — extract text and tables with Mistral OCR |
 | **User & Role Management** | RBAC with fine-grained permissions per module (view / create / edit / delete) |

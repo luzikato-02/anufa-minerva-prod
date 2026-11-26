@@ -25,7 +25,7 @@ import { usePermissions } from '@/lib/permissions';
 import { activityLog, batchStockTakingMain, creelTypeSettings, creelVisualization, dashboard, documentIntelligence, finishEarlierDisplay, finishEarlierScan, machineMaintenance, stockSheetMain, stockSheetsMain, stockTakeRecordsMain, tensionRecordsDisplay, torqueCheckMain, torqueChecksMain, twistingTensionMain, underConstruction, userMaintenance, weavingTensionMain } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, FileCheck2, Library, MessagesSquare } from 'lucide-react';
+import { HomeIcon, ConeIcon, Layers, Table2, ClipboardList, ClipboardPenLine, ArrowLeftRight, ShieldIcon, HistoryIcon, ScrollTextIcon, FileSearch, ScanLine, Eye, Settings2, Gauge, FileCheck2, Library, MessagesSquare, Columns4 } from 'lucide-react';
 import { useState } from 'react';
 import { AdminNav } from './admin-nav';
 import AppLogo from './app-logo';
@@ -127,6 +127,20 @@ const inventoryNavItems: NavItem[] = [
         href: stockSheetsMain(),
         icon: Table2,
         permission: 'stock-take.view',
+    },
+
+    {
+        title: 'Reed Inventory',
+        href: '/reeds',
+        icon: Columns4,
+        permission: 'reeds.view',
+    },
+
+    {
+        title: 'Reed Settings',
+        href: '/reed-settings',
+        icon: Settings2,
+        permission: 'reeds.view',
     },
 
     {

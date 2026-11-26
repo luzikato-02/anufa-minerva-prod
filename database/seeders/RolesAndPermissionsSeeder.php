@@ -55,6 +55,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'roles.manage',
             'activity-log.view',
             'ai-chat.use',
+            'reeds.view',
+            'reeds.operate',
+            'reeds.manage',
         ];
 
         foreach ($permissions as $permission) {
@@ -92,6 +95,9 @@ class RolesAndPermissionsSeeder extends Seeder
                 'control-plans.author',
                 'activity-log.view',
                 'ai-chat.use',
+                'reeds.view',
+                'reeds.operate',
+                'reeds.manage',
             ],
             'analyst' => [
                 'tension-records.view',
@@ -104,6 +110,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'control-plans.view',
                 'activity-log.view',
                 'ai-chat.use',
+                'reeds.view',
             ],
             'operator' => [
                 'tension-records.view',
@@ -123,6 +130,8 @@ class RolesAndPermissionsSeeder extends Seeder
                 'torque-checks.edit',
                 'creel-types.view',
                 'control-plans.view',
+                'reeds.view',
+                'reeds.operate',
             ],
             // Control plan workflow: QA reviews a submitted revision, the approver (mill manager) releases it.
             'qa-reviewer' => [

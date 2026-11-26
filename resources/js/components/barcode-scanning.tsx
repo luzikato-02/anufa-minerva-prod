@@ -24,6 +24,8 @@ interface BarcodeScannerProps {
     open: boolean;
     onClose: () => void;
     onScan: (barcode: string) => void;
+    title?: string;
+    description?: string;
 }
 
 // How often to run barcode detection against the live video frame.
@@ -43,7 +45,7 @@ type ExtendedCapabilities = MediaTrackCapabilities & {
     torch?: boolean;
 };
 
-export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
+export function BarcodeScanner({ open, onClose, onScan, title = 'Scan Batch Barcode', description = 'Point your camera at the barcode to scan' }: BarcodeScannerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [scanError, setScanError] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
@@ -395,10 +397,8 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Scan Batch Barcode</DialogTitle>
-                    <DialogDescription>
-                        Point your camera at the barcode to scan
-                    </DialogDescription>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">

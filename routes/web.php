@@ -24,6 +24,9 @@ use App\Http\Controllers\ControlPlans\ControlPlanReferenceController;
 use App\Http\Controllers\ControlPlans\ControlPlanSettingController;
 use App\Http\Controllers\ControlPlans\ControlPlanSignatureController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Reeds\ReedActionController;
+use App\Http\Controllers\Reeds\ReedController;
+use App\Http\Controllers\Reeds\ReedSettingsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -237,6 +240,51 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::delete('/finish-earlier/{id}', [FinishEarlierRecordController::class, 'destroy'])
         ->middleware('permission:finish-earlier.delete');
+
+    // ---- REED INVENTORY ----
+    // Pages are /reeds, /reed-settings and /reed-labels; JSON lives under /reed-inventory. Status changes only go
+    // through the action routes (ReedLifecycle), never a plain update.
+    Route::middleware('permission:reeds.view')->group(function () {
+        Route::get('reeds', [ReedController::class, 'page'])->name('reeds');
+        Route::get('reed-labels', [ReedController::class, 'labels'])->name('reed-labels');
+        Route::get('reed-settings', [ReedSettingsController::class, 'page'])->name('reed-settings');
+
+        Route::prefix('reed-inventory')->group(function () {
+            Route::get('reeds', [ReedController::class, 'index']);
+            Route::get('reeds/{id}', [ReedController::class, 'show'])->whereNumber('id');
+            Route::get('by-code/{code}', [ReedController::class, 'byCode']);
+            Route::get('stats', [ReedController::class, 'stats']);
+            Route::get('options', [ReedController::class, 'pickerOptions']);
+            Route::get('match', [ReedController::class, 'match']);
+            Route::get('movements', [ReedController::class, 'recentMovements']);
+            Route::get('specs', [ReedSettingsController::class, 'specs']);
+            Route::get('styles', [ReedSettingsController::class, 'styles']);
+            Route::get('locations', [ReedSettingsController::class, 'locations']);
+        });
+    });
+
+    Route::middleware('permission:reeds.operate')->prefix('reed-inventory')->group(function () {
+        Route::post('receipts', [ReedController::class, 'receive']);
+        foreach (['reserve', 'release', 'issue', 'return', 'inspect', 'transfer'] as $action) {
+            Route::post("reeds/{id}/{$action}", [ReedActionController::class, $action])->whereNumber('id');
+        }
+    });
+
+    Route::middleware('permission:reeds.manage')->prefix('reed-inventory')->group(function () {
+        Route::post('reeds/{id}/repair-out', [ReedActionController::class, 'sendToRepair'])->whereNumber('id');
+        Route::post('reeds/{id}/repair-in', [ReedActionController::class, 'receiveFromRepair'])->whereNumber('id');
+        Route::post('reeds/{id}/scrap', [ReedActionController::class, 'scrap'])->whereNumber('id');
+
+        Route::post('specs', [ReedSettingsController::class, 'storeSpec']);
+        Route::patch('specs/{id}', [ReedSettingsController::class, 'updateSpec'])->whereNumber('id');
+        Route::delete('specs/{id}', [ReedSettingsController::class, 'destroySpec'])->whereNumber('id');
+        Route::post('styles', [ReedSettingsController::class, 'storeStyle']);
+        Route::patch('styles/{id}', [ReedSettingsController::class, 'updateStyle'])->whereNumber('id');
+        Route::delete('styles/{id}', [ReedSettingsController::class, 'destroyStyle'])->whereNumber('id');
+        Route::post('locations', [ReedSettingsController::class, 'storeLocation']);
+        Route::patch('locations/{id}', [ReedSettingsController::class, 'updateLocation'])->whereNumber('id');
+        Route::delete('locations/{id}', [ReedSettingsController::class, 'destroyLocation'])->whereNumber('id');
+    });
 
     // ---- USER & ROLE MANAGEMENT ----
     Route::middleware('permission:users.view')->group(function () {
