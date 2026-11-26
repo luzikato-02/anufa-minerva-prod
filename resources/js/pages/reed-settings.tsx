@@ -235,6 +235,7 @@ export default function ReedSettings() {
                                     <TableHead>Total hole</TableHead>
                                     <TableHead>Height</TableHead>
                                     <TableHead>Type</TableHead>
+                                    <TableHead>Machine type</TableHead>
                                     <TableHead>Wire</TableHead>
                                     <TableHead className="text-right">
                                         Min stock
@@ -248,7 +249,7 @@ export default function ReedSettings() {
                             <TableBody>
                                 {specs.length === 0
                                     ? empty(
-                                          9,
+                                          10,
                                           'No reed specs yet. Add one for each dent density and width you stock, or import them from the template.',
                                       )
                                     : specs.map((s) => (
@@ -270,6 +271,9 @@ export default function ReedSettings() {
                                               </TableCell>
                                               <TableCell>
                                                   {s.reed_type ?? '—'}
+                                              </TableCell>
+                                              <TableCell>
+                                                  {s.machine_type ?? '—'}
                                               </TableCell>
                                               <TableCell className="text-muted-foreground">
                                                   {[
@@ -456,6 +460,7 @@ function initialValues(kind: Kind, row: Row | null): Values {
             total_hole: str(r.total_hole),
             height_mm: str(r.height_mm),
             reed_type: str(r.reed_type),
+            machine_type: str(r.machine_type),
             wire_profile: str(r.wire_profile),
             wire_thickness_mm: str(r.wire_thickness_mm),
             wire_material: str(r.wire_material),
@@ -573,6 +578,9 @@ function EditDialog({
                             })}
                             {input('reed_type', 'Type', {
                                 placeholder: 'e.g. Profile (air-jet)',
+                            })}
+                            {input('machine_type', 'Machine type', {
+                                placeholder: 'e.g. Air-jet loom',
                             })}
                             {input('wire_profile', 'Wire profile', {
                                 placeholder: 'e.g. Flat',

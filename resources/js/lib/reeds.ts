@@ -21,6 +21,7 @@ export interface ReedSpec {
     total_hole: string | null;
     height_mm: string | null;
     reed_type: string | null;
+    machine_type: string | null;
     wire_profile: string | null;
     wire_thickness_mm: string | null;
     wire_material: string | null;

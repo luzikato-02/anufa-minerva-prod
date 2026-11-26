@@ -248,7 +248,7 @@ class ReedInventoryTest extends TestCase
         $path = tempnam(sys_get_temp_dir(), 'tpl').'.xlsx';
         file_put_contents($path, $res->streamedContent());
         $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getSheetByName('Specs');
-        $sheet->fromArray(['RD-NEW', '100', '1800 mm', null, null, 'Flat', null, null, 'Steel', '2', null], null, 'A3');
+        $sheet->fromArray(['RD-NEW', '100', '1800 mm', null, null, 'Flat', 'Rapier', null, null, 'Steel', '2', null], null, 'A3');
         (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($sheet->getParent()))->save($path);
 
         $file = new UploadedFile($path, 'specs.xlsx', null, null, true);
@@ -260,6 +260,7 @@ class ReedInventoryTest extends TestCase
         $spec = ReedSpec::firstWhere('code', 'RD-NEW');
         $this->assertSame('100', $spec->dents_per_10cm);
         $this->assertSame('1800 mm', $spec->width_mm);
+        $this->assertSame('Rapier', $spec->machine_type);
         $this->assertSame(2, $spec->min_stock);
         @unlink($path);
     }
@@ -270,9 +271,9 @@ class ReedInventoryTest extends TestCase
         ReedSpec::create(['code' => 'RD-90', 'dents_per_10cm' => '90', 'width_mm' => '1600 mm', 'min_stock' => 3]);
 
         $ok = $this->specCsv([
-            ['Code', 'Dents per 10 cm', 'Overall width', 'Total hole', 'Min spare stock'],
-            ['rd-90', '', '1650 mm', '14850', ''],
-            ['RD-120', '120', '', '', '1'],
+            ['Code', 'Dents per 10 cm', 'Overall width', 'Total hole', 'Machine type', 'Min spare stock'],
+            ['rd-90', '', '1650 mm', '14850', 'Air-jet', ''],
+            ['RD-120', '120', '', '', '', '1'],
         ]);
         $this->actingAs($user)->post('/reed-inventory/specs/import', ['file' => $ok], ['Accept' => 'application/json'])
             ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.updated', 1);
@@ -280,6 +281,7 @@ class ReedInventoryTest extends TestCase
         $this->assertSame('90', $updated->dents_per_10cm); // blank cell left it alone
         $this->assertSame('1650 mm', $updated->width_mm);
         $this->assertSame('14850', $updated->total_hole);
+        $this->assertSame('Air-jet', $updated->machine_type);
         $this->assertSame(3, $updated->min_stock);
 
         $bad = $this->specCsv([

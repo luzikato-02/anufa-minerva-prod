@@ -26,6 +26,7 @@ class ReedSpecSpreadsheet
         'Total hole' => 'total_hole',
         'Height' => 'height_mm',
         'Type' => 'reed_type',
+        'Machine type' => 'machine_type',
         'Wire profile' => 'wire_profile',
         'Wire thickness' => 'wire_thickness_mm',
         'Wire material' => 'wire_material',
@@ -33,7 +34,9 @@ class ReedSpecSpreadsheet
         'Notes' => 'notes',
     ];
 
-    private const EXAMPLE = ['RD-90-1600', '90', '1600 mm', '14400', '120 mm', 'Profile (air-jet)', 'Flat', '0.30 mm', 'Stainless', '3', 'Example row: delete before importing'];
+    private const EXAMPLE_NOTE = 'Example row: delete before importing';
+
+    private const EXAMPLE = ['RD-90-1600', '90', '1600 mm', '14400', '120 mm', 'Profile (air-jet)', 'Air-jet loom', 'Flat', '0.30 mm', 'Stainless', '3', self::EXAMPLE_NOTE];
 
     public const MAX_ROWS = 2000;
 
@@ -104,7 +107,7 @@ class ReedSpecSpreadsheet
             foreach ($fieldAt as $col => $field) {
                 $values[$field] = $this->text($cells[$col] ?? null);
             }
-            if (count(array_filter($values, fn ($v) => $v !== null)) === 0 || ($values['notes'] ?? null) === self::EXAMPLE[10]) {
+            if (count(array_filter($values, fn ($v) => $v !== null)) === 0 || ($values['notes'] ?? null) === self::EXAMPLE_NOTE) {
                 continue; // blank row, or the template's example left in
             }
             if (count($parsed) >= self::MAX_ROWS) {
